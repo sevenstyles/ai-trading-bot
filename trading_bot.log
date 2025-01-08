@@ -13,3 +13,26 @@
 2025-01-08 17:00:17,611 - ERROR - Error placing market order: (400, -2021, 'Order would immediately trigger.', {'Content-Type': 'application/json', 'Content-Length': '55', 'Connection': 'keep-alive', 'Date': 'Wed, 08 Jan 2025 06:00:17 GMT', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Server': 'Bengine', 'x-mbx-used-weight-1m': '-1', 'x-mbx-order-count-10s': '2', 'x-mbx-order-count-1m': '2', 'x-response-time': '0ms', 'Access-Control-Allow-Origin': '*', 'X-Cache': 'Error from cloudfront', 'Via': '1.1 8ccca629f0b1ca48e2e69a056f61f9a6.cloudfront.net (CloudFront)', 'X-Amz-Cf-Pop': 'SYD62-P3', 'X-Amz-Cf-Id': 'B_6dj60jgLQMslfEhRREJQMgOmLvflK3Ucz6gG87vC6Bgh5UBVOZSw=='})
 2025-01-08 17:00:17,612 - ERROR - Error parsing trade strategy: (400, -2021, 'Order would immediately trigger.', {'Content-Type': 'application/json', 'Content-Length': '55', 'Connection': 'keep-alive', 'Date': 'Wed, 08 Jan 2025 06:00:17 GMT', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Server': 'Bengine', 'x-mbx-used-weight-1m': '-1', 'x-mbx-order-count-10s': '2', 'x-mbx-order-count-1m': '2', 'x-response-time': '0ms', 'Access-Control-Allow-Origin': '*', 'X-Cache': 'Error from cloudfront', 'Via': '1.1 8ccca629f0b1ca48e2e69a056f61f9a6.cloudfront.net (CloudFront)', 'X-Amz-Cf-Pop': 'SYD62-P3', 'X-Amz-Cf-Id': 'B_6dj60jgLQMslfEhRREJQMgOmLvflK3Ucz6gG87vC6Bgh5UBVOZSw=='})
 2025-01-08 17:00:17,612 - ERROR - Error in main trading logic: (400, -2021, 'Order would immediately trigger.', {'Content-Type': 'application/json', 'Content-Length': '55', 'Connection': 'keep-alive', 'Date': 'Wed, 08 Jan 2025 06:00:17 GMT', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Server': 'Bengine', 'x-mbx-used-weight-1m': '-1', 'x-mbx-order-count-10s': '2', 'x-mbx-order-count-1m': '2', 'x-response-time': '0ms', 'Access-Control-Allow-Origin': '*', 'X-Cache': 'Error from cloudfront', 'Via': '1.1 8ccca629f0b1ca48e2e69a056f61f9a6.cloudfront.net (CloudFront)', 'X-Amz-Cf-Pop': 'SYD62-P3', 'X-Amz-Cf-Id': 'B_6dj60jgLQMslfEhRREJQMgOmLvflK3Ucz6gG87vC6Bgh5UBVOZSw=='})
+2025-01-08 17:14:32,769 - INFO - Fetched data range: 2025-01-03 12:15 to 2025-01-08 17:00
+2025-01-08 17:14:36,006 - INFO - HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+2025-01-08 17:14:42,725 - INFO - Saved DeepSeek response to deepseek_response.txt
+2025-01-08 17:14:42,725 - INFO - Trade strategy received: {'entry': 101254, 'exit': 102469, 'stop_loss': 100482, 'direction': 'LONG', 'reasoning': 'The price has shown a strong upward trend with increasing volume, indicating a potential continuation of the bullish momentum. The entry is set at the breakout level, with a stop loss below the recent support to manage risk.'}
+2025-01-08 17:14:42,726 - WARNING - Initial quantity 0.0 BTC is below minimum 0.001 BTC - adjusting to meet Binance requirements
+2025-01-08 17:14:42,726 - INFO - Adjusted risk percentage: 0.2632
+2025-01-08 17:14:42,726 - INFO - Minimum quantity needed: 0.001 BTC
+2025-01-08 17:14:42,726 - INFO - Calculated quantity: 0.002 BTC
+2025-01-08 17:14:42,726 - INFO - Notional value: 193.05136 USDT
+2025-01-08 17:14:42,726 - INFO - Adjusted stop-loss: 100482.0
+2025-01-08 17:14:43,504 - INFO - Closed existing position: {'orderId': 4076506569, 'symbol': 'BTCUSDT', 'status': 'NEW', 'clientOrderId': 'HC7n2KAti1asQXbfRHvqWp', 'price': '0.00', 'avgPrice': '0.00', 'origQty': '0.002', 'executedQty': '0.000', 'cumQty': '0.000', 'cumQuote': '0.00000', 'timeInForce': 'GTC', 'type': 'MARKET', 'reduceOnly': False, 'closePosition': False, 'side': 'SELL', 'positionSide': 'BOTH', 'stopPrice': '0.00', 'workingType': 'CONTRACT_PRICE', 'priceProtect': False, 'origType': 'MARKET', 'priceMatch': 'NONE', 'selfTradePreventionMode': 'NONE', 'goodTillDate': 0, 'updateTime': 1736316883432}
+2025-01-08 17:14:43,504 - INFO - Successfully closed existing position
+2025-01-08 17:15:54,044 - INFO - Fetched data range: 2025-01-03 12:30 to 2025-01-08 17:15
+2025-01-08 17:15:57,709 - INFO - HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+2025-01-08 17:16:06,762 - INFO - Saved DeepSeek response to deepseek_response.txt
+2025-01-08 17:16:06,762 - INFO - Trade strategy received: {'entry': 101254, 'exit': 102469, 'stop_loss': 100482, 'direction': 'LONG', 'reasoning': 'The price has shown a strong upward trend with increasing volume, indicating a potential continuation of the bullish momentum. The entry is set at the breakout level, with a stop loss below the recent swing low to manage risk.'}
+2025-01-08 17:16:06,762 - WARNING - Initial quantity 0.0 BTC is below minimum 0.001 BTC - adjusting to meet Binance requirements
+2025-01-08 17:16:06,762 - INFO - Adjusted risk percentage: 0.2632
+2025-01-08 17:16:06,762 - INFO - Minimum quantity needed: 0.001 BTC
+2025-01-08 17:16:06,762 - INFO - Calculated quantity: 0.002 BTC
+2025-01-08 17:16:06,763 - INFO - Notional value: 193.03212 USDT
+2025-01-08 17:16:06,763 - INFO - Adjusted stop-loss: 100482.0
+2025-01-08 17:16:07,141 - INFO - No existing position to close
