@@ -45,6 +45,13 @@ for candle in data:
     }
     ohlc_data.append(ohlc)
 
+# Calculate date range
+start_time = datetime.datetime.fromtimestamp(data[0][0]/1000)
+end_time = datetime.datetime.fromtimestamp(data[-1][0]/1000)
+date_range = f"{start_time.strftime('%Y-%m-%d %H:%M')} to {end_time.strftime('%Y-%m-%d %H:%M')}"
+logging.info(f"Fetched data range: {date_range}")
+print(f"Fetched data range: {date_range}")
+
 # Convert data to a table string
 table = tabulate(ohlc_data, headers='keys', tablefmt='grid')
 
@@ -54,17 +61,17 @@ client = OpenAI(
     base_url='https://api.deepseek.com'
 )
 
+# Read system message from file
+try:
+    with open('deepseek_prompt.txt', 'r') as f:
+        system_message = f.read().strip()
+except Exception as e:
+    logging.error(f"Error reading deepseek_prompt.txt: {e}")
+    raise
+
 # Prepare messages with clear JSON formatting instructions
 messages = [
-    {"role": "system", "content": """You are a trading assistant that analyzes OHLC data and provides trading strategies.
-    Respond ONLY with a raw JSON object (no markdown, no code blocks) in this format:
-    {
-        "entry": number,
-        "exit": number,
-        "stop_loss": number,
-        "direction": "LONG" or "SHORT",
-        "reasoning": "string explaining the strategy"
-    }"""},
+    {"role": "system", "content": system_message},
     {"role": "user", "content": f"""Analyze this BTCUSDT OHLC data and provide a trade strategy.
     Requirements:
     1. Based on the recent price action, determine if this should be a LONG or SHORT trade
