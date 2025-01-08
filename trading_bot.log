@@ -36,3 +36,20 @@
 2025-01-08 17:16:06,763 - INFO - Notional value: 193.03212 USDT
 2025-01-08 17:16:06,763 - INFO - Adjusted stop-loss: 100482.0
 2025-01-08 17:16:07,141 - INFO - No existing position to close
+2025-01-08 17:22:05,572 - INFO - Fetched data range: 2025-01-03 12:30 to 2025-01-08 17:15
+2025-01-08 17:22:08,900 - INFO - HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+2025-01-08 17:25:04,515 - INFO - Fetched data range: 2025-01-07 16:30 to 2025-01-08 17:15
+2025-01-08 17:25:07,308 - INFO - HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+2025-01-08 17:25:09,466 - INFO - Saved DeepSeek response to deepseek_response.txt
+2025-01-08 17:25:09,467 - INFO - Trade strategy received: {'entry': 96620.9, 'exit': 97000, 'stop_loss': 96300, 'direction': 'LONG', 'reasoning': 'The price has shown resilience around the 96500 level, with multiple tests and bounces. A breakout above 96620.9 suggests potential upward momentum, targeting 97000. The stop loss is placed below the recent support level to minimize risk.'}
+2025-01-08 17:25:09,467 - WARNING - Initial quantity 0.0 BTC is below minimum 0.001 BTC - adjusting to meet Binance requirements
+2025-01-08 17:25:09,468 - INFO - Adjusted risk percentage: 0.1044
+2025-01-08 17:25:09,468 - WARNING - Stop-loss adjusted to maintain minimum distance from entry price
+2025-01-08 17:25:09,468 - INFO - Minimum quantity needed: 0.001 BTC
+2025-01-08 17:25:09,468 - INFO - Calculated quantity: 0.002 BTC
+2025-01-08 17:25:09,468 - INFO - Notional value: 192.64396 USDT
+2025-01-08 17:25:09,468 - INFO - Adjusted stop-loss: 96137.7955
+2025-01-08 17:25:10,106 - INFO - No existing position to close
+2025-01-08 17:25:10,267 - INFO - Order placed: {'orderId': 4076507745, 'symbol': 'BTCUSDT', 'status': 'NEW', 'clientOrderId': '54GxFG8pXBycVmWSYcWozm', 'price': '0.00', 'avgPrice': '0.00', 'origQty': '0.002', 'executedQty': '0.000', 'cumQty': '0.000', 'cumQuote': '0.00000', 'timeInForce': 'GTC', 'type': 'MARKET', 'reduceOnly': False, 'closePosition': False, 'side': 'BUY', 'positionSide': 'BOTH', 'stopPrice': '0.00', 'workingType': 'CONTRACT_PRICE', 'priceProtect': False, 'origType': 'MARKET', 'priceMatch': 'NONE', 'selfTradePreventionMode': 'NONE', 'goodTillDate': 0, 'updateTime': 1736317510195}
+2025-01-08 17:25:10,425 - ERROR - Error placing stop-loss order: (400, -1111, 'Precision is over the maximum defined for this asset.', {'Content-Type': 'application/json', 'Content-Length': '76', 'Connection': 'keep-alive', 'Date': 'Wed, 08 Jan 2025 06:25:10 GMT', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Server': 'Bengine', 'x-mbx-used-weight-1m': '-1', 'x-mbx-order-count-10s': '2', 'x-mbx-order-count-1m': '2', 'x-response-time': '0ms', 'Access-Control-Allow-Origin': '*', 'X-Cache': 'Error from cloudfront', 'Via': '1.1 1a3ae026221703eb33062b70eac5e094.cloudfront.net (CloudFront)', 'X-Amz-Cf-Pop': 'SYD62-P3', 'X-Amz-Cf-Id': 'wMpzd4uXCnsamr--xrIgD9OStNwt6pUJHhXAiuC8ngdELG672qvSYw=='})
+2025-01-08 17:25:10,426 - ERROR - Error placing market order: (400, -1111, 'Precision is over the maximum defined for this asset.', {'Content-Type': 'application/json', 'Content-Length': '76', 'Connection': 'keep-alive', 'Date': 'Wed, 08 Jan 2025 06:25:10 GMT', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS', 'Server': 'Bengine', 'x-mbx-used-weight-1m': '-1', 'x-mbx-order-count-10s': '2', 'x-mbx-order-count-1m': '2', 'x-response-time': '0ms', 'Access-Control-Allow-Origin': '*', 'X-Cache': 'Error from cloudfront', 'Via': '1.1 1a3ae026221703eb33062b70eac5e094.cloudfront.net (CloudFront)', 'X-Amz-Cf-Pop': 'SYD62-P3', 'X-Amz-Cf-Id': 'wMpzd4uXCnsamr--xrIgD9OStNwt6pUJHhXAiuC8ngdELG672qvSYw=='})

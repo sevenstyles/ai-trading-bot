@@ -27,7 +27,7 @@ url = 'https://api.binance.com/api/v3/klines'
 params = {
     'symbol': 'BTCUSDT',
     'interval': '15m',
-    'limit': 500
+    'limit': 100
 }
 response = requests.get(url, params=params)
 data = response.json()
@@ -256,76 +256,66 @@ except Exception as e:
     logging.error(f"Error handling existing position: {e}")
     print(f"Error handling existing position: {e}")
     raise
-        
-    # Define order parameters
-    symbol = 'BTCUSDT'
-    side = 'BUY' if direction == 'LONG' else 'SELL'
-    type_order = 'MARKET'
+
+# Define order parameters
+symbol = 'BTCUSDT'
+side = 'BUY' if direction == 'LONG' else 'SELL'
+type_order = 'MARKET'
+
+# Place market order
+try:
+    order_response = client_binance.new_order(
+        symbol=symbol,
+        side=side,
+        type=type_order,
+        quantity=quantity
+    )
+    logging.info(f"Order placed: {order_response}")
+    print(f"Order placed: {order_response}")
     
-    # Place market order
+    # Place stop-loss order
+    stop_side = 'SELL' if side == 'BUY' else 'BUY'
     try:
-        order_response = client_binance.new_order(
+        stop_order_response = client_binance.new_order(
             symbol=symbol,
-            side=side,
-            type=type_order,
-            quantity=quantity
+            side=stop_side,
+            type='STOP_MARKET',
+            stopPrice=stop_loss,
+            quantity=quantity,
+            timeInForce='GTC'  # Good Till Cancel
         )
-        logging.info(f"Order placed: {order_response}")
-        print(f"Order placed: {order_response}")
+        logging.info(f"Stop-loss order placed: {stop_order_response}")
+        print(f"Stop-loss order placed: {stop_order_response}")
         
-        # Place stop-loss order
-        stop_side = 'SELL' if side == 'BUY' else 'BUY'
+        # Place take-profit order
         try:
-            stop_order_response = client_binance.new_order(
+            tp_order_response = client_binance.new_order(
                 symbol=symbol,
-                side=stop_side,
-                type='STOP_MARKET',
-                stopPrice=stop_loss,
+                side='SELL' if side == 'BUY' else 'BUY',
+                type='TAKE_PROFIT_MARKET',
+                stopPrice=exit_level,
                 quantity=quantity,
                 timeInForce='GTC'  # Good Till Cancel
             )
-            logging.info(f"Stop-loss order placed: {stop_order_response}")
-            print(f"Stop-loss order placed: {stop_order_response}")
-            
-            # Place take-profit order
-            try:
-                tp_order_response = client_binance.new_order(
-                    symbol=symbol,
-                    side='SELL' if side == 'BUY' else 'BUY',
-                    type='TAKE_PROFIT_MARKET',
-                    stopPrice=exit_level,
-                    quantity=quantity,
-                    timeInForce='GTC'  # Good Till Cancel
-                )
-                logging.info(f"Take-profit order placed: {tp_order_response}")
-                print(f"Take-profit order placed: {tp_order_response}")
-            
-            except ClientError as e:
-                logging.error(f"Binance API error placing take-profit order: {e}")
-                print(f"Binance API error placing take-profit order: {e}")
-                raise
-            
-            except Exception as e:
-                logging.error(f"Unexpected error placing take-profit order: {e}")
-                print(f"Unexpected error placing take-profit order: {e}")
-                raise
-                
+            logging.info(f"Take-profit order placed: {tp_order_response}")
+            print(f"Take-profit order placed: {tp_order_response}")
+        
+        except ClientError as e:
+            logging.error(f"Binance API error placing take-profit order: {e}")
+            print(f"Binance API error placing take-profit order: {e}")
+            raise
+        
         except Exception as e:
-            logging.error(f"Error placing stop-loss order: {e}")
-            print(f"Error placing stop-loss order: {e}")
+            logging.error(f"Unexpected error placing take-profit order: {e}")
+            print(f"Unexpected error placing take-profit order: {e}")
             raise
             
     except Exception as e:
-        logging.error(f"Error placing market order: {e}")
-        print(f"Error placing market order: {e}")
-        raise
-            
-    except Exception as e:
-        logging.error(f"Error parsing trade strategy: {e}")
-        print(f"Error parsing trade strategy: {e}")
+        logging.error(f"Error placing stop-loss order: {e}")
+        print(f"Error placing stop-loss order: {e}")
         raise
         
 except Exception as e:
-    logging.error(f"Error in main trading logic: {e}")
-    print(f"Error in main trading logic: {e}")
+    logging.error(f"Error placing market order: {e}")
+    print(f"Error placing market order: {e}")
     raise
