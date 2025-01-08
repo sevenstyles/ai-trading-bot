@@ -91,8 +91,14 @@ try:
     ds_response = re.sub(r'^```json\s*', '', ds_response)  # Remove opening ```json
     ds_response = re.sub(r'\s*```$', '', ds_response)      # Remove closing ```
     
-    # Parse the JSON response
+    # Save DeepSeek response to file
     try:
+        with open('deepseek_response.txt', 'w') as f:
+            f.write(ds_response)
+        logging.info("Saved DeepSeek response to deepseek_response.txt")
+        print("Saved DeepSeek response to deepseek_response.txt")
+        
+        # Parse the JSON response
         trade_strategy = json.loads(ds_response)
         entry = float(trade_strategy['entry'])
         exit_level = float(trade_strategy['exit'])
