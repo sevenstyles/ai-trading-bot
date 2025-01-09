@@ -1,7 +1,7 @@
 {
-    "entry": 96620.9,
-    "exit": 97000,
-    "stop_loss": 96300,
+    "entry": 95000,
+    "exit": 95500,
+    "stop_loss": 94500,
     "direction": "LONG",
-    "reasoning": "The price has shown resilience around the 96500 level, with multiple tests and bounces. A breakout above 96620.9 suggests potential upward momentum, targeting 97000. The stop loss is placed below the recent support level to minimize risk."
+    "reasoning": "The price has shown resilience around the 95000 level, with multiple bounces and higher lows forming. The recent consolidation and volume increase suggest a potential breakout to the upside, targeting 95500. A stop loss is placed below the recent swing low to manage risk."
 }
