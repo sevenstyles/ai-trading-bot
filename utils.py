@@ -3,16 +3,31 @@ import logging
 
 # Validate and adjust price levels based on current market price and direction
 def validate_price_levels(current_price, entry, exit_level, stop_loss, direction, precision_handler):
+    # Minimum price distance (0.5% from current price)
+    min_distance = current_price * 0.005
+    
     if direction == 'LONG':
         if exit_level <= current_price:
             raise ValueError(f"Take-profit {exit_level} is below current price {current_price} for LONG position")
         if stop_loss >= current_price:
             raise ValueError(f"Stop-loss {stop_loss} is above current price {current_price} for LONG position")
+        if exit_level - current_price < min_distance:
+            exit_level = current_price + min_distance
+            logging.info(f"Adjusted take-profit to maintain minimum distance: {exit_level}")
+        if current_price - stop_loss < min_distance:
+            stop_loss = current_price - min_distance
+            logging.info(f"Adjusted stop-loss to maintain minimum distance: {stop_loss}")
     else:  # SHORT
         if exit_level >= current_price:
             raise ValueError(f"Take-profit {exit_level} is above current price {current_price} for SHORT position")
         if stop_loss <= current_price:
             raise ValueError(f"Stop-loss {stop_loss} is below current price {current_price} for SHORT position")
+        if current_price - exit_level < min_distance:
+            exit_level = current_price - min_distance
+            logging.info(f"Adjusted take-profit to maintain minimum distance: {exit_level}")
+        if stop_loss - current_price < min_distance:
+            stop_loss = current_price + min_distance
+            logging.info(f"Adjusted stop-loss to maintain minimum distance: {stop_loss}")
     
     # Normalize prices
     exit_level = precision_handler.normalize_price(exit_level)

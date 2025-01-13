@@ -22,7 +22,15 @@ def get_trading_strategy(ohlc_data):
             {"role": "user", "content": f"""Analyze this BTCUSDT OHLC data and provide a trade strategy.
             Requirements:
             1. Based on the price data, determine if this should be a LONG or SHORT trade
-            2. If there is no suitable trade, do not place a trade.
+            2. For LONG trades:
+               - entry should be at current price (market order)
+               - stop-loss must be BELOW current price
+               - take-profit must be ABOVE current price
+            3. For SHORT trades:
+               - entry should be at current price (market order)
+               - stop-loss must be ABOVE current price
+               - take-profit must be BELOW current price
+            4. If there is no suitable trade, respond with {{"trade": false, "reasoning": "explanation"}}
             
             Data:
             {table}
