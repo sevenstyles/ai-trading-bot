@@ -1,7 +1,0 @@
-{
-    "entry": 95000,
-    "exit": 95227.5,
-    "stop_loss": 94823.5,
-    "direction": "LONG",
-    "reasoning": "The price has shown resilience around the 95000 level, with multiple tests and bounces. The recent consolidation and slight upward movement suggest a potential breakout. A LONG position is recommended with a stop-loss below the recent low to manage risk."
-}
