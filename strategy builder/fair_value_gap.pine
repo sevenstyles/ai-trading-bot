@@ -10,6 +10,11 @@ downcolor = input.color(defval = color.red, title = "Bearish color", group = "Ae
 consecutive_upcolor = input.color(defval = color.new(color.blue, 15), title = "Consecutive Bullish color", group = "Aesthetics")
 consecutive_downcolor = input.color(defval = color.new(color.purple, 15), title = "Consecutive Bearish color", group = "Aesthetics")
 
+// Label Settings
+show_labels = input.bool(true, "Show Long/Short Labels", group="Label Settings")
+label_size = input.string("small", "Label Size", options=["tiny", "small", "normal", "large"], group="Label Settings")
+label_offset = input.int(1, "Label Offset (bars)", minval=1, group="Label Settings")
+
 // FVG Size Filter
 use_size_filter = input.bool(true, "Filter by FVG Size", group="Size Filter")
 max_fvg_size = input.float(5.0, "Maximum FVG Size % of Candle", minval=0.1, step=0.1, group="Size Filter", tooltip="Only show FVGs where the gap height is less than this percentage of the candle height")
@@ -40,6 +45,14 @@ var int bullishConsecutive = 0
 var int bearishConsecutive = 0
 var bool lastWasBullish = false
 var bool lastWasBearish = false
+
+// Function to get label style based on input
+get_label_style(size) =>
+    switch size
+        "tiny" => size.tiny
+        "small" => size.small
+        "large" => size.large
+        => size.normal
 
 // Volume spike detection using MA comparison
 ma_func(x, length) =>
@@ -88,7 +101,7 @@ else
 lastWasBullish := bfvg
 lastWasBearish := sfvg
 
-// Create new FVG boxes with size filter
+// Create new FVG boxes with size filter and labels
 if bfvg and (not use_consecutive or bullishConsecutive >= required_consecutive)
     fvg_height = low - high[2]  // Gap height
     candle_height = high[2] - low[2]  // FVG candle height
@@ -98,6 +111,14 @@ if bfvg and (not use_consecutive or bullishConsecutive >= required_consecutive)
              border_color = color.new(color.gray, 100), bgcolor = boxColor)
         array.push(bullishBoxes, newBox)
         array.push(bullishLevels, high[2])  // Store the bottom level of bullish FVG
+        
+        // Add LONG label for consecutive bullish FVGs
+        if show_labels and bullishConsecutive >= required_consecutive
+            label.new(bar_index + label_offset, high, text="LONG", 
+                 color=color.new(color.green, 20), 
+                 textcolor=color.white,
+                 style=label.style_label_down,
+                 size=get_label_style(label_size))
 
 if sfvg and (not use_consecutive or bearishConsecutive >= required_consecutive)
     fvg_height = low[2] - high  // Gap height
@@ -108,6 +129,14 @@ if sfvg and (not use_consecutive or bearishConsecutive >= required_consecutive)
              border_color = color.new(color.gray, 100), bgcolor = boxColor)
         array.push(bearishBoxes, newBox)
         array.push(bearishLevels, low[2])  // Store the top level of bearish FVG
+        
+        // Add SHORT label for consecutive bearish FVGs
+        if show_labels and bearishConsecutive >= required_consecutive
+            label.new(bar_index + label_offset, low, text="SHORT", 
+                 color=color.new(color.red, 20), 
+                 textcolor=color.white,
+                 style=label.style_label_up,
+                 size=get_label_style(label_size))
 
 // Check for invalidation and remove boxes
 if array.size(bullishBoxes) > 0
