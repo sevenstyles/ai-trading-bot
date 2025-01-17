@@ -39,6 +39,8 @@ var float[] recentSwingHighs = array.new_float(3, na)
 var float[] recentSwingLows = array.new_float(3, na)
 var int[] recentSwingHighBars = array.new_int(3, na)
 var int[] recentSwingLowBars = array.new_int(3, na)
+var string[] patternHistory = array.new_string(3, "")  // Store last 3 swing patterns
+var int lastPatternBar = 0  // Store the bar index of last pattern update
 
 // Initialize other variables
 var float lastBosLevel = na
@@ -61,11 +63,14 @@ atrPeriod = input(10, "ATR Period")
 atrMultiplier = input.float(1.0, "ATR Multiplier for Swing Significance", minval=0.5, step=0.1)
 textSize = input.string("Small", "Text Size", options=["Tiny", "Small", "Normal", "Large"])
 
+// More sensitive swing detection - moved up before first usage
+float threshold = math.min(ta.atr(atrPeriod) * atrMultiplier, close * swingThreshold)
+
 // Text size mapping
-textSizeValue = switch
-    textSize == "Tiny" => size.tiny
-    textSize == "Small" => size.small
-    textSize == "Normal" => size.normal
+textSizeValue = switch textSize
+    "Tiny" => size.tiny
+    "Small" => size.small
+    "Normal" => size.normal
     => size.large
 
 // Pre-calculate values for consistency
@@ -79,6 +84,77 @@ crossOverSma := ta.crossover(close, sma20)
 // Calculate dynamic offset based on ATR
 var float dynamicOffset = na
 dynamicOffset := math.max(ta.atr(atrPeriod) * labelOffset, high - low)
+
+// Major swing points with more frequent detection
+swingHigh = ta.pivothigh(high, lookbackLeft, lookbackRight)
+swingLow = ta.pivotlow(low, lookbackLeft, lookbackRight)
+
+// Minor swing points for confirmation
+minorSwingHigh = ta.pivothigh(high, minorLookbackLeft, minorLookbackRight)
+minorSwingLow = ta.pivotlow(low, minorLookbackLeft, minorLookbackRight)
+
+// Enhanced validation without volume
+bool validSwingHigh = not na(swingHigh) and (na(lastSwingHigh) or math.abs(swingHigh - lastSwingHigh) > threshold)
+bool validSwingLow = not na(swingLow) and (na(lastSwingLow) or math.abs(swingLow - lastSwingLow) > threshold)
+
+// More sensitive minor swing detection
+bool validMinorSwingHigh = not na(minorSwingHigh) and (na(lastSwingHigh) or math.abs(minorSwingHigh - lastSwingHigh) > threshold * 0.5)
+bool validMinorSwingLow = not na(minorSwingLow) and (na(lastSwingLow) or math.abs(minorSwingLow - lastSwingLow) > threshold * 0.5)
+
+// Enhanced trend change detection
+bool significantMove = math.abs(close - close[1]) > threshold
+
+// Improved BOS detection - moved up
+bool validBosUp = validSwingLow and low[lookbackRight] > lastSwingLow and significantMove
+bool validBosDown = validSwingHigh and high[lookbackRight] < lastSwingHigh and significantMove
+
+// Pattern Sequence Settings
+showPatternOne = input.bool(true, "Show HH->HL->BOS Pattern", group="Pattern Sequences")
+patternOneColor = input.color(color.green, "HH->HL->BOS Pattern Color", group="Pattern Sequences")
+showPatternTwo = input.bool(true, "Show LL->HH->BOS Pattern", group="Pattern Sequences")
+patternTwoColor = input.color(color.blue, "LL->HH->BOS Pattern Color", group="Pattern Sequences")
+
+// Pattern Detection
+bool patternOneDetected = showPatternOne and array.get(patternHistory, 2) == "HH" and array.get(patternHistory, 1) == "HL" and array.get(patternHistory, 0) == "BOS_UP"
+bool patternTwoDetected = showPatternTwo and array.get(patternHistory, 2) == "LL" and array.get(patternHistory, 1) == "HH" and array.get(patternHistory, 0) == "BOS_UP"
+
+// Function to update pattern history
+updatePatternHistory(string newPattern) =>
+    var int _lastBar = 0  // Local variable for tracking
+    if bar_index != _lastBar
+        array.unshift(patternHistory, newPattern)
+        array.pop(patternHistory)
+        _lastBar := bar_index
+    _lastBar
+
+// Update pattern history based on swing formations
+if validSwingHigh and not na(prevSwingHigh)
+    if high[lookbackRight] > prevSwingHigh
+        lastPatternBar := updatePatternHistory("HH")
+    else
+        lastPatternBar := updatePatternHistory("LH")
+
+if validSwingLow and not na(prevSwingLow)
+    if low[lookbackRight] < prevSwingLow
+        lastPatternBar := updatePatternHistory("LL")
+    else
+        lastPatternBar := updatePatternHistory("HL")
+
+if validBosUp and inUptrend
+    lastPatternBar := updatePatternHistory("BOS_UP")
+if validBosDown and inDowntrend
+    lastPatternBar := updatePatternHistory("BOS_DOWN")
+
+// Plot pattern signals
+plotshape(patternOneDetected, title="HH->HL->BOS Pattern", location=location.belowbar, color=patternOneColor, style=shape.triangleup, size=size.large)
+plotshape(patternTwoDetected, title="LL->HH->BOS Pattern", location=location.belowbar, color=patternTwoColor, style=shape.triangleup, size=size.large)
+
+// Add pattern labels for clarity
+if patternOneDetected
+    label.new(bar_index, low - (3 * dynamicOffset), text="HH->HL->BOS", style=label.style_label_up, color=na, textcolor=patternOneColor, size=textSizeValue)
+
+if patternTwoDetected
+    label.new(bar_index, low - (4 * dynamicOffset), text="LL->HH->BOS", style=label.style_label_up, color=na, textcolor=patternTwoColor, size=textSizeValue)
 
 // Enhanced leg detection
 getLeg(int size) =>
@@ -97,51 +173,9 @@ isNewLeg(int leg) => ta.change(leg) != 0
 isBearishLeg(int leg) => ta.change(leg) == -1
 isBullishLeg(int leg) => ta.change(leg) == 1
 
-// More sensitive swing detection
-float threshold = math.min(ta.atr(atrPeriod) * atrMultiplier, close * swingThreshold)
-
-// Major swing points with more frequent detection
-swingHigh = ta.pivothigh(high, lookbackLeft, lookbackRight)
-swingLow = ta.pivotlow(low, lookbackLeft, lookbackRight)
-
-// Minor swing points for confirmation
-minorSwingHigh = ta.pivothigh(high, minorLookbackLeft, minorLookbackRight)
-minorSwingLow = ta.pivotlow(low, minorLookbackLeft, minorLookbackRight)
-
-// Enhanced validation without volume
-validSwingHigh = not na(swingHigh) and (na(lastSwingHigh) or math.abs(swingHigh - lastSwingHigh) > threshold)
-validSwingLow = not na(swingLow) and (na(lastSwingLow) or math.abs(swingLow - lastSwingLow) > threshold)
-
 // Higher lows and lower highs detection
 hasHigherLow := validSwingLow and (na(lastSwingLow) or low[lookbackRight] > lastSwingLow)
 hasLowerHigh := validSwingHigh and (na(lastSwingHigh) or high[lookbackRight] < lastSwingHigh)
-
-// More sensitive minor swing detection
-validMinorSwingHigh = not na(minorSwingHigh) and (na(lastSwingHigh) or math.abs(minorSwingHigh - lastSwingHigh) > threshold * 0.5)
-validMinorSwingLow = not na(minorSwingLow) and (na(lastSwingLow) or math.abs(minorSwingLow - lastSwingLow) > threshold * 0.5)
-
-// Enhanced trend change detection
-bool significantMove = math.abs(close - close[1]) > threshold
-
-// Improved BOS detection
-bool validBosUp = validSwingLow and low[lookbackRight] > lastSwingLow and significantMove
-bool validBosDown = validSwingHigh and high[lookbackRight] < lastSwingHigh and significantMove
-
-// Track the last BOS level and bar
-if validBosUp or validBosDown
-    lastBosLevel := validBosUp ? lastSwingLow : lastSwingHigh
-    lastBosBar := bar_index[lookbackRight]
-
-// Detect valid structure patterns after BOS
-if not na(lastBosLevel) and not na(lastBosBar)
-    barsFromBos = bar_index - lastBosBar
-    if barsFromBos <= lookbackLeft * 3  // Extended range for pattern completion
-        if validBosUp and inUptrend
-            // Bullish structure pattern
-            validBosPattern := validMinorSwingLow and minorSwingLow > lastBosLevel and close > sma20 and hasHigherLow and not isSwingFailure and array.get(recentSwingLows, 0) > array.get(recentSwingLows, 1)
-        else if validBosDown and inDowntrend
-            // Bearish structure pattern
-            validBosPattern := validMinorSwingHigh and minorSwingHigh < lastBosLevel and close < sma20 and hasLowerHigh and not isSwingFailure and array.get(recentSwingHighs, 0) < array.get(recentSwingHighs, 1)
 
 // Enhanced swing pattern detection
 updateRecentSwings() =>
@@ -270,3 +304,19 @@ if validSwingLow
 // Enhanced swing failure conditions
 swingFailureUp := (isSwingHighFailure and hasHigherLow and close > sma20 and validMinorSwingLow)
 swingFailureDown := (isSwingLowFailure and hasLowerHigh and close < sma20 and validMinorSwingHigh) 
+
+// Track the last BOS level and bar
+if validBosUp or validBosDown
+    lastBosLevel := validBosUp ? lastSwingLow : lastSwingHigh
+    lastBosBar := bar_index[lookbackRight]
+
+// Detect valid structure patterns after BOS
+if not na(lastBosLevel) and not na(lastBosBar)
+    barsFromBos = bar_index - lastBosBar
+    if barsFromBos <= lookbackLeft * 3  // Extended range for pattern completion
+        if validBosUp and inUptrend
+            // Bullish structure pattern
+            validBosPattern := validMinorSwingLow and minorSwingLow > lastBosLevel and close > sma20 and hasHigherLow and not isSwingFailure and array.get(recentSwingLows, 0) > array.get(recentSwingLows, 1)
+        else if validBosDown and inDowntrend
+            // Bearish structure pattern
+            validBosPattern := validMinorSwingHigh and minorSwingHigh < lastBosLevel and close < sma20 and hasLowerHigh and not isSwingFailure and array.get(recentSwingHighs, 0) < array.get(recentSwingHighs, 1) 
