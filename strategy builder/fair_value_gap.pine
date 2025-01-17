@@ -16,7 +16,7 @@ max_fvg_size = input.float(5.0, "Maximum FVG Size % of Candle", minval=0.1, step
 
 // Consecutive FVG Settings
 use_consecutive = input.bool(true, "Filter for Consecutive FVGs", group="Consecutive FVG Filter")
-required_consecutive = input.int(2, "Required Consecutive FVGs", minval=2, maxval=5, group="Consecutive FVG Filter")
+required_consecutive = input.int(2, "Required Consecutive FVGs", minval=2, maxval=5, group="Consecutive FVG Filter", tooltip="Only show FVGs when this many consecutive FVGs of the same type (bullish/bearish) have occurred")
 highlight_consecutive = input.bool(true, "Highlight Consecutive FVGs", group="Consecutive FVG Filter")
 
 // Volume Spike Settings
@@ -38,6 +38,8 @@ var float[] bearishLevels = array.new_float()
 // Variables to track consecutive FVGs
 var int bullishConsecutive = 0
 var int bearishConsecutive = 0
+var bool lastWasBullish = false
+var bool lastWasBearish = false
 
 // Volume spike detection using MA comparison
 ma_func(x, length) =>
@@ -67,9 +69,24 @@ check_fvg_size(fvg_height, candle_height) =>
 bfvg = low > high[2] and vol_filt and atrfilt and locfiltb
 sfvg = high < low[2] and vol_filt and atrfilt and locfilts
 
-// Update consecutive counters
-bullishConsecutive := bfvg ? bullishConsecutive + 1 : 0
-bearishConsecutive := sfvg ? bearishConsecutive + 1 : 0
+// Update consecutive counters with type checking
+if bfvg and lastWasBullish
+    bullishConsecutive := bullishConsecutive + 1
+else if bfvg
+    bullishConsecutive := 1
+else
+    bullishConsecutive := 0
+
+if sfvg and lastWasBearish
+    bearishConsecutive := bearishConsecutive + 1
+else if sfvg
+    bearishConsecutive := 1
+else
+    bearishConsecutive := 0
+
+// Update last FVG type
+lastWasBullish := bfvg
+lastWasBearish := sfvg
 
 // Create new FVG boxes with size filter
 if bfvg and (not use_consecutive or bullishConsecutive >= required_consecutive)
