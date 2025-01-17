@@ -18,6 +18,42 @@ var int lastSwingHighBar = na
 var int lastSwingLowBar = na
 var int trendBias = 0
 
+// Initialize all boolean flags at the start
+var bool isSwingFailure = false
+var bool isSwingHighFailure = false
+var bool isSwingLowFailure = false
+var bool hasHigherLow = false
+var bool hasLowerHigh = false
+var bool validBosPattern = false
+var bool isPotentialBullishReversal = false
+var bool isPotentialBearishReversal = false
+var bool swingFailureUp = false
+var bool swingFailureDown = false
+var bool bosConfirmationUp = false
+var bool bosConfirmationDown = false
+var bool trendContinuationUp = false
+var bool trendContinuationDown = false
+var bool longSignal = false
+var bool shortSignal = false
+
+// Initialize arrays at the start
+var array<line> bosLines = array.new<line>()
+var array<label> swingLabels = array.new<label>()
+var float[] recentSwingHighs = array.new_float(3, na)
+var float[] recentSwingLows = array.new_float(3, na)
+var int[] recentSwingHighBars = array.new_int(3, na)
+var int[] recentSwingLowBars = array.new_int(3, na)
+
+// Initialize other variables
+var float lastBosLevel = na
+var int lastBosBar = na
+var float lastSignificantHigh = na
+var float lastSignificantLow = na
+var int lastSignificantHighBar = na
+var int lastSignificantLowBar = na
+var int consecutiveHigher = 0
+var int consecutiveLower = 0
+
 // Input parameters with more sensitive defaults
 lookbackLeft = input(5, "Lookback Left (Major Swings)")
 lookbackRight = input(3, "Lookback Right (Major Swings)")
@@ -81,10 +117,7 @@ validSwingHigh = not na(swingHigh) and (na(lastSwingHigh) or math.abs(swingHigh 
 validSwingLow = not na(swingLow) and (na(lastSwingLow) or math.abs(swingLow - lastSwingLow) > threshold)
 
 // Higher lows and lower highs detection
-var bool hasHigherLow = false
 hasHigherLow := validSwingLow and (na(lastSwingLow) or low[lookbackRight] > lastSwingLow)
-
-var bool hasLowerHigh = false
 hasLowerHigh := validSwingHigh and (na(lastSwingHigh) or high[lookbackRight] < lastSwingHigh)
 
 // More sensitive minor swing detection
@@ -99,39 +132,22 @@ bool validBosUp = validSwingLow and low[lookbackRight] > lastSwingLow and signif
 bool validBosDown = validSwingHigh and high[lookbackRight] < lastSwingHigh and significantMove
 
 // Track the last BOS level and bar
-var float lastBosLevel = na
-var int lastBosBar = na
-
 if validBosUp or validBosDown
     lastBosLevel := validBosUp ? lastSwingLow : lastSwingHigh
     lastBosBar := bar_index[lookbackRight]
 
 // Detect valid structure patterns after BOS
-var bool validBosPattern = false
-validBosPattern := false
 if not na(lastBosLevel) and not na(lastBosBar)
     barsFromBos = bar_index - lastBosBar
-    if barsFromBos <= lookbackLeft * 2  // Check within reasonable range
+    if barsFromBos <= lookbackLeft * 3  // Extended range for pattern completion
         if validBosUp and inUptrend
-            validBosPattern := validMinorSwingLow and minorSwingLow > lastBosLevel and close > sma20
+            // Bullish structure pattern
+            validBosPattern := validMinorSwingLow and minorSwingLow > lastBosLevel and close > sma20 and hasHigherLow and not isSwingFailure and array.get(recentSwingLows, 0) > array.get(recentSwingLows, 1)
         else if validBosDown and inDowntrend
-            validBosPattern := validMinorSwingHigh and minorSwingHigh < lastBosLevel and close < sma20
-
-// Arrays to store all our visual elements
-var array<line> bosLines = array.new<line>()
-var array<label> swingLabels = array.new<label>()
-
-// Detect potential reversal zones and trade signals
-var bool isSwingFailure = false
-isSwingFailure := (validSwingHigh and high[lookbackRight] < lastSwingHigh and inUptrend) or (validSwingLow and low[lookbackRight] > lastSwingLow and inDowntrend)
+            // Bearish structure pattern
+            validBosPattern := validMinorSwingHigh and minorSwingHigh < lastBosLevel and close < sma20 and hasLowerHigh and not isSwingFailure and array.get(recentSwingHighs, 0) < array.get(recentSwingHighs, 1)
 
 // Enhanced swing pattern detection
-var float[] recentSwingHighs = array.new_float(3, na)
-var float[] recentSwingLows = array.new_float(3, na)
-var int[] recentSwingHighBars = array.new_int(3, na)
-var int[] recentSwingLowBars = array.new_int(3, na)
-
-// Update recent swing arrays
 updateRecentSwings() =>
     if validSwingHigh
         array.unshift(recentSwingHighs, high[lookbackRight])
@@ -148,31 +164,18 @@ updateRecentSwings() =>
 updateRecentSwings()
 
 // Enhanced failure pattern detection
-var bool isSwingHighFailure = false
 isSwingHighFailure := (validSwingHigh and array.size(recentSwingHighs) >= 2 and not na(array.get(recentSwingHighs, 0)) and not na(array.get(recentSwingHighs, 1)) and array.get(recentSwingHighs, 0) < array.get(recentSwingHighs, 1) and inUptrend)
-
-var bool isSwingLowFailure = false
 isSwingLowFailure := (validSwingLow and array.size(recentSwingLows) >= 2 and not na(array.get(recentSwingLows, 0)) and not na(array.get(recentSwingLows, 1)) and array.get(recentSwingLows, 0) > array.get(recentSwingLows, 1) and inDowntrend)
 
 // Enhanced reversal pattern detection
-var bool isPotentialBullishReversal = false
 isPotentialBullishReversal := ((validSwingLow and hasHigherLow and crossOverSma) and ((isSwingHighFailure) or (validMinorSwingLow and minorSwingLow > lastSwingLow)) and close > sma20)
-
-var bool isPotentialBearishReversal = false
 isPotentialBearishReversal := ((validSwingHigh and hasLowerHigh and crossUnderSma) and ((isSwingLowFailure) or (validMinorSwingHigh and minorSwingHigh < lastSwingHigh)) and close < sma20)
 
 // Enhanced swing failure conditions
-var bool swingFailureUp = false
 swingFailureUp := (isSwingHighFailure and hasHigherLow and close > sma20 and validMinorSwingLow)
-
-var bool swingFailureDown = false
 swingFailureDown := (isSwingLowFailure and hasLowerHigh and close < sma20 and validMinorSwingHigh)
 
 // Track consecutive swings for trend strength
-var int consecutiveHigher = 0
-var int consecutiveLower = 0
-
-// Track consecutive higher highs/lows and lower highs/lows
 if validSwingHigh
     if high[lookbackRight] > lastSwingHigh
         consecutiveHigher := consecutiveHigher + 1
@@ -190,19 +193,10 @@ if validSwingLow
         consecutiveLower := consecutiveLower + 1
 
 // Break of Structure confirmation
-var bool bosConfirmationUp = false
 bosConfirmationUp := (validBosUp and close > sma20 and validMinorSwingLow and minorSwingLow > lastSwingLow)
-
-var bool bosConfirmationDown = false
 bosConfirmationDown := (validBosDown and close < sma20 and validMinorSwingHigh and minorSwingHigh < lastSwingHigh)
 
 // Track the last significant swing levels for BOS
-var float lastSignificantHigh = na
-var float lastSignificantLow = na
-var int lastSignificantHighBar = na
-var int lastSignificantLowBar = na
-
-// Update significant levels
 if validSwingHigh
     lastSignificantHigh := high[lookbackRight]
     lastSignificantHighBar := bar_index[lookbackRight]
@@ -225,17 +219,11 @@ if not na(lastSignificantHigh) and high > lastSignificantHigh and inUptrend
     lastSignificantHigh := na  // Reset to avoid multiple lines
 
 // Trend continuation conditions
-var bool trendContinuationUp = false
 trendContinuationUp := (consecutiveHigher >= 2 and validMinorSwingLow and minorSwingLow > lastSwingLow and close > sma20)
-
-var bool trendContinuationDown = false
 trendContinuationDown := (consecutiveLower >= 2 and validMinorSwingHigh and minorSwingHigh < lastSwingHigh and close < sma20)
 
 // Initialize trade signals
-var bool longSignal = false
 longSignal := ((bosConfirmationUp and not inUptrend and validMinorSwingLow) or (swingFailureUp and consecutiveLower >= 2 and validMinorSwingLow) or (trendContinuationUp and not isSwingFailure and validMinorSwingLow) or (validBosPattern and inUptrend))
-
-var bool shortSignal = false
 shortSignal := ((bosConfirmationDown and not inDowntrend and validMinorSwingHigh) or (swingFailureDown and consecutiveHigher >= 2 and validMinorSwingHigh) or (trendContinuationDown and not isSwingFailure and validMinorSwingHigh) or (validBosPattern and inDowntrend))
 
 // Plot all visual elements
@@ -243,8 +231,18 @@ plotshape(isPotentialBullishReversal, title="Bullish Reversal", location=locatio
 plotshape(isPotentialBearishReversal, title="Bearish Reversal", location=location.abovebar, color=color.new(color.red, 0), style=shape.diamond, size=size.small)
 
 // Plot structure pattern confirmations
-plotshape(validBosPattern and inUptrend, title="Bullish Structure Pattern", location=location.belowbar, color=color.new(color.blue, 0), style=shape.circle, size=size.small)
-plotshape(validBosPattern and inDowntrend, title="Bearish Structure Pattern", location=location.abovebar, color=color.new(color.blue, 0), style=shape.circle, size=size.small)
+plotshape(validBosPattern and inUptrend, title="Bullish Structure Pattern", location=location.belowbar, 
+         color=color.new(color.blue, 0), style=shape.triangleup, size=size.normal)
+plotshape(validBosPattern and inDowntrend, title="Bearish Structure Pattern", location=location.abovebar, 
+         color=color.new(color.red, 0), style=shape.triangledown, size=size.normal)
+
+// Add structure pattern labels for clarity
+if validBosPattern and inUptrend
+    label.new(bar_index, low - (2 * dynamicOffset), text="BSP", 
+             style=label.style_label_up, color=na, textcolor=color.blue, size=textSizeValue)
+if validBosPattern and inDowntrend
+    label.new(bar_index, high + (2 * dynamicOffset), text="BSP", 
+             style=label.style_label_down, color=na, textcolor=color.red, size=textSizeValue)
 
 // Plot trade signals
 plotshape(longSignal, title="Long Signal", location=location.belowbar, color=color.green, style=shape.triangleup, size=size.normal)
