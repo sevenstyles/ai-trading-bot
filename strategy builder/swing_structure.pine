@@ -99,19 +99,35 @@ var array<label> swingLabels = array.new<label>()
 isSwingFailure = (validSwingHigh and high[lookbackRight] < lastSwingHigh and inUptrend) or 
                  (validSwingLow and low[lookbackRight] > lastSwingLow and inDowntrend)
 
-isPotentialReversal = (validSwingHigh and crossUnderSma) or 
-                     (validSwingLow and crossOverSma)
+// Consolidated reversal detection
+isPotentialBullishReversal = validSwingLow and crossOverSma and validMinorSwingLow and minorSwingLow > lastSwingLow and close > sma20
+isPotentialBearishReversal = validSwingHigh and crossUnderSma and validMinorSwingHigh and minorSwingHigh < lastSwingHigh and close < sma20
 
-// Detect optimal trade entries using both major and minor swings
-var bool longSignal = false
-var bool shortSignal = false
+// Use minor swings to confirm reversals
+minorSwingConfirmsBullish = validMinorSwingLow and minorSwingLow > lastSwingLow and close > sma20
+minorSwingConfirmsBearish = validMinorSwingHigh and minorSwingHigh < lastSwingHigh and close < sma20
 
-// Improved entry conditions using minor swings
-bool minorSwingConfirmation = (validMinorSwingHigh and minorSwingHigh < lastSwingHigh) or 
-                             (validMinorSwingLow and minorSwingLow > lastSwingLow)
+// Structure pattern recognition after breaks
+var float lastBosLevel = na
+var int lastBosBar = na
+var bool validBosPattern = false
 
-// Enhanced market structure conditions
-var float lastValidBosLevel = na
+// Track the last BOS level and bar
+if validBosUp or validBosDown
+    lastBosLevel := validBosUp ? lastSwingLow : lastSwingHigh
+    lastBosBar := bar_index[lookbackRight]
+
+// Detect valid structure patterns after BOS
+validBosPattern := false
+if not na(lastBosLevel) and not na(lastBosBar)
+    barsFromBos = bar_index - lastBosBar
+    if barsFromBos <= lookbackLeft * 2  // Check within reasonable range
+        if validBosUp and inUptrend
+            validBosPattern := validMinorSwingLow and minorSwingLow > lastBosLevel and close > sma20
+        else if validBosDown and inDowntrend
+            validBosPattern := validMinorSwingHigh and minorSwingHigh < lastBosLevel and close < sma20
+
+// Track consecutive swings for trend strength
 var int consecutiveHigher = 0
 var int consecutiveLower = 0
 
@@ -132,26 +148,56 @@ if validSwingLow
         consecutiveHigher := 0
         consecutiveLower := consecutiveLower + 1
 
-// Improved trend conditions
-bool strongUptrend = consecutiveHigher >= 2 and close > sma20
-bool strongDowntrend = consecutiveLower >= 2 and close < sma20
-
-// Enhanced swing failure conditions
-bool swingFailureUp = inDowntrend and validSwingHigh and high[lookbackRight] < lastSwingHigh and close > sma20 and validMinorSwingLow
-bool swingFailureDown = inUptrend and validSwingLow and low[lookbackRight] > lastSwingLow and close < sma20 and validMinorSwingHigh
-
 // Break of Structure confirmation
 bool bosConfirmationUp = validBosUp and close > sma20 and validMinorSwingLow and minorSwingLow > lastSwingLow
 bool bosConfirmationDown = validBosDown and close < sma20 and validMinorSwingHigh and minorSwingHigh < lastSwingHigh
 
-// Trend continuation confirmation
-bool trendContinuationUp = strongUptrend and validMinorSwingLow and minorSwingLow > lastSwingLow and close > sma20
-bool trendContinuationDown = strongDowntrend and validMinorSwingHigh and minorSwingHigh < lastSwingHigh and close < sma20
+// Swing failure conditions
+bool swingFailureUp = inDowntrend and validSwingHigh and high[lookbackRight] < lastSwingHigh and close > sma20 and validMinorSwingLow
+bool swingFailureDown = inUptrend and validSwingLow and low[lookbackRight] > lastSwingLow and close < sma20 and validMinorSwingHigh
 
-// Enhanced trade signals with comprehensive conditions
-longSignal := (bosConfirmationUp and not inUptrend) or (swingFailureUp and consecutiveLower >= 2) or (trendContinuationUp and not isSwingFailure)
+// Trend continuation conditions
+bool trendContinuationUp = consecutiveHigher >= 2 and validMinorSwingLow and minorSwingLow > lastSwingLow and close > sma20
+bool trendContinuationDown = consecutiveLower >= 2 and validMinorSwingHigh and minorSwingHigh < lastSwingHigh and close < sma20
 
-shortSignal := (bosConfirmationDown and not inDowntrend) or (swingFailureDown and consecutiveHigher >= 2) or (trendContinuationDown and not isSwingFailure)
+// Initialize trade signals
+var bool longSignal = false
+var bool shortSignal = false
+
+// Enhanced trade signals with structure pattern confirmation
+longSignal := (bosConfirmationUp and not inUptrend and minorSwingConfirmsBullish) or 
+              (swingFailureUp and consecutiveLower >= 2 and minorSwingConfirmsBullish) or 
+              (trendContinuationUp and not isSwingFailure and minorSwingConfirmsBullish) or 
+              (validBosPattern and inUptrend)
+
+shortSignal := (bosConfirmationDown and not inDowntrend and minorSwingConfirmsBearish) or 
+               (swingFailureDown and consecutiveHigher >= 2 and minorSwingConfirmsBearish) or 
+               (trendContinuationDown and not isSwingFailure and minorSwingConfirmsBearish) or 
+               (validBosPattern and inDowntrend)
+
+// Plot all visual elements
+plotshape(isPotentialBullishReversal, title="Bullish Reversal", location=location.belowbar, color=color.new(color.green, 0), style=shape.diamond, size=size.small)
+plotshape(isPotentialBearishReversal, title="Bearish Reversal", location=location.abovebar, color=color.new(color.red, 0), style=shape.diamond, size=size.small)
+
+// Plot structure pattern confirmations
+plotshape(validBosPattern and inUptrend, title="Bullish Structure Pattern", location=location.belowbar, color=color.new(color.blue, 0), style=shape.circle, size=size.small)
+plotshape(validBosPattern and inDowntrend, title="Bearish Structure Pattern", location=location.abovebar, color=color.new(color.blue, 0), style=shape.circle, size=size.small)
+
+// Plot trade signals
+plotshape(longSignal, title="Long Signal", location=location.belowbar, color=color.green, style=shape.triangleup, size=size.normal)
+plotshape(shortSignal, title="Short Signal", location=location.abovebar, color=color.red, style=shape.triangledown, size=size.normal)
+
+// Plot swing failures
+plotshape(isSwingFailure, title="Swing Failure", location=location.abovebar, color=color.new(color.red, 0), style=shape.xcross, size=size.small)
+
+// Plot minor swing points
+if validMinorSwingHigh and math.abs(minorSwingHigh - lastSwingHigh) > threshold * 0.75
+    float minorHighPrice = minorSwingHigh
+    label.new(bar_index[minorLookbackRight], minorHighPrice + (dynamicOffset * 0.5), text="h", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.new(color.gray, 40), style=label.style_label_down, size=size.tiny)
+
+if validMinorSwingLow and math.abs(minorSwingLow - lastSwingLow) > threshold * 0.75
+    float minorLowPrice = minorSwingLow
+    label.new(bar_index[minorLookbackRight], minorLowPrice - (dynamicOffset * 0.5), text="l", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.new(color.gray, 40), style=label.style_label_up, size=size.tiny)
 
 // Update swing points and plot text with improved BOS visualization
 if validSwingHigh
@@ -159,7 +205,6 @@ if validSwingHigh
     lastSwingHigh := swingHighPrice
     
     if not na(prevSwingHigh)
-        currentLeg = getLeg(lookbackRight)
         if swingHighPrice > prevSwingHigh
             label.new(bar_index[lookbackRight], swingHighPrice + dynamicOffset, text="HH", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.green, style=label.style_label_down, size=textSizeValue)
             if inDowntrend
@@ -169,11 +214,7 @@ if validSwingHigh
                 inUptrend := true
                 trendBias := BULLISH
         else
-            label.new(bar_index[lookbackRight], swingHighPrice + dynamicOffset, 
-                     text=isSwingFailure ? "LH (Failure)" : "LH", 
-                     xloc=xloc.bar_index, yloc=yloc.price, 
-                     color=na, textcolor=isSwingFailure ? color.red : color.orange, 
-                     style=label.style_label_down, size=textSizeValue)
+            label.new(bar_index[lookbackRight], swingHighPrice + dynamicOffset, text=isSwingFailure ? "LH (Failure)" : "LH", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=isSwingFailure ? color.red : color.orange, style=label.style_label_down, size=textSizeValue)
             if not inDowntrend
                 inDowntrend := true
                 inUptrend := false
@@ -186,7 +227,6 @@ if validSwingLow
     lastSwingLow := swingLowPrice
     
     if not na(prevSwingLow)
-        currentLeg = getLeg(lookbackRight)
         if swingLowPrice < prevSwingLow
             label.new(bar_index[lookbackRight], swingLowPrice - dynamicOffset, text="LL", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.red, style=label.style_label_up, size=textSizeValue)
             if inUptrend
@@ -196,52 +236,10 @@ if validSwingLow
                 inDowntrend := true
                 trendBias := BEARISH
         else
-            label.new(bar_index[lookbackRight], swingLowPrice - dynamicOffset, 
-                     text=isSwingFailure ? "HL (Failure)" : "HL", 
-                     xloc=xloc.bar_index, yloc=yloc.price, 
-                     color=na, textcolor=isSwingFailure ? color.red : color.green, 
-                     style=label.style_label_up, size=textSizeValue)
+            label.new(bar_index[lookbackRight], swingLowPrice - dynamicOffset, text=isSwingFailure ? "HL (Failure)" : "HL", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=isSwingFailure ? color.red : color.green, style=label.style_label_up, size=textSizeValue)
             if not inUptrend
                 inUptrend := true
                 inDowntrend := false
                 trendBias := BULLISH
     prevSwingLow := swingLowPrice
-    lastSwingLowBar := bar_index[lookbackRight]
-
-// Plot trade signals with arrows (in global scope)
-plotshape(longSignal, title="Long Signal", location=location.belowbar, color=color.green, style=shape.triangleup, size=size.normal)
-plotshape(shortSignal, title="Short Signal", location=location.abovebar, color=color.red, style=shape.triangledown, size=size.normal)
-
-// Plot swing failures and potential reversals (in global scope)
-plotshape(isSwingFailure, title="Swing Failure", location=location.abovebar, color=color.new(color.red, 0), style=shape.xcross, size=size.small)
-plotshape(isPotentialReversal, title="Potential Reversal", location=location.belowbar, color=color.purple, style=shape.diamond, size=size.tiny)
-
-// Plot minor swing points (only if they're significant enough)
-if validMinorSwingHigh and math.abs(minorSwingHigh - lastSwingHigh) > threshold * 0.75
-    float minorHighPrice = minorSwingHigh
-    label.new(bar_index[minorLookbackRight], minorHighPrice + (dynamicOffset * 0.5), text="h", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.new(color.gray, 40), style=label.style_label_down, size=size.tiny)
-
-if validMinorSwingLow and math.abs(minorSwingLow - lastSwingLow) > threshold * 0.75
-    float minorLowPrice = minorSwingLow
-    label.new(bar_index[minorLookbackRight], minorLowPrice - (dynamicOffset * 0.5), text="l", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.new(color.gray, 40), style=label.style_label_up, size=size.tiny)
-
-// Enhance potential reversal detection with direction
-isPotentialBullishReversal = validSwingLow and crossOverSma and validMinorSwingLow and minorSwingLow > lastSwingLow
-isPotentialBearishReversal = validSwingHigh and crossUnderSma and validMinorSwingHigh and minorSwingHigh < lastSwingHigh
-
-// Use minor swings to confirm reversals
-bool minorSwingConfirmsBullish = validMinorSwingLow and minorSwingLow > lastSwingLow and close > sma20
-bool minorSwingConfirmsBearish = validMinorSwingHigh and minorSwingHigh < lastSwingHigh and close < sma20
-
-// Enhanced trade signals with minor swing confirmation
-longSignal := (bosConfirmationUp and not inUptrend and minorSwingConfirmsBullish) or 
-              (swingFailureUp and consecutiveLower >= 2 and minorSwingConfirmsBullish) or 
-              (trendContinuationUp and not isSwingFailure and minorSwingConfirmsBullish)
-
-shortSignal := (bosConfirmationDown and not inDowntrend and minorSwingConfirmsBearish) or 
-               (swingFailureDown and consecutiveHigher >= 2 and minorSwingConfirmsBearish) or 
-               (trendContinuationDown and not isSwingFailure and minorSwingConfirmsBearish)
-
-// Plot differentiated reversal signals
-plotshape(isPotentialBullishReversal, title="Bullish Reversal", location=location.belowbar, color=color.new(color.green, 20), style=shape.diamond, size=size.tiny)
-plotshape(isPotentialBearishReversal, title="Bearish Reversal", location=location.abovebar, color=color.new(color.red, 20), style=shape.diamond, size=size.tiny) 
+    lastSwingLowBar := bar_index[lookbackRight] 
