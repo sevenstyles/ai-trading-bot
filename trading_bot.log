@@ -194,3 +194,49 @@
 2025-01-13 19:14:10,065 - INFO - Closed existing position
 2025-01-13 19:14:10,475 - INFO - Main order placed: {'orderId': 4077077447, 'symbol': 'BTCUSDT', 'status': 'NEW', 'clientOrderId': '5SGU15pIykl5DYr2p3zjV5', 'price': '0.00', 'avgPrice': '0.00', 'origQty': '0.002', 'executedQty': '0.000', 'cumQty': '0.000', 'cumQuote': '0.00000', 'timeInForce': 'GTC', 'type': 'MARKET', 'reduceOnly': False, 'closePosition': False, 'side': 'SELL', 'positionSide': 'BOTH', 'stopPrice': '0.00', 'workingType': 'CONTRACT_PRICE', 'priceProtect': False, 'origType': 'MARKET', 'priceMatch': 'NONE', 'selfTradePreventionMode': 'NONE', 'goodTillDate': 0, 'updateTime': 1736756050405}
 2025-01-13 19:14:11,476 - ERROR - Error in main execution: 'UMFutures' object has no attribute 'get_order'
+2025-01-15 19:58:55,654 - INFO - Symbol info - Price precision: 1, Tick size: 0.1
+2025-01-15 19:58:55,665 - INFO - Symbol info - Quantity precision: 1, Step size: 0.001
+2025-01-15 19:58:55,892 - INFO - Exported OHLC data to ohlc_data_20250115_195855.json
+2025-01-15 19:58:55,892 - INFO - Current price: 97180.8
+2025-01-15 19:59:00,735 - INFO - HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+2025-01-15 19:59:00,739 - INFO - Received strategy: {'entry': 97180.8, 'exit': 97470, 'stop_loss': 97000, 'direction': 'LONG', 'reasoning': 'The price has shown a consistent upward trend with higher highs and higher lows, supported by increasing volume. The current price is near a recent support level, making it a good entry point for a LONG trade with a stop-loss below the support and a take-profit near the recent high.'}
+2025-01-15 19:59:00,739 - INFO - Trade strategy received: {'entry': 97180.8, 'exit': 97470, 'stop_loss': 97000, 'direction': 'LONG', 'reasoning': 'The price has shown a consistent upward trend with higher highs and higher lows, supported by increasing volume. The current price is near a recent support level, making it a good entry point for a LONG trade with a stop-loss below the support and a take-profit near the recent high.'}
+2025-01-15 19:59:00,741 - WARNING - Adjusting quantity to meet minimum notional value requirement
+2025-01-15 19:59:00,742 - INFO - Calculated quantity: 0.002 BTC
+2025-01-15 19:59:00,742 - INFO - Notional value: 194.36 USDT
+2025-01-15 19:59:00,743 - INFO - Adjusted take-profit to maintain minimum distance: 97666.704
+2025-01-15 19:59:00,743 - INFO - Adjusted stop-loss to maintain minimum distance: 96694.89600000001
+2025-01-15 19:59:01,756 - INFO - Leverage set to 20x
+2025-01-15 19:59:02,618 - INFO - Main order placed: {'orderId': 4077742636, 'symbol': 'BTCUSDT', 'status': 'NEW', 'clientOrderId': 'f1CT2nlHGccgJBS2HW4V5g', 'price': '0.00', 'avgPrice': '0.00', 'origQty': '0.002', 'executedQty': '0.000', 'cumQty': '0.000', 'cumQuote': '0.00000', 'timeInForce': 'GTC', 'type': 'MARKET', 'reduceOnly': False, 'closePosition': False, 'side': 'BUY', 'positionSide': 'BOTH', 'stopPrice': '0.00', 'workingType': 'CONTRACT_PRICE', 'priceProtect': False, 'origType': 'MARKET', 'priceMatch': 'NONE', 'selfTradePreventionMode': 'NONE', 'goodTillDate': 0, 'updateTime': 1736931542567}
+2025-01-15 19:59:04,052 - ERROR - Error in main execution: Main order not filled yet
+2025-01-17 12:05:24,680 - INFO - Symbol info - Price precision: 1, Tick size: 0.1
+2025-01-17 12:05:24,689 - INFO - Symbol info - Quantity precision: 1, Step size: 0.001
+2025-01-17 12:05:24,910 - INFO - Exported OHLC data to ohlc_data_20250117_120524.json
+2025-01-17 12:05:24,910 - INFO - Current price: 100106.1
+2025-01-17 12:05:25,932 - INFO - HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+2025-01-17 12:05:28,943 - INFO - Received strategy: {'entry': 100106, 'exit': 100300, 'stop_loss': 99800, 'direction': 'LONG', 'reasoning': 'The price has shown a consistent upward trend with higher highs and higher lows, supported by increasing volume. The current price is near the recent low, providing a good entry point with a stop-loss below the recent support level to minimize risk.'}
+2025-01-17 12:05:28,943 - INFO - Trade strategy received: {'entry': 100106, 'exit': 100300, 'stop_loss': 99800, 'direction': 'LONG', 'reasoning': 'The price has shown a consistent upward trend with higher highs and higher lows, supported by increasing volume. The current price is near the recent low, providing a good entry point with a stop-loss below the recent support level to minimize risk.'}
+2025-01-17 12:05:28,944 - WARNING - Adjusting quantity to meet minimum notional value requirement
+2025-01-17 12:05:28,946 - INFO - Calculated quantity: 0.002 BTC
+2025-01-17 12:05:28,946 - INFO - Notional value: 200.21 USDT
+2025-01-17 12:05:28,946 - INFO - Adjusted take-profit to maintain minimum distance: 100606.6305
+2025-01-17 12:05:28,947 - INFO - Adjusted stop-loss to maintain minimum distance: 99605.56950000001
+2025-01-17 12:05:29,963 - INFO - Leverage set to 20x
+2025-01-17 12:05:30,823 - INFO - Closed existing position
+2025-01-17 12:05:31,252 - INFO - Main order placed: {'orderId': 4078198403, 'symbol': 'BTCUSDT', 'status': 'NEW', 'clientOrderId': '5mOVwQ7lwKwrFuXEpVyLKw', 'price': '0.00', 'avgPrice': '0.00', 'origQty': '0.002', 'executedQty': '0.000', 'cumQty': '0.000', 'cumQuote': '0.00000', 'timeInForce': 'GTC', 'type': 'MARKET', 'reduceOnly': False, 'closePosition': False, 'side': 'BUY', 'positionSide': 'BOTH', 'stopPrice': '0.00', 'workingType': 'CONTRACT_PRICE', 'priceProtect': False, 'origType': 'MARKET', 'priceMatch': 'NONE', 'selfTradePreventionMode': 'NONE', 'goodTillDate': 0, 'updateTime': 1737075931009}
+2025-01-17 12:05:32,415 - ERROR - Error in main execution: Main order not filled yet
+2025-01-17 12:08:20,615 - INFO - Symbol info - Price precision: 1, Tick size: 0.1
+2025-01-17 12:08:20,615 - INFO - Symbol info - Quantity precision: 1, Step size: 0.001
+2025-01-17 12:08:20,842 - INFO - Exported OHLC data to ohlc_data_20250117_120820.json
+2025-01-17 12:08:20,842 - INFO - Current price: 100047.1
+2025-01-17 12:08:21,733 - INFO - HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+2025-01-17 12:08:26,317 - INFO - Received strategy: {'entry': 100047, 'exit': 100500, 'stop_loss': 99500, 'direction': 'LONG', 'reasoning': 'The price has shown a consistent upward trend with higher highs and higher lows, supported by increasing volume. The recent pullback to 100047 provides a good entry point, with a stop-loss below the recent low at 99500 to minimize risk. The take-profit is set at 100500, targeting the next resistance level.'}
+2025-01-17 12:08:26,317 - INFO - Trade strategy received: {'entry': 100047, 'exit': 100500, 'stop_loss': 99500, 'direction': 'LONG', 'reasoning': 'The price has shown a consistent upward trend with higher highs and higher lows, supported by increasing volume. The recent pullback to 100047 provides a good entry point, with a stop-loss below the recent low at 99500 to minimize risk. The take-profit is set at 100500, targeting the next resistance level.'}
+2025-01-17 12:08:26,317 - WARNING - Adjusting quantity to meet minimum notional value requirement
+2025-01-17 12:08:26,318 - INFO - Calculated quantity: 0.002 BTC
+2025-01-17 12:08:26,318 - INFO - Notional value: 200.09 USDT
+2025-01-17 12:08:26,318 - INFO - Adjusted take-profit to maintain minimum distance: 100547.3355
+2025-01-17 12:08:27,338 - INFO - Leverage set to 20x
+2025-01-17 12:08:27,923 - INFO - Closed existing position
+2025-01-17 12:08:28,076 - INFO - Main order placed: {'orderId': 4078199422, 'symbol': 'BTCUSDT', 'status': 'NEW', 'clientOrderId': 'JpsV3rQt1E9MDYQ3WdNSMo', 'price': '0.00', 'avgPrice': '0.00', 'origQty': '0.002', 'executedQty': '0.000', 'cumQty': '0.000', 'cumQuote': '0.00000', 'timeInForce': 'GTC', 'type': 'MARKET', 'reduceOnly': False, 'closePosition': False, 'side': 'BUY', 'positionSide': 'BOTH', 'stopPrice': '0.00', 'workingType': 'CONTRACT_PRICE', 'priceProtect': False, 'origType': 'MARKET', 'priceMatch': 'NONE', 'selfTradePreventionMode': 'NONE', 'goodTillDate': 0, 'updateTime': 1737076107844}
+2025-01-17 12:08:29,507 - ERROR - Error in main execution: Main order not filled yet

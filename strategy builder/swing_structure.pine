@@ -1,0 +1,85 @@
+//@version=6
+indicator("Swing Structure", overlay=true)
+
+// Input parameters
+lookbackLeft = input(5, "Lookback Left")
+lookbackRight = input(5, "Lookback Right")
+labelOffset = input.float(0.5, "Text Offset", minval=0.1)
+textSize = input.string("Small", "Text Size", options=["Tiny", "Small", "Normal", "Large"])
+
+// Convert text size input to label size
+textSizeValue = switch
+    textSize == "Tiny"   => size.tiny
+    textSize == "Small"  => size.small
+    textSize == "Normal" => size.normal
+    => size.large
+
+// Function to detect swing high - checking if current bar's high is highest in the lookback period
+swingHigh = high[lookbackRight] > high[lookbackRight + 1] and high[lookbackRight] > high[lookbackRight - 1] and high[lookbackRight] >= ta.highest(high[lookbackRight + 1], lookbackLeft + lookbackRight - 1)
+
+// Function to detect swing low - checking if current bar's low is lowest in the lookback period
+swingLow = low[lookbackRight] < low[lookbackRight + 1] and low[lookbackRight] < low[lookbackRight - 1] and low[lookbackRight] <= ta.lowest(low[lookbackRight + 1], lookbackLeft + lookbackRight - 1)
+
+// Variables to store previous swing levels and market structure
+var float prevSwingHigh = na
+var float prevSwingLow = na
+var float lastSwingHigh = na
+var float lastSwingLow = na
+var bool inDowntrend = false
+var bool inUptrend = false
+var int consecutiveLowerLows = 0
+var int consecutiveHigherHighs = 0
+var line currentBosLine = na
+
+// Update swing points and plot text
+if swingHigh
+    lastSwingHigh := high[lookbackRight]
+    if not na(prevSwingHigh)
+        if high[lookbackRight] > prevSwingHigh
+            label.new(bar_index[lookbackRight], high[lookbackRight] + (labelOffset * syminfo.mintick), text="HH", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.green, style=label.style_label_down, size=textSizeValue)
+            consecutiveHigherHighs := consecutiveHigherHighs + 1
+            if inDowntrend and consecutiveHigherHighs >= 1
+                label.new(bar_index[lookbackRight], high[lookbackRight] + (2 * labelOffset * syminfo.mintick), text="BOS", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.green, style=label.style_label_down, size=textSizeValue)
+                if not na(currentBosLine)
+                    line.delete(currentBosLine)
+                currentBosLine := line.new(bar_index[lookbackRight], high[lookbackRight], bar_index, high[lookbackRight], color=color.yellow, width=2)
+                inDowntrend := false
+                inUptrend := true
+                consecutiveLowerLows := 0
+        else
+            label.new(bar_index[lookbackRight], high[lookbackRight] + (labelOffset * syminfo.mintick), text="LH", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.red, style=label.style_label_down, size=textSizeValue)
+            consecutiveHigherHighs := 0
+            if not inDowntrend
+                inDowntrend := true
+                inUptrend := false
+    prevSwingHigh := high[lookbackRight]
+
+if swingLow
+    lastSwingLow := low[lookbackRight]
+    if not na(prevSwingLow)
+        if low[lookbackRight] < prevSwingLow
+            label.new(bar_index[lookbackRight], low[lookbackRight] - (labelOffset * syminfo.mintick), text="LL", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.red, style=label.style_label_up, size=textSizeValue)
+            consecutiveLowerLows := consecutiveLowerLows + 1
+            if inUptrend and consecutiveLowerLows >= 1
+                label.new(bar_index[lookbackRight], low[lookbackRight] - (2 * labelOffset * syminfo.mintick), text="BOS", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.red, style=label.style_label_up, size=textSizeValue)
+                if not na(currentBosLine)
+                    line.delete(currentBosLine)
+                currentBosLine := line.new(bar_index[lookbackRight], low[lookbackRight], bar_index, low[lookbackRight], color=color.yellow, width=2)
+                inUptrend := false
+                inDowntrend := true
+                consecutiveHigherHighs := 0
+        else
+            label.new(bar_index[lookbackRight], low[lookbackRight] - (labelOffset * syminfo.mintick), text="HL", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.green, style=label.style_label_up, size=textSizeValue)
+            consecutiveLowerLows := 0
+            if not inUptrend
+                inUptrend := true
+                inDowntrend := false
+    prevSwingLow := low[lookbackRight]
+
+// Update BOS line
+if not na(currentBosLine)
+    line.set_x2(currentBosLine, bar_index)
+
+// Plot trend state
+plot(inUptrend ? high : na, title="Uptrend", color=color.new(color.green, 50), linewidth=2, style=plot.style_linebr)
+plot(inDowntrend ? low : na, title="Downtrend", color=color.new(color.red, 50), linewidth=2, style=plot.style_linebr) 

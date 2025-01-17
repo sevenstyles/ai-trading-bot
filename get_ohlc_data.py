@@ -50,7 +50,7 @@ def main():
         params = {
             'symbol': SYMBOL,
             'interval': '15m',
-            'limit': 100
+            'limit': 200
         }
         response = requests.get(url, params=params)
         response.raise_for_status()
