@@ -114,9 +114,27 @@ patternOneColor = input.color(color.green, "HH->HL->BOS Pattern Color", group="P
 showPatternTwo = input.bool(true, "Show LL->HH->BOS Pattern", group="Pattern Sequences")
 patternTwoColor = input.color(color.blue, "LL->HH->BOS Pattern Color", group="Pattern Sequences")
 
-// Pattern Detection
-bool patternOneDetected = showPatternOne and array.get(patternHistory, 2) == "HH" and array.get(patternHistory, 1) == "HL" and array.get(patternHistory, 0) == "BOS_UP"
-bool patternTwoDetected = showPatternTwo and array.get(patternHistory, 2) == "LL" and array.get(patternHistory, 1) == "HH" and array.get(patternHistory, 0) == "BOS_UP"
+// Pattern Detection with debug info
+var label debugLabel = na
+
+// Function to get pattern history as string
+getPatternHistoryString() =>
+    result = ""
+    for i = 0 to 2
+        pattern = array.get(patternHistory, i)
+        result := result + (i == 0 ? "" : "->") + pattern
+    result
+
+// Enhanced pattern detection
+bool patternOneDetected = showPatternOne and 
+     array.get(patternHistory, 2) == "HH" and 
+     array.get(patternHistory, 1) == "HL" and 
+     (array.get(patternHistory, 0) == "BOS_UP" or array.get(patternHistory, 0) == "BOS_DOWN")
+
+bool patternTwoDetected = showPatternTwo and 
+     array.get(patternHistory, 2) == "LL" and 
+     array.get(patternHistory, 1) == "HH" and 
+     (array.get(patternHistory, 0) == "BOS_UP" or array.get(patternHistory, 0) == "BOS_DOWN")
 
 // Function to update pattern history
 updatePatternHistory(string newPattern) =>
@@ -126,6 +144,15 @@ updatePatternHistory(string newPattern) =>
         array.pop(patternHistory)
         _lastBar := bar_index
     _lastBar
+
+// Update debug label separately from the function
+if not na(debugLabel)
+    label.delete(debugLabel)
+debugLabel := label.new(bar_index, high + (2 * dynamicOffset), 
+                      text=getPatternHistoryString(), 
+                      style=label.style_label_down,
+                      color=color.new(color.blue, 80),
+                      textcolor=color.white)
 
 // Update pattern history based on swing formations
 if validSwingHigh and not na(prevSwingHigh)
@@ -140,21 +167,34 @@ if validSwingLow and not na(prevSwingLow)
     else
         lastPatternBar := updatePatternHistory("HL")
 
-if validBosUp and inUptrend
-    lastPatternBar := updatePatternHistory("BOS_UP")
-if validBosDown and inDowntrend
-    lastPatternBar := updatePatternHistory("BOS_DOWN")
+// Update BOS patterns more explicitly
+if validBosUp
+    if inUptrend
+        lastPatternBar := updatePatternHistory("BOS_UP")
+    else
+        lastPatternBar := updatePatternHistory("BOS_DOWN")
+if validBosDown
+    if inDowntrend
+        lastPatternBar := updatePatternHistory("BOS_DOWN")
+    else
+        lastPatternBar := updatePatternHistory("BOS_UP")
 
-// Plot pattern signals
-plotshape(patternOneDetected, title="HH->HL->BOS Pattern", location=location.belowbar, color=patternOneColor, style=shape.triangleup, size=size.large)
-plotshape(patternTwoDetected, title="LL->HH->BOS Pattern", location=location.belowbar, color=patternTwoColor, style=shape.triangleup, size=size.large)
+// Plot pattern signals with larger size for visibility
+plotshape(patternOneDetected, title="HH->HL->BOS Pattern", location=location.belowbar, 
+          color=patternOneColor, style=shape.triangleup, size=size.huge)
+plotshape(patternTwoDetected, title="LL->HH->BOS Pattern", location=location.belowbar, 
+          color=patternTwoColor, style=shape.triangleup, size=size.huge)
 
-// Add pattern labels for clarity
+// Add pattern labels for clarity with increased visibility
 if patternOneDetected
-    label.new(bar_index, low - (3 * dynamicOffset), text="HH->HL->BOS", style=label.style_label_up, color=na, textcolor=patternOneColor, size=textSizeValue)
+    label.new(bar_index, low - (3 * dynamicOffset), text="HH->HL->BOS", 
+              style=label.style_label_up, color=color.new(patternOneColor, 40), 
+              textcolor=patternOneColor, size=size.large)
 
 if patternTwoDetected
-    label.new(bar_index, low - (4 * dynamicOffset), text="LL->HH->BOS", style=label.style_label_up, color=na, textcolor=patternTwoColor, size=textSizeValue)
+    label.new(bar_index, low - (4 * dynamicOffset), text="LL->HH->BOS", 
+              style=label.style_label_up, color=color.new(patternTwoColor, 40), 
+              textcolor=patternTwoColor, size=size.large)
 
 // Enhanced leg detection
 getLeg(int size) =>
