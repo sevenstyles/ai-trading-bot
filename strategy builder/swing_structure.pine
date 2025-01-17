@@ -61,12 +61,22 @@ validSwingLow = not na(swingLow) and (na(lastSwingLow) or math.abs(swingLow - la
 validMinorSwingHigh = not na(minorSwingHigh) and (na(lastSwingHigh) or math.abs(minorSwingHigh - lastSwingHigh) > threshold * 0.5)
 validMinorSwingLow = not na(minorSwingLow) and (na(lastSwingLow) or math.abs(minorSwingLow - lastSwingLow) > threshold * 0.5)
 
-// Detect potential reversal zones
+// Detect potential reversal zones and trade signals
 isSwingFailure = (validSwingHigh and high[lookbackRight] < lastSwingHigh and inUptrend) or 
                  (validSwingLow and low[lookbackRight] > lastSwingLow and inDowntrend)
 
 isPotentialReversal = (validSwingHigh and ta.crossunder(close, ta.sma(close, 20))) or 
                      (validSwingLow and ta.crossover(close, ta.sma(close, 20)))
+
+// Detect optimal trade entries
+var bool longSignal = false
+var bool shortSignal = false
+
+longSignal := (inDowntrend[1] and not inDowntrend and validSwingLow and low[lookbackRight] > lastSwingLow) or  // BOS followed by HL
+              (inDowntrend and validSwingHigh and high[lookbackRight] < lastSwingHigh and close > ta.sma(close, 20))  // Failed LH during downtrend
+
+shortSignal := (inUptrend[1] and not inUptrend and validSwingHigh and high[lookbackRight] < lastSwingHigh) or  // BOS followed by LH
+               (inUptrend and validSwingLow and low[lookbackRight] > lastSwingLow and close < ta.sma(close, 20))  // Failed HL during uptrend
 
 // Update swing points and plot text
 if validSwingHigh
@@ -121,8 +131,19 @@ if validSwingLow
     prevSwingLow := swingLowPrice
     lastSwingLowBar := bar_index[lookbackRight]
 
-// Plot potential trade entry signals
-plotshape(isSwingFailure, title="Swing Failure", location=location.belowbar, color=color.red, style=shape.circle, size=size.tiny)
+// Plot trade signals
+if longSignal
+    label.new(bar_index[lookbackRight], low[lookbackRight] - (2 * labelOffset * syminfo.mintick), 
+              text="LONG", xloc=xloc.bar_index, yloc=yloc.price, 
+              color=na, textcolor=color.green, style=label.style_label_up, size=textSizeValue)
+
+if shortSignal
+    label.new(bar_index[lookbackRight], high[lookbackRight] + (2 * labelOffset * syminfo.mintick), 
+              text="SHORT", xloc=xloc.bar_index, yloc=yloc.price, 
+              color=na, textcolor=color.red, style=label.style_label_down, size=textSizeValue)
+
+// Plot swing failures and potential reversals
+plotshape(isSwingFailure, title="Swing Failure", location=location.abovebar, color=color.new(color.red, 0), style=shape.xcross, size=size.small)
 plotshape(isPotentialReversal, title="Potential Reversal", location=location.belowbar, color=color.purple, style=shape.diamond, size=size.tiny)
 
 // Plot minor swing points (only if they're significant enough)
