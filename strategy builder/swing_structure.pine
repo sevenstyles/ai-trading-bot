@@ -2,9 +2,10 @@
 indicator("Swing Structure", overlay=true, max_labels_count=500, max_lines_count=500)
 
 // Input parameters
-lookbackLeft = input(10, "Lookback Left")
-lookbackRight = input(10, "Lookback Right")
+lookbackLeft = input(15, "Lookback Left")
+lookbackRight = input(15, "Lookback Right")
 labelOffset = input.float(2.0, "Text Offset", minval=0.1)
+swingThreshold = input.float(0.5, "Swing Threshold %", minval=0.1, step=0.1) / 100
 textSize = input.string("Small", "Text Size", options=["Tiny", "Small", "Normal", "Large"])
 
 // Convert text size input to label size
@@ -13,10 +14,6 @@ textSizeValue = switch
     textSize == "Small"  => size.small
     textSize == "Normal" => size.normal
     => size.large
-
-// Function to detect swing high/low using pivot points
-swingHigh = ta.pivothigh(high, lookbackLeft, lookbackRight)
-swingLow = ta.pivotlow(low, lookbackLeft, lookbackRight)
 
 // Variables to store previous swing levels and market structure
 var float prevSwingHigh = na
@@ -34,8 +31,17 @@ var array<label> swingLabels = array.new<label>()
 var array<int> bosStartBars = array.new<int>()
 var array<float> bosLevels = array.new<float>()
 
+// Function to detect swing high/low using pivot points with threshold
+float threshold = close * swingThreshold
+swingHigh = ta.pivothigh(high, lookbackLeft, lookbackRight)
+swingLow = ta.pivotlow(low, lookbackLeft, lookbackRight)
+
+// Only consider swing points that exceed the threshold
+validSwingHigh = not na(swingHigh) and (na(lastSwingHigh) or math.abs(swingHigh - lastSwingHigh) > threshold)
+validSwingLow = not na(swingLow) and (na(lastSwingLow) or math.abs(swingLow - lastSwingLow) > threshold)
+
 // Update swing points and plot text
-if not na(swingHigh)
+if validSwingHigh
     float swingHighPrice = swingHigh
     lastSwingHigh := swingHighPrice
     int currentBar = bar_index[lookbackRight]
@@ -66,7 +72,7 @@ if not na(swingHigh)
     prevSwingHigh := swingHighPrice
     lastSwingHighBar := bar_index[lookbackRight]
 
-if not na(swingLow)
+if validSwingLow
     float swingLowPrice = swingLow
     lastSwingLow := swingLowPrice
     int currentBar = bar_index[lookbackRight]
