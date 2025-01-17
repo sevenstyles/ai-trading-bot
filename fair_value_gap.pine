@@ -28,13 +28,13 @@ cleanupArrays()
 
 // Detect Bullish FVG (gap up)
 if low > high[2] and math.abs(low - high[2]) > close * minGapSize
-    var box newBox = box.new(left=bar_index - 2, top=low, right=bar_index + extendBoxes, bottom=high[2], bgcolor=bullishColor, border_color=na)
+    box newBox = box.new(left=bar_index - 2, top=low, right=bar_index + extendBoxes, bottom=high[2], bgcolor=bullishColor, border_color=na)
     array.push(bullishFVGs, newBox)
     array.push(bullishLevels, high[2])  // Store the bottom level
 
 // Detect Bearish FVG (gap down)
 if high < low[2] and math.abs(low[2] - high) > close * minGapSize
-    var box newBox = box.new(left=bar_index - 2, top=high, right=bar_index + extendBoxes, bottom=low[2], bgcolor=bearishColor, border_color=na)
+    box newBox = box.new(left=bar_index - 2, top=high, right=bar_index + extendBoxes, bottom=low[2], bgcolor=bearishColor, border_color=na)
     array.push(bearishFVGs, newBox)
     array.push(bearishLevels, low[2])  // Store the top level
 

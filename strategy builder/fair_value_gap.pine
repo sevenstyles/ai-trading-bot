@@ -29,50 +29,40 @@ cleanupArrays()
 // Detect Bullish FVG (gap up)
 if low > high[2] and math.abs(low - high[2]) > close * minGapSize
     // Create new box
-    var box newBox = box.new(
-        left=bar_index - 2,
-        top=low,
-        right=bar_index + extendBoxes,
-        bottom=high[2],
-        bgcolor=bullishColor,
-        border_color=na
-        )
+    box newBox = box.new(left=bar_index - 2, top=low, right=bar_index + extendBoxes, bottom=high[2], bgcolor=bullishColor, border_color=na)
     array.push(bullishFVGs, newBox)
     array.push(bullishLevels, high[2])  // Store the bottom level
 
 // Detect Bearish FVG (gap down)
 if high < low[2] and math.abs(low[2] - high) > close * minGapSize
     // Create new box
-    var box newBox = box.new(
-        left=bar_index - 2,
-        top=high,
-        right=bar_index + extendBoxes,
-        bottom=low[2],
-        bgcolor=bearishColor,
-        border_color=na
-        )
+    box newBox = box.new(left=bar_index - 2, top=high, right=bar_index + extendBoxes, bottom=low[2], bgcolor=bearishColor, border_color=na)
     array.push(bearishFVGs, newBox)
     array.push(bearishLevels, low[2])  // Store the top level
 
 // Check for invalidation of bullish FVGs
-for i = 0 to array.size(bullishFVGs) - 1
-    box currentBox = array.get(bullishFVGs, i)
-    float level = array.get(bullishLevels, i)
-    if low < level  // Price moved below the FVG
-        box.set_bgcolor(currentBox, invalidColor)
+if array.size(bullishFVGs) > 0
+    for i = 0 to array.size(bullishFVGs) - 1
+        box currentBox = array.get(bullishFVGs, i)
+        float level = array.get(bullishLevels, i)
+        if low < level  // Price moved below the FVG
+            box.set_bgcolor(currentBox, invalidColor)
 
 // Check for invalidation of bearish FVGs
-for i = 0 to array.size(bearishFVGs) - 1
-    box currentBox = array.get(bearishFVGs, i)
-    float level = array.get(bearishLevels, i)
-    if high > level  // Price moved above the FVG
-        box.set_bgcolor(currentBox, invalidColor)
+if array.size(bearishFVGs) > 0
+    for i = 0 to array.size(bearishFVGs) - 1
+        box currentBox = array.get(bearishFVGs, i)
+        float level = array.get(bearishLevels, i)
+        if high > level  // Price moved above the FVG
+            box.set_bgcolor(currentBox, invalidColor)
 
 // Extend active boxes
-for i = 0 to array.size(bullishFVGs) - 1
-    box currentBox = array.get(bullishFVGs, i)
-    box.set_right(currentBox, bar_index + extendBoxes)
+if array.size(bullishFVGs) > 0
+    for i = 0 to array.size(bullishFVGs) - 1
+        box currentBox = array.get(bullishFVGs, i)
+        box.set_right(currentBox, bar_index + extendBoxes)
 
-for i = 0 to array.size(bearishFVGs) - 1
-    box currentBox = array.get(bearishFVGs, i)
-    box.set_right(currentBox, bar_index + extendBoxes) 
+if array.size(bearishFVGs) > 0
+    for i = 0 to array.size(bearishFVGs) - 1
+        box currentBox = array.get(bearishFVGs, i)
+        box.set_right(currentBox, bar_index + extendBoxes) 
