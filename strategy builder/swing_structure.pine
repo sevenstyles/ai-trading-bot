@@ -23,7 +23,7 @@ lookbackLeft = input(5, "Lookback Left (Major Swings)")
 lookbackRight = input(3, "Lookback Right (Major Swings)")
 minorLookbackLeft = input(3, "Lookback Left (Minor Swings)")
 minorLookbackRight = input(2, "Lookback Right (Minor Swings)")
-labelOffset = input.float(2.0, "Text Offset", minval=0.1)
+labelOffset = input.float(0.5, "Text Offset %", minval=0.1, step=0.1) / 100
 swingThreshold = input.float(0.2, "Swing Threshold %", minval=0.1, step=0.1) / 100
 atrPeriod = input(10, "ATR Period")
 atrMultiplier = input.float(1.0, "ATR Multiplier for Swing Significance", minval=0.5, step=0.1)
@@ -43,6 +43,10 @@ var bool crossUnderSma = false
 var bool crossOverSma = false
 crossUnderSma := ta.crossunder(close, sma20)
 crossOverSma := ta.crossover(close, sma20)
+
+// Calculate dynamic offset based on ATR
+var float dynamicOffset = na
+dynamicOffset := math.max(ta.atr(atrPeriod) * labelOffset, high - low)
 
 // Enhanced leg detection
 getLeg(int size) =>
@@ -157,15 +161,15 @@ if validSwingHigh
     if not na(prevSwingHigh)
         currentLeg = getLeg(lookbackRight)
         if swingHighPrice > prevSwingHigh
-            label.new(bar_index[lookbackRight], swingHighPrice + (labelOffset * syminfo.mintick), text="HH", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.green, style=label.style_label_down, size=textSizeValue)
+            label.new(bar_index[lookbackRight], swingHighPrice + dynamicOffset, text="HH", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.green, style=label.style_label_down, size=textSizeValue)
             if inDowntrend
-                label.new(bar_index[lookbackRight], swingHighPrice + (3 * labelOffset * syminfo.mintick), text="BOS", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.purple, style=label.style_label_down, size=textSizeValue)
+                label.new(bar_index[lookbackRight], swingHighPrice + (2 * dynamicOffset), text="BOS", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.purple, style=label.style_label_down, size=textSizeValue)
                 line.new(bar_index[lookbackRight], close[lookbackRight], lastSwingHighBar, prevSwingHigh, color=color.yellow, width=2)
                 inDowntrend := false
                 inUptrend := true
                 trendBias := BULLISH
         else
-            label.new(bar_index[lookbackRight], swingHighPrice + (labelOffset * syminfo.mintick), 
+            label.new(bar_index[lookbackRight], swingHighPrice + dynamicOffset, 
                      text=isSwingFailure ? "LH (Failure)" : "LH", 
                      xloc=xloc.bar_index, yloc=yloc.price, 
                      color=na, textcolor=isSwingFailure ? color.red : color.orange, 
@@ -184,15 +188,15 @@ if validSwingLow
     if not na(prevSwingLow)
         currentLeg = getLeg(lookbackRight)
         if swingLowPrice < prevSwingLow
-            label.new(bar_index[lookbackRight], swingLowPrice - (labelOffset * syminfo.mintick), text="LL", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.red, style=label.style_label_up, size=textSizeValue)
+            label.new(bar_index[lookbackRight], swingLowPrice - dynamicOffset, text="LL", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.red, style=label.style_label_up, size=textSizeValue)
             if inUptrend
-                label.new(bar_index[lookbackRight], swingLowPrice - (3 * labelOffset * syminfo.mintick), text="BOS", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.purple, style=label.style_label_up, size=textSizeValue)
+                label.new(bar_index[lookbackRight], swingLowPrice - (2 * dynamicOffset), text="BOS", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.purple, style=label.style_label_up, size=textSizeValue)
                 line.new(bar_index[lookbackRight], close[lookbackRight], lastSwingLowBar, prevSwingLow, color=color.yellow, width=2)
                 inUptrend := false
                 inDowntrend := true
                 trendBias := BEARISH
         else
-            label.new(bar_index[lookbackRight], swingLowPrice - (labelOffset * syminfo.mintick), 
+            label.new(bar_index[lookbackRight], swingLowPrice - dynamicOffset, 
                      text=isSwingFailure ? "HL (Failure)" : "HL", 
                      xloc=xloc.bar_index, yloc=yloc.price, 
                      color=na, textcolor=isSwingFailure ? color.red : color.green, 
@@ -215,8 +219,29 @@ plotshape(isPotentialReversal, title="Potential Reversal", location=location.bel
 // Plot minor swing points (only if they're significant enough)
 if validMinorSwingHigh and math.abs(minorSwingHigh - lastSwingHigh) > threshold * 0.75
     float minorHighPrice = minorSwingHigh
-    label.new(bar_index[minorLookbackRight], minorHighPrice + (labelOffset * syminfo.mintick), text="h", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.new(color.gray, 40), style=label.style_label_down, size=size.tiny)
+    label.new(bar_index[minorLookbackRight], minorHighPrice + (dynamicOffset * 0.5), text="h", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.new(color.gray, 40), style=label.style_label_down, size=size.tiny)
 
 if validMinorSwingLow and math.abs(minorSwingLow - lastSwingLow) > threshold * 0.75
     float minorLowPrice = minorSwingLow
-    label.new(bar_index[minorLookbackRight], minorLowPrice - (labelOffset * syminfo.mintick), text="l", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.new(color.gray, 40), style=label.style_label_up, size=size.tiny) 
+    label.new(bar_index[minorLookbackRight], minorLowPrice - (dynamicOffset * 0.5), text="l", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.new(color.gray, 40), style=label.style_label_up, size=size.tiny)
+
+// Enhance potential reversal detection with direction
+isPotentialBullishReversal = validSwingLow and crossOverSma and validMinorSwingLow and minorSwingLow > lastSwingLow
+isPotentialBearishReversal = validSwingHigh and crossUnderSma and validMinorSwingHigh and minorSwingHigh < lastSwingHigh
+
+// Use minor swings to confirm reversals
+bool minorSwingConfirmsBullish = validMinorSwingLow and minorSwingLow > lastSwingLow and close > sma20
+bool minorSwingConfirmsBearish = validMinorSwingHigh and minorSwingHigh < lastSwingHigh and close < sma20
+
+// Enhanced trade signals with minor swing confirmation
+longSignal := (bosConfirmationUp and not inUptrend and minorSwingConfirmsBullish) or 
+              (swingFailureUp and consecutiveLower >= 2 and minorSwingConfirmsBullish) or 
+              (trendContinuationUp and not isSwingFailure and minorSwingConfirmsBullish)
+
+shortSignal := (bosConfirmationDown and not inDowntrend and minorSwingConfirmsBearish) or 
+               (swingFailureDown and consecutiveHigher >= 2 and minorSwingConfirmsBearish) or 
+               (trendContinuationDown and not isSwingFailure and minorSwingConfirmsBearish)
+
+// Plot differentiated reversal signals
+plotshape(isPotentialBullishReversal, title="Bullish Reversal", location=location.belowbar, color=color.new(color.green, 20), style=shape.diamond, size=size.tiny)
+plotshape(isPotentialBearishReversal, title="Bearish Reversal", location=location.abovebar, color=color.new(color.red, 20), style=shape.diamond, size=size.tiny) 
