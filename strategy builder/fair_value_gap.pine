@@ -1,68 +1,84 @@
-//@version=6
-indicator("Fair Value Gap", "FVG", overlay=true, max_boxes_count=500)
+// © Sevenstyles
+
+//@version=5
+indicator(title="Fair Value Gaps", shorttitle="FVG", overlay=true, max_boxes_count = 200)
 
 // Input parameters
-extendBoxes = input.int(50, "Extend Boxes (Bars)", minval=1, maxval=500)
-bullishColor = input.color(color.new(color.green, 70), "Bullish FVG Color")
-bearishColor = input.color(color.new(color.red, 70), "Bearish FVG Color")
-invalidColor = input.color(color.new(color.gray, 70), "Invalid FVG Color")
-minGapSize = input.float(0.1, "Minimum Gap Size %", minval=0.01, step=0.01) / 100
+ext = input.int(10, "Extend FVGs")
+upcolor = input.color(defval = color.green, title = "Bullish color", group = "Aesthetics")
+downcolor = input.color(defval = color.red, title = "Bearish color", group = "Aesthetics")
 
-// Arrays to store FVG boxes and their price levels
-var box[] bullishFVGs = array.new_box()
-var box[] bearishFVGs = array.new_box()
+// Volume Spike Settings
+n_times = input.float(2.0, "Volume must be N times bigger", minval=1.0, step=0.1, group="Volume Spike Filter")
+bars_back = input.int(10, "Than average volume in last X bars", minval=1, group="Volume Spike Filter")
+ma_type = input.string("SMA", "Moving Average Type", options=["SMA", "WMA", "EMA"], group="Volume Spike Filter")
+use_vol_spike = input.bool(true, "Use Volume Spike Filter", group="Volume Spike Filter")
+
+// Other Filters
+inp2 = input.bool(false, "ATR Filter", group = "Filters")
+inp3 = input.bool(false, "Trend Filter", group = "Filters")
+
+// Arrays to store boxes and their levels
+var box[] bullishBoxes = array.new_box()
 var float[] bullishLevels = array.new_float()
+var box[] bearishBoxes = array.new_box()
 var float[] bearishLevels = array.new_float()
 
-// Function to clean up old boxes and levels
-cleanupArrays() =>
-    while array.size(bullishFVGs) > 0 and box.get_left(array.get(bullishFVGs, 0)) < bar_index - 500
-        array.shift(bullishFVGs)
-        array.shift(bullishLevels)
-    while array.size(bearishFVGs) > 0 and box.get_left(array.get(bearishFVGs, 0)) < bar_index - 500
-        array.shift(bearishFVGs)
-        array.shift(bearishLevels)
+// Volume spike detection using MA comparison
+ma_func(x, length) =>
+    switch ma_type
+        "WMA" => ta.wma(x, length)
+        "EMA" => ta.ema(x, length)
+        => ta.sma(x, length)
 
-// Clean up old boxes
-cleanupArrays()
+vol_ma = ma_func(volume[1], bars_back)
+is_vol_spike = volume > vol_ma * n_times
+vol_filt = use_vol_spike ? is_vol_spike[2] : true  // Check volume spike on the FVG candle
 
-// Detect Bullish FVG (gap up)
-if low > high[2] and math.abs(low - high[2]) > close * minGapSize
-    // Create new box
-    box newBox = box.new(left=bar_index - 2, top=low, right=bar_index + extendBoxes, bottom=high[2], bgcolor=bullishColor, border_color=na)
-    array.push(bullishFVGs, newBox)
-    array.push(bullishLevels, high[2])  // Store the bottom level
+// Other filters calculation
+atr = ta.atr(20) / 1.5
+atrfilt = inp2 ? ((low - high[2] > atr) or (low[2] - high > atr)) : true
+loc = ta.sma(close, 54)
+loc2 = loc > loc[1]
+locfiltb = inp3 ? loc2 : true
+locfilts = inp3 ? not loc2 : true
 
-// Detect Bearish FVG (gap down)
-if high < low[2] and math.abs(low[2] - high) > close * minGapSize
-    // Create new box
-    box newBox = box.new(left=bar_index - 2, top=high, right=bar_index + extendBoxes, bottom=low[2], bgcolor=bearishColor, border_color=na)
-    array.push(bearishFVGs, newBox)
-    array.push(bearishLevels, low[2])  // Store the top level
+// FVG Detection with volume spike filter
+bfvg = low > high[2] and vol_filt and atrfilt and locfiltb
+sfvg = high < low[2] and vol_filt and atrfilt and locfilts
 
-// Check for invalidation of bullish FVGs
-if array.size(bullishFVGs) > 0
-    for i = 0 to array.size(bullishFVGs) - 1
-        box currentBox = array.get(bullishFVGs, i)
+// Create new FVG boxes
+if bfvg
+    box newBox = box.new(left = bar_index-2, top = low, right = bar_index + ext, bottom = high[2], 
+         border_color = color.new(color.gray, 100), bgcolor = color.new(upcolor, 85))
+    array.push(bullishBoxes, newBox)
+    array.push(bullishLevels, high[2])  // Store the bottom level of bullish FVG
+
+if sfvg
+    box newBox = box.new(left = bar_index-2, top = high, right = bar_index + ext, bottom = low[2], 
+         border_color = color.new(color.gray, 100), bgcolor = color.new(downcolor, 85))
+    array.push(bearishBoxes, newBox)
+    array.push(bearishLevels, low[2])  // Store the top level of bearish FVG
+
+// Check for invalidation and remove boxes
+if array.size(bullishBoxes) > 0
+    for i = array.size(bullishBoxes) - 1 to 0
+        box currentBox = array.get(bullishBoxes, i)
         float level = array.get(bullishLevels, i)
-        if low < level  // Price moved below the FVG
-            box.set_bgcolor(currentBox, invalidColor)
+        if close < level  // Price closed below the FVG
+            box.delete(currentBox)
+            array.remove(bullishBoxes, i)
+            array.remove(bullishLevels, i)
+        else
+            box.set_right(currentBox, bar_index + ext)  // Extend active boxes
 
-// Check for invalidation of bearish FVGs
-if array.size(bearishFVGs) > 0
-    for i = 0 to array.size(bearishFVGs) - 1
-        box currentBox = array.get(bearishFVGs, i)
+if array.size(bearishBoxes) > 0
+    for i = array.size(bearishBoxes) - 1 to 0
+        box currentBox = array.get(bearishBoxes, i)
         float level = array.get(bearishLevels, i)
-        if high > level  // Price moved above the FVG
-            box.set_bgcolor(currentBox, invalidColor)
-
-// Extend active boxes
-if array.size(bullishFVGs) > 0
-    for i = 0 to array.size(bullishFVGs) - 1
-        box currentBox = array.get(bullishFVGs, i)
-        box.set_right(currentBox, bar_index + extendBoxes)
-
-if array.size(bearishFVGs) > 0
-    for i = 0 to array.size(bearishFVGs) - 1
-        box currentBox = array.get(bearishFVGs, i)
-        box.set_right(currentBox, bar_index + extendBoxes) 
+        if close > level  // Price closed above the FVG
+            box.delete(currentBox)
+            array.remove(bearishBoxes, i)
+            array.remove(bearishLevels, i)
+        else
+            box.set_right(currentBox, bar_index + ext)  // Extend active boxes
