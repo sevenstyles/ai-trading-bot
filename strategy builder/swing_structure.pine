@@ -1,9 +1,15 @@
 //@version=6
 indicator("Swing Structure", overlay=true, max_labels_count=500, max_lines_count=500)
 
+// Constants
+var BULLISH = 1
+var BEARISH = -1
+
 // Input parameters
-lookbackLeft = input(15, "Lookback Left")
-lookbackRight = input(15, "Lookback Right")
+lookbackLeft = input(50, "Lookback Left (Major Swings)")
+lookbackRight = input(50, "Lookback Right (Major Swings)")
+minorLookbackLeft = input(10, "Lookback Left (Minor Swings)")
+minorLookbackRight = input(10, "Lookback Right (Minor Swings)")
 labelOffset = input.float(2.0, "Text Offset", minval=0.1)
 swingThreshold = input.float(0.5, "Swing Threshold %", minval=0.1, step=0.1) / 100
 textSize = input.string("Small", "Text Size", options=["Tiny", "Small", "Normal", "Large"])
@@ -24,101 +30,80 @@ var bool inDowntrend = false
 var bool inUptrend = false
 var int lastSwingHighBar = na
 var int lastSwingLowBar = na
+var int trendBias = 0
 
 // Arrays to store all our visual elements
 var array<line> bosLines = array.new<line>()
 var array<label> swingLabels = array.new<label>()
-var array<int> bosStartBars = array.new<int>()
-var array<float> bosLevels = array.new<float>()
 
 // Function to detect swing high/low using pivot points with threshold
 float threshold = close * swingThreshold
+
+// Major swing points
 swingHigh = ta.pivothigh(high, lookbackLeft, lookbackRight)
 swingLow = ta.pivotlow(low, lookbackLeft, lookbackRight)
+
+// Minor swing points
+minorSwingHigh = ta.pivothigh(high, minorLookbackLeft, minorLookbackRight)
+minorSwingLow = ta.pivotlow(low, minorLookbackLeft, minorLookbackRight)
 
 // Only consider swing points that exceed the threshold
 validSwingHigh = not na(swingHigh) and (na(lastSwingHigh) or math.abs(swingHigh - lastSwingHigh) > threshold)
 validSwingLow = not na(swingLow) and (na(lastSwingLow) or math.abs(swingLow - lastSwingLow) > threshold)
 
+validMinorSwingHigh = not na(minorSwingHigh) and (na(lastSwingHigh) or math.abs(minorSwingHigh - lastSwingHigh) > threshold * 0.5)
+validMinorSwingLow = not na(minorSwingLow) and (na(lastSwingLow) or math.abs(minorSwingLow - lastSwingLow) > threshold * 0.5)
+
 // Update swing points and plot text
 if validSwingHigh
     float swingHighPrice = swingHigh
     lastSwingHigh := swingHighPrice
-    int currentBar = bar_index[lookbackRight]
     
     if not na(prevSwingHigh)
         if swingHighPrice > prevSwingHigh
-            label hhLabel = label.new(bar_index[lookbackRight], swingHighPrice + (labelOffset * syminfo.mintick), text="HH", 
-                          xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.green, style=label.style_label_down, size=textSizeValue)
-            array.push(swingLabels, hhLabel)
+            label.new(bar_index[lookbackRight], swingHighPrice + (labelOffset * syminfo.mintick), text="HH", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.green, style=label.style_label_down, size=textSizeValue)
             if inDowntrend
-                label bosLabel = label.new(bar_index[lookbackRight], swingHighPrice + (3 * labelOffset * syminfo.mintick), text="BOS", 
-                             xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.purple, style=label.style_label_down, size=textSizeValue)
-                line newBosLine = line.new(bar_index[lookbackRight], swingHighPrice, lastSwingHighBar, prevSwingHigh, 
-                             color=color.yellow, width=2, xloc=xloc.bar_index)
-                array.push(swingLabels, bosLabel)
-                array.push(bosLines, newBosLine)
-                array.push(bosStartBars, bar_index[lookbackRight])
-                array.push(bosLevels, swingHighPrice)
+                label.new(bar_index[lookbackRight], swingHighPrice + (3 * labelOffset * syminfo.mintick), text="BOS", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.purple, style=label.style_label_down, size=textSizeValue)
+                line.new(bar_index[lookbackRight], swingHighPrice, lastSwingHighBar, prevSwingHigh, color=color.yellow, width=2)
                 inDowntrend := false
                 inUptrend := true
+                trendBias := BULLISH
         else
-            label lhLabel = label.new(bar_index[lookbackRight], swingHighPrice + (labelOffset * syminfo.mintick), text="LH", 
-                          xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.red, style=label.style_label_down, size=textSizeValue)
-            array.push(swingLabels, lhLabel)
+            label.new(bar_index[lookbackRight], swingHighPrice + (labelOffset * syminfo.mintick), text="LH", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.red, style=label.style_label_down, size=textSizeValue)
             if not inDowntrend
                 inDowntrend := true
                 inUptrend := false
+                trendBias := BEARISH
     prevSwingHigh := swingHighPrice
     lastSwingHighBar := bar_index[lookbackRight]
 
 if validSwingLow
     float swingLowPrice = swingLow
     lastSwingLow := swingLowPrice
-    int currentBar = bar_index[lookbackRight]
     
     if not na(prevSwingLow)
         if swingLowPrice < prevSwingLow
-            label llLabel = label.new(bar_index[lookbackRight], swingLowPrice - (labelOffset * syminfo.mintick), text="LL", 
-                          xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.red, style=label.style_label_up, size=textSizeValue)
-            array.push(swingLabels, llLabel)
+            label.new(bar_index[lookbackRight], swingLowPrice - (labelOffset * syminfo.mintick), text="LL", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.red, style=label.style_label_up, size=textSizeValue)
             if inUptrend
-                label bosLabel = label.new(bar_index[lookbackRight], swingLowPrice - (3 * labelOffset * syminfo.mintick), text="BOS", 
-                             xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.purple, style=label.style_label_up, size=textSizeValue)
-                line newBosLine = line.new(bar_index[lookbackRight], swingLowPrice, lastSwingLowBar, prevSwingLow, 
-                             color=color.yellow, width=2, xloc=xloc.bar_index)
-                array.push(swingLabels, bosLabel)
-                array.push(bosLines, newBosLine)
-                array.push(bosStartBars, bar_index[lookbackRight])
-                array.push(bosLevels, swingLowPrice)
+                label.new(bar_index[lookbackRight], swingLowPrice - (3 * labelOffset * syminfo.mintick), text="BOS", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.purple, style=label.style_label_up, size=textSizeValue)
+                line.new(bar_index[lookbackRight], swingLowPrice, lastSwingLowBar, prevSwingLow, color=color.yellow, width=2)
                 inUptrend := false
                 inDowntrend := true
+                trendBias := BEARISH
         else
-            label hlLabel = label.new(bar_index[lookbackRight], swingLowPrice - (labelOffset * syminfo.mintick), text="HL", 
-                          xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.green, style=label.style_label_up, size=textSizeValue)
-            array.push(swingLabels, hlLabel)
+            label.new(bar_index[lookbackRight], swingLowPrice - (labelOffset * syminfo.mintick), text="HL", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.green, style=label.style_label_up, size=textSizeValue)
             if not inUptrend
                 inUptrend := true
                 inDowntrend := false
+                trendBias := BULLISH
     prevSwingLow := swingLowPrice
     lastSwingLowBar := bar_index[lookbackRight]
 
-// Clean up old elements
-if array.size(bosLines) > 0
-    for i = array.size(bosLines) - 1 to 0
-        line currentLine = array.get(bosLines, i)
-        int startBar = array.get(bosStartBars, i)
-        float level = array.get(bosLevels, i)
-        
-        if bar_index - startBar > lookbackLeft * 3
-            line.delete(currentLine)
-            array.remove(bosLines, i)
-            array.remove(bosStartBars, i)
-            array.remove(bosLevels, i)
+// Plot minor swing points
+if validMinorSwingHigh
+    float minorHighPrice = minorSwingHigh
+    label.new(bar_index[minorLookbackRight], minorHighPrice + (labelOffset * syminfo.mintick), text="h", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.new(color.gray, 40), style=label.style_label_down, size=size.tiny)
 
-if array.size(swingLabels) > 0
-    for i = array.size(swingLabels) - 1 to 0
-        label currentLabel = array.get(swingLabels, i)
-        if bar_index - label.get_x(currentLabel) > lookbackLeft * 3
-            label.delete(currentLabel)
-            array.remove(swingLabels, i) 
+if validMinorSwingLow
+    float minorLowPrice = minorSwingLow
+    label.new(bar_index[minorLookbackRight], minorLowPrice - (labelOffset * syminfo.mintick), text="l", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.new(color.gray, 40), style=label.style_label_up, size=size.tiny) 
