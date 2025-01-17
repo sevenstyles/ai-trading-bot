@@ -2,8 +2,8 @@
 indicator("Swing Structure", overlay=true, max_labels_count=500, max_lines_count=500)
 
 // Input parameters
-lookbackLeft = input(5, "Lookback Left")
-lookbackRight = input(5, "Lookback Right")
+lookbackLeft = input(10, "Lookback Left")
+lookbackRight = input(10, "Lookback Right")
 labelOffset = input.float(2.0, "Text Offset", minval=0.1)
 textSize = input.string("Small", "Text Size", options=["Tiny", "Small", "Normal", "Large"])
 
@@ -14,17 +14,9 @@ textSizeValue = switch
     textSize == "Normal" => size.normal
     => size.large
 
-// Function to detect swing high - checking if current bar's high is highest in the lookback period
-float swingHighPrice = high[lookbackRight]
-swingHigh = high[lookbackRight] > high[lookbackRight + 1] and 
-           high[lookbackRight] > high[lookbackRight - 1] and 
-           high[lookbackRight] >= ta.highest(high[lookbackRight + 1], lookbackLeft + lookbackRight - 1)
-
-// Function to detect swing low - checking if current bar's low is lowest in the lookback period
-float swingLowPrice = low[lookbackRight]
-swingLow = low[lookbackRight] < low[lookbackRight + 1] and 
-           low[lookbackRight] < low[lookbackRight - 1] and 
-           low[lookbackRight] <= ta.lowest(low[lookbackRight + 1], lookbackLeft + lookbackRight - 1)
+// Function to detect swing high/low using pivot points
+swingHigh = ta.pivothigh(high, lookbackLeft, lookbackRight)
+swingLow = ta.pivotlow(low, lookbackLeft, lookbackRight)
 
 // Variables to store previous swing levels and market structure
 var float prevSwingHigh = na
@@ -33,54 +25,94 @@ var float lastSwingHigh = na
 var float lastSwingLow = na
 var bool inDowntrend = false
 var bool inUptrend = false
-var int consecutiveLowerLows = 0
-var int consecutiveHigherHighs = 0
+var int lastSwingHighBar = na
+var int lastSwingLowBar = na
+
+// Arrays to store all our visual elements
 var array<line> bosLines = array.new<line>()
+var array<label> swingLabels = array.new<label>()
+var array<int> bosStartBars = array.new<int>()
+var array<float> bosLevels = array.new<float>()
 
 // Update swing points and plot text
-if swingHigh
+if not na(swingHigh)
+    float swingHighPrice = swingHigh
     lastSwingHigh := swingHighPrice
+    int currentBar = bar_index[lookbackRight]
+    
     if not na(prevSwingHigh)
         if swingHighPrice > prevSwingHigh
-            label.new(time[lookbackRight], swingHighPrice + (labelOffset * syminfo.mintick), text="HH", xloc=xloc.bar_time, yloc=yloc.price, color=na, textcolor=color.green, style=label.style_label_down, size=textSizeValue)
-            consecutiveHigherHighs := consecutiveHigherHighs + 1
-            if inDowntrend and consecutiveHigherHighs >= 1
-                label.new(time[lookbackRight], swingHighPrice + (3 * labelOffset * syminfo.mintick), text="BOS", xloc=xloc.bar_time, yloc=yloc.price, color=na, textcolor=color.green, style=label.style_label_down, size=textSizeValue)
-                line newBosLine = line.new(time[lookbackRight], swingHighPrice, time, swingHighPrice, color=color.yellow, width=2, xloc=xloc.bar_time)
-                bosLines.push(newBosLine)
+            label hhLabel = label.new(bar_index[lookbackRight], swingHighPrice + (labelOffset * syminfo.mintick), text="HH", 
+                          xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.green, style=label.style_label_down, size=textSizeValue)
+            array.push(swingLabels, hhLabel)
+            if inDowntrend
+                label bosLabel = label.new(bar_index[lookbackRight], swingHighPrice + (3 * labelOffset * syminfo.mintick), text="BOS", 
+                             xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.purple, style=label.style_label_down, size=textSizeValue)
+                line newBosLine = line.new(bar_index[lookbackRight], swingHighPrice, lastSwingHighBar, prevSwingHigh, 
+                             color=color.yellow, width=2, xloc=xloc.bar_index)
+                array.push(swingLabels, bosLabel)
+                array.push(bosLines, newBosLine)
+                array.push(bosStartBars, bar_index[lookbackRight])
+                array.push(bosLevels, swingHighPrice)
                 inDowntrend := false
                 inUptrend := true
-                consecutiveLowerLows := 0
         else
-            label.new(time[lookbackRight], swingHighPrice + (labelOffset * syminfo.mintick), text="LH", xloc=xloc.bar_time, yloc=yloc.price, color=na, textcolor=color.red, style=label.style_label_down, size=textSizeValue)
-            consecutiveHigherHighs := 0
+            label lhLabel = label.new(bar_index[lookbackRight], swingHighPrice + (labelOffset * syminfo.mintick), text="LH", 
+                          xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.red, style=label.style_label_down, size=textSizeValue)
+            array.push(swingLabels, lhLabel)
             if not inDowntrend
                 inDowntrend := true
                 inUptrend := false
     prevSwingHigh := swingHighPrice
+    lastSwingHighBar := bar_index[lookbackRight]
 
-if swingLow
+if not na(swingLow)
+    float swingLowPrice = swingLow
     lastSwingLow := swingLowPrice
+    int currentBar = bar_index[lookbackRight]
+    
     if not na(prevSwingLow)
         if swingLowPrice < prevSwingLow
-            label.new(time[lookbackRight], swingLowPrice - (labelOffset * syminfo.mintick), text="LL", xloc=xloc.bar_time, yloc=yloc.price, color=na, textcolor=color.red, style=label.style_label_up, size=textSizeValue)
-            consecutiveLowerLows := consecutiveLowerLows + 1
-            if inUptrend and consecutiveLowerLows >= 1
-                label.new(time[lookbackRight], swingLowPrice - (3 * labelOffset * syminfo.mintick), text="BOS", xloc=xloc.bar_time, yloc=yloc.price, color=na, textcolor=color.red, style=label.style_label_up, size=textSizeValue)
-                line newBosLine = line.new(time[lookbackRight], swingLowPrice, time, swingLowPrice, color=color.yellow, width=2, xloc=xloc.bar_time)
-                bosLines.push(newBosLine)
+            label llLabel = label.new(bar_index[lookbackRight], swingLowPrice - (labelOffset * syminfo.mintick), text="LL", 
+                          xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.red, style=label.style_label_up, size=textSizeValue)
+            array.push(swingLabels, llLabel)
+            if inUptrend
+                label bosLabel = label.new(bar_index[lookbackRight], swingLowPrice - (3 * labelOffset * syminfo.mintick), text="BOS", 
+                             xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.purple, style=label.style_label_up, size=textSizeValue)
+                line newBosLine = line.new(bar_index[lookbackRight], swingLowPrice, lastSwingLowBar, prevSwingLow, 
+                             color=color.yellow, width=2, xloc=xloc.bar_index)
+                array.push(swingLabels, bosLabel)
+                array.push(bosLines, newBosLine)
+                array.push(bosStartBars, bar_index[lookbackRight])
+                array.push(bosLevels, swingLowPrice)
                 inUptrend := false
                 inDowntrend := true
-                consecutiveHigherHighs := 0
         else
-            label.new(time[lookbackRight], swingLowPrice - (labelOffset * syminfo.mintick), text="HL", xloc=xloc.bar_time, yloc=yloc.price, color=na, textcolor=color.green, style=label.style_label_up, size=textSizeValue)
-            consecutiveLowerLows := 0
+            label hlLabel = label.new(bar_index[lookbackRight], swingLowPrice - (labelOffset * syminfo.mintick), text="HL", 
+                          xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.green, style=label.style_label_up, size=textSizeValue)
+            array.push(swingLabels, hlLabel)
             if not inUptrend
                 inUptrend := true
                 inDowntrend := false
     prevSwingLow := swingLowPrice
+    lastSwingLowBar := bar_index[lookbackRight]
 
-// Update BOS lines
+// Clean up old elements
 if array.size(bosLines) > 0
-    for i = 0 to array.size(bosLines) - 1
-        line.set_x2(array.get(bosLines, i), time) 
+    for i = array.size(bosLines) - 1 to 0
+        line currentLine = array.get(bosLines, i)
+        int startBar = array.get(bosStartBars, i)
+        float level = array.get(bosLevels, i)
+        
+        if bar_index - startBar > lookbackLeft * 3
+            line.delete(currentLine)
+            array.remove(bosLines, i)
+            array.remove(bosStartBars, i)
+            array.remove(bosLevels, i)
+
+if array.size(swingLabels) > 0
+    for i = array.size(swingLabels) - 1 to 0
+        label currentLabel = array.get(swingLabels, i)
+        if bar_index - label.get_x(currentLabel) > lookbackLeft * 3
+            label.delete(currentLabel)
+            array.remove(swingLabels, i) 
