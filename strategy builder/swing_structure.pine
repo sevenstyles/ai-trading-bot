@@ -152,6 +152,34 @@ if validSwingLow
 bool bosConfirmationUp = validBosUp and close > sma20 and validMinorSwingLow and minorSwingLow > lastSwingLow
 bool bosConfirmationDown = validBosDown and close < sma20 and validMinorSwingHigh and minorSwingHigh < lastSwingHigh
 
+// Track the last significant swing levels for BOS
+var float lastSignificantHigh = na
+var float lastSignificantLow = na
+var int lastSignificantHighBar = na
+var int lastSignificantLowBar = na
+
+// Update significant levels
+if validSwingHigh
+    lastSignificantHigh := high[lookbackRight]
+    lastSignificantHighBar := bar_index[lookbackRight]
+
+if validSwingLow
+    lastSignificantLow := low[lookbackRight]
+    lastSignificantLowBar := bar_index[lookbackRight]
+
+// Check for BOS and draw horizontal lines
+if not na(lastSignificantLow) and low < lastSignificantLow and inDowntrend
+    line.new(lastSignificantLowBar, lastSignificantLow, bar_index, lastSignificantLow, color=color.fuchsia, width=2)
+    label.new(bar_index, lastSignificantLow, text="BOS", xloc=xloc.bar_index, yloc=yloc.price, 
+             color=na, textcolor=color.fuchsia, style=label.style_label_up, size=textSizeValue)
+    lastSignificantLow := na  // Reset to avoid multiple lines
+
+if not na(lastSignificantHigh) and high > lastSignificantHigh and inUptrend
+    line.new(lastSignificantHighBar, lastSignificantHigh, bar_index, lastSignificantHigh, color=color.fuchsia, width=2)
+    label.new(bar_index, lastSignificantHigh, text="BOS", xloc=xloc.bar_index, yloc=yloc.price, 
+             color=na, textcolor=color.fuchsia, style=label.style_label_down, size=textSizeValue)
+    lastSignificantHigh := na  // Reset to avoid multiple lines
+
 // Swing failure conditions
 bool swingFailureUp = inDowntrend and validSwingHigh and high[lookbackRight] < lastSwingHigh and close > sma20 and validMinorSwingLow
 bool swingFailureDown = inUptrend and validSwingLow and low[lookbackRight] > lastSwingLow and close < sma20 and validMinorSwingHigh
