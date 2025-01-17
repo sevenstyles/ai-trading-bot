@@ -111,8 +111,8 @@ bool validBosDown = validSwingHigh and high[lookbackRight] < lastSwingHigh and s
 // Pattern Sequence Settings
 showPatternOne = input.bool(true, "Show HH->HL->BOS Pattern", group="Pattern Sequences")
 patternOneColor = input.color(color.green, "HH->HL->BOS Pattern Color", group="Pattern Sequences")
-showPatternTwo = input.bool(true, "Show LL->HH->BOS Pattern", group="Pattern Sequences")
-patternTwoColor = input.color(color.blue, "LL->HH->BOS Pattern Color", group="Pattern Sequences")
+showPatternTwo = input.bool(true, "Show LL->LH->BOS Pattern", group="Pattern Sequences")
+patternTwoColor = input.color(color.blue, "LL->LH->BOS Pattern Color", group="Pattern Sequences")
 
 // Pattern Detection with debug info
 var label debugLabel = na
@@ -120,7 +120,8 @@ var bool lastWasHH = false
 var bool lastWasHL = false
 var bool lastWasLL = false
 var bool lastWasLH = false
-var bool waitingForBOS = false
+var bool waitingForBullishBOS = false
+var bool waitingForBearishBOS = false
 
 // Function to get pattern history as string
 getPatternHistoryString() =>
@@ -138,7 +139,7 @@ updatePatternHistory(string pattern) =>
 
 // Enhanced pattern detection with state tracking
 bool patternOneDetected = false  // HH->HL->BOS
-bool patternTwoDetected = false  // LL->HH->BOS
+bool patternTwoDetected = false  // LL->LH->BOS
 
 // Update pattern history based on swing formations
 if validSwingHigh and not na(prevSwingHigh)
@@ -148,12 +149,16 @@ if validSwingHigh and not na(prevSwingHigh)
         lastWasHL := false
         lastWasLL := false
         lastWasLH := false
+        if lastWasHL
+            waitingForBullishBOS := true
     else
         lastPatternBar := updatePatternHistory("LH")
         lastWasLH := true
         lastWasHH := false
         lastWasHL := false
         lastWasLL := false
+        if lastWasLL
+            waitingForBearishBOS := true
 
 if validSwingLow and not na(prevSwingLow)
     if low[lookbackRight] < prevSwingLow
@@ -162,35 +167,48 @@ if validSwingLow and not na(prevSwingLow)
         lastWasHH := false
         lastWasHL := false
         lastWasLH := false
+        if lastWasLH
+            waitingForBearishBOS := true
     else
         lastPatternBar := updatePatternHistory("HL")
         lastWasHL := true
+        lastWasHH := false
+        lastWasLL := false
+        lastWasLH := false
         if lastWasHH
-            waitingForBOS := true
+            waitingForBullishBOS := true
 
 // Update BOS patterns more explicitly
-if validBosUp
+if validBosUp and waitingForBullishBOS
     lastPatternBar := updatePatternHistory("BOS_UP")
-    if waitingForBOS and lastWasHL and lastWasHH
-        patternOneDetected := true
-    waitingForBOS := false
+    patternOneDetected := true
+    waitingForBullishBOS := false
+    label.new(bar_index, low - (2 * dynamicOffset), text="BOS_UP", 
+             style=label.style_label_up, color=color.new(patternOneColor, 40), 
+             textcolor=patternOneColor, size=size.normal)
     
-if validBosDown
+if validBosDown and waitingForBearishBOS
     lastPatternBar := updatePatternHistory("BOS_DOWN")
-    if waitingForBOS and lastWasLH and lastWasLL
-        patternTwoDetected := true
-    waitingForBOS := false
+    patternTwoDetected := true
+    waitingForBearishBOS := false
+    label.new(bar_index, high + (2 * dynamicOffset), text="BOS_DOWN", 
+             style=label.style_label_down, color=color.new(patternTwoColor, 40), 
+             textcolor=patternTwoColor, size=size.normal)
 
-// Reset pattern flags when a new pattern starts
+// Reset pattern flags when conditions are broken
 if validSwingHigh or validSwingLow
-    if not (lastWasHH and lastWasHL and waitingForBOS)
-        waitingForBOS := false
+    if not (lastWasHH or lastWasHL)
+        waitingForBullishBOS := false
+        patternOneDetected := false
+    if not (lastWasLL or lastWasLH)
+        waitingForBearishBOS := false
+        patternTwoDetected := false
 
 // Plot pattern signals with larger size for visibility
 plotshape(patternOneDetected, title="HH->HL->BOS Pattern", location=location.belowbar, 
           color=patternOneColor, style=shape.triangleup, size=size.huge)
-plotshape(patternTwoDetected, title="LL->HH->BOS Pattern", location=location.belowbar, 
-          color=patternTwoColor, style=shape.triangleup, size=size.huge)
+plotshape(patternTwoDetected, title="LL->LH->BOS Pattern", location=location.abovebar, 
+          color=patternTwoColor, style=shape.triangledown, size=size.huge)
 
 // Add pattern labels for clarity with increased visibility
 if patternOneDetected
@@ -199,8 +217,8 @@ if patternOneDetected
               textcolor=patternOneColor, size=size.large)
 
 if patternTwoDetected
-    label.new(bar_index, low - (4 * dynamicOffset), text="LL->HH->BOS", 
-              style=label.style_label_up, color=color.new(patternTwoColor, 40), 
+    label.new(bar_index, high + (3 * dynamicOffset), text="LL->LH->BOS", 
+              style=label.style_label_down, color=color.new(patternTwoColor, 40), 
               textcolor=patternTwoColor, size=size.large)
 
 // Enhanced leg detection
