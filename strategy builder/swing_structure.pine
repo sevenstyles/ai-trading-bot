@@ -38,13 +38,21 @@ var int trendBias = 0
 var array<line> bosLines = array.new<line>()
 var array<label> swingLabels = array.new<label>()
 
-// ATR for dynamic threshold
-atr = ta.atr(atrPeriod)
-var float dynamicThreshold = na
-dynamicThreshold := nz(atr * atrMultiplier, close * swingThreshold)
+// Pre-calculate moving average and crosses for consistency
+var float sma20 = na
+sma20 := ta.sma(close, 20)
+var bool crossUnderSma = false
+var bool crossOverSma = false
+crossUnderSma := ta.crossunder(close, sma20)
+crossOverSma := ta.crossover(close, sma20)
+
+// ATR for dynamic threshold - improved calculation
+var float atrValue = na
+atrValue := ta.atr(atrPeriod)
+float dynamicThreshold = math.max(atrValue * atrMultiplier, close * swingThreshold)
 
 // Function to detect swing high/low using pivot points with threshold
-float threshold = math.min(close * swingThreshold, dynamicThreshold)
+float threshold = dynamicThreshold  // Using ATR-based threshold directly
 
 // Major swing points with more selective detection
 swingHigh = ta.pivothigh(high, lookbackLeft, lookbackRight)
@@ -65,26 +73,26 @@ validMinorSwingLow = not na(minorSwingLow) and (na(lastSwingLow) or math.abs(min
 isSwingFailure = (validSwingHigh and high[lookbackRight] < lastSwingHigh and inUptrend) or 
                  (validSwingLow and low[lookbackRight] > lastSwingLow and inDowntrend)
 
-isPotentialReversal = (validSwingHigh and ta.crossunder(close, ta.sma(close, 20))) or 
-                     (validSwingLow and ta.crossover(close, ta.sma(close, 20)))
+isPotentialReversal = (validSwingHigh and crossUnderSma) or 
+                     (validSwingLow and crossOverSma)
 
 // Detect optimal trade entries using both major and minor swings
 var bool longSignal = false
 var bool shortSignal = false
 
-// Improved entry conditions using minor swings
+// Improved entry conditions using minor swings and pre-calculated values
 bool minorSwingConfirmation = (validMinorSwingHigh and minorSwingHigh < lastSwingHigh) or 
                              (validMinorSwingLow and minorSwingLow > lastSwingLow)
 
 longSignal := (inDowntrend[1] and not inDowntrend and validSwingLow and low[lookbackRight] > lastSwingLow) or  // BOS followed by HL
-              (inDowntrend and validSwingHigh and high[lookbackRight] < lastSwingHigh and close > ta.sma(close, 20)) or  // Failed LH during downtrend
-              (inDowntrend and validMinorSwingLow and minorSwingLow > lastSwingLow and close > ta.sma(close, 20))  // Minor HL confirmation
+              (inDowntrend and validSwingHigh and high[lookbackRight] < lastSwingHigh and close > sma20) or  // Failed LH during downtrend
+              (inDowntrend and validMinorSwingLow and minorSwingLow > lastSwingLow and close > sma20)  // Minor HL confirmation
 
 shortSignal := (inUptrend[1] and not inUptrend and validSwingHigh and high[lookbackRight] < lastSwingHigh) or  // BOS followed by LH
-               (inUptrend and validSwingLow and low[lookbackRight] > lastSwingLow and close < ta.sma(close, 20)) or  // Failed HL during uptrend
-               (inUptrend and validMinorSwingHigh and minorSwingHigh < lastSwingHigh and close < ta.sma(close, 20))  // Minor LH confirmation
+               (inUptrend and validSwingLow and low[lookbackRight] > lastSwingLow and close < sma20) or  // Failed HL during uptrend
+               (inUptrend and validMinorSwingHigh and minorSwingHigh < lastSwingHigh and close < sma20)  // Minor LH confirmation
 
-// Update swing points and plot text
+// Update swing points and plot text with improved BOS visualization
 if validSwingHigh
     float swingHighPrice = swingHigh
     lastSwingHigh := swingHighPrice
@@ -94,7 +102,8 @@ if validSwingHigh
             label.new(bar_index[lookbackRight], swingHighPrice + (labelOffset * syminfo.mintick), text="HH", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.green, style=label.style_label_down, size=textSizeValue)
             if inDowntrend
                 label.new(bar_index[lookbackRight], swingHighPrice + (3 * labelOffset * syminfo.mintick), text="BOS", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.purple, style=label.style_label_down, size=textSizeValue)
-                line.new(bar_index[lookbackRight], swingHighPrice, lastSwingHighBar, prevSwingHigh, color=color.yellow, width=2)
+                // Draw BOS line from close of breaking candle to previous structure
+                line.new(bar_index[lookbackRight], close[lookbackRight], lastSwingHighBar, prevSwingHigh, color=color.yellow, width=2)
                 inDowntrend := false
                 inUptrend := true
                 trendBias := BULLISH
@@ -120,7 +129,8 @@ if validSwingLow
             label.new(bar_index[lookbackRight], swingLowPrice - (labelOffset * syminfo.mintick), text="LL", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.red, style=label.style_label_up, size=textSizeValue)
             if inUptrend
                 label.new(bar_index[lookbackRight], swingLowPrice - (3 * labelOffset * syminfo.mintick), text="BOS", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.purple, style=label.style_label_up, size=textSizeValue)
-                line.new(bar_index[lookbackRight], swingLowPrice, lastSwingLowBar, prevSwingLow, color=color.yellow, width=2)
+                // Draw BOS line from close of breaking candle to previous structure
+                line.new(bar_index[lookbackRight], close[lookbackRight], lastSwingLowBar, prevSwingLow, color=color.yellow, width=2)
                 inUptrend := false
                 inDowntrend := true
                 trendBias := BEARISH
