@@ -116,6 +116,11 @@ patternTwoColor = input.color(color.blue, "LL->HH->BOS Pattern Color", group="Pa
 
 // Pattern Detection with debug info
 var label debugLabel = na
+var bool lastWasHH = false
+var bool lastWasHL = false
+var bool lastWasLL = false
+var bool lastWasLH = false
+var bool waitingForBOS = false
 
 // Function to get pattern history as string
 getPatternHistoryString() =>
@@ -125,59 +130,61 @@ getPatternHistoryString() =>
         result := result + (i == 0 ? "" : "->") + pattern
     result
 
-// Enhanced pattern detection
-bool patternOneDetected = showPatternOne and 
-     array.get(patternHistory, 2) == "HH" and 
-     array.get(patternHistory, 1) == "HL" and 
-     (array.get(patternHistory, 0) == "BOS_UP" or array.get(patternHistory, 0) == "BOS_DOWN")
+// Function to update pattern history and return the current bar index
+updatePatternHistory(string pattern) =>
+    array.unshift(patternHistory, pattern)
+    array.pop(patternHistory)
+    bar_index
 
-bool patternTwoDetected = showPatternTwo and 
-     array.get(patternHistory, 2) == "LL" and 
-     array.get(patternHistory, 1) == "HH" and 
-     (array.get(patternHistory, 0) == "BOS_UP" or array.get(patternHistory, 0) == "BOS_DOWN")
-
-// Function to update pattern history
-updatePatternHistory(string newPattern) =>
-    var int _lastBar = 0  // Local variable for tracking
-    if bar_index != _lastBar
-        array.unshift(patternHistory, newPattern)
-        array.pop(patternHistory)
-        _lastBar := bar_index
-    _lastBar
-
-// Update debug label separately from the function
-if not na(debugLabel)
-    label.delete(debugLabel)
-debugLabel := label.new(bar_index, high + (2 * dynamicOffset), 
-                      text=getPatternHistoryString(), 
-                      style=label.style_label_down,
-                      color=color.new(color.blue, 80),
-                      textcolor=color.white)
+// Enhanced pattern detection with state tracking
+bool patternOneDetected = false  // HH->HL->BOS
+bool patternTwoDetected = false  // LL->HH->BOS
 
 // Update pattern history based on swing formations
 if validSwingHigh and not na(prevSwingHigh)
     if high[lookbackRight] > prevSwingHigh
         lastPatternBar := updatePatternHistory("HH")
+        lastWasHH := true
+        lastWasHL := false
+        lastWasLL := false
+        lastWasLH := false
     else
         lastPatternBar := updatePatternHistory("LH")
+        lastWasLH := true
+        lastWasHH := false
+        lastWasHL := false
+        lastWasLL := false
 
 if validSwingLow and not na(prevSwingLow)
     if low[lookbackRight] < prevSwingLow
         lastPatternBar := updatePatternHistory("LL")
+        lastWasLL := true
+        lastWasHH := false
+        lastWasHL := false
+        lastWasLH := false
     else
         lastPatternBar := updatePatternHistory("HL")
+        lastWasHL := true
+        if lastWasHH
+            waitingForBOS := true
 
 // Update BOS patterns more explicitly
 if validBosUp
-    if inUptrend
-        lastPatternBar := updatePatternHistory("BOS_UP")
-    else
-        lastPatternBar := updatePatternHistory("BOS_DOWN")
+    lastPatternBar := updatePatternHistory("BOS_UP")
+    if waitingForBOS and lastWasHL and lastWasHH
+        patternOneDetected := true
+    waitingForBOS := false
+    
 if validBosDown
-    if inDowntrend
-        lastPatternBar := updatePatternHistory("BOS_DOWN")
-    else
-        lastPatternBar := updatePatternHistory("BOS_UP")
+    lastPatternBar := updatePatternHistory("BOS_DOWN")
+    if waitingForBOS and lastWasLH and lastWasLL
+        patternTwoDetected := true
+    waitingForBOS := false
+
+// Reset pattern flags when a new pattern starts
+if validSwingHigh or validSwingLow
+    if not (lastWasHH and lastWasHL and waitingForBOS)
+        waitingForBOS := false
 
 // Plot pattern signals with larger size for visibility
 plotshape(patternOneDetected, title="HH->HL->BOS Pattern", location=location.belowbar, 
