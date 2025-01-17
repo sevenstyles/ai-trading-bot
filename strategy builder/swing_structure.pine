@@ -11,7 +11,9 @@ lookbackRight = input(50, "Lookback Right (Major Swings)")
 minorLookbackLeft = input(10, "Lookback Left (Minor Swings)")
 minorLookbackRight = input(10, "Lookback Right (Minor Swings)")
 labelOffset = input.float(2.0, "Text Offset", minval=0.1)
-swingThreshold = input.float(0.5, "Swing Threshold %", minval=0.1, step=0.1) / 100
+swingThreshold = input.float(1.0, "Swing Threshold %", minval=0.1, step=0.1) / 100
+atrPeriod = input(14, "ATR Period")
+atrMultiplier = input.float(1.5, "ATR Multiplier for Swing Significance", minval=0.5, step=0.1)
 textSize = input.string("Small", "Text Size", options=["Tiny", "Small", "Normal", "Large"])
 
 // Convert text size input to label size
@@ -36,10 +38,15 @@ var int trendBias = 0
 var array<line> bosLines = array.new<line>()
 var array<label> swingLabels = array.new<label>()
 
-// Function to detect swing high/low using pivot points with threshold
-float threshold = close * swingThreshold
+// ATR for dynamic threshold
+atr = ta.atr(atrPeriod)
+var float dynamicThreshold = na
+dynamicThreshold := nz(atr * atrMultiplier, close * swingThreshold)
 
-// Major swing points
+// Function to detect swing high/low using pivot points with threshold
+float threshold = math.min(close * swingThreshold, dynamicThreshold)
+
+// Major swing points with more selective detection
 swingHigh = ta.pivothigh(high, lookbackLeft, lookbackRight)
 swingLow = ta.pivotlow(low, lookbackLeft, lookbackRight)
 
@@ -47,12 +54,19 @@ swingLow = ta.pivotlow(low, lookbackLeft, lookbackRight)
 minorSwingHigh = ta.pivothigh(high, minorLookbackLeft, minorLookbackRight)
 minorSwingLow = ta.pivotlow(low, minorLookbackLeft, minorLookbackRight)
 
-// Only consider swing points that exceed the threshold
+// Only consider swing points that exceed the dynamic threshold
 validSwingHigh = not na(swingHigh) and (na(lastSwingHigh) or math.abs(swingHigh - lastSwingHigh) > threshold)
 validSwingLow = not na(swingLow) and (na(lastSwingLow) or math.abs(swingLow - lastSwingLow) > threshold)
 
 validMinorSwingHigh = not na(minorSwingHigh) and (na(lastSwingHigh) or math.abs(minorSwingHigh - lastSwingHigh) > threshold * 0.5)
 validMinorSwingLow = not na(minorSwingLow) and (na(lastSwingLow) or math.abs(minorSwingLow - lastSwingLow) > threshold * 0.5)
+
+// Detect potential reversal zones
+isSwingFailure = (validSwingHigh and high[lookbackRight] < lastSwingHigh and inUptrend) or 
+                 (validSwingLow and low[lookbackRight] > lastSwingLow and inDowntrend)
+
+isPotentialReversal = (validSwingHigh and ta.crossunder(close, ta.sma(close, 20))) or 
+                     (validSwingLow and ta.crossover(close, ta.sma(close, 20)))
 
 // Update swing points and plot text
 if validSwingHigh
@@ -69,7 +83,11 @@ if validSwingHigh
                 inUptrend := true
                 trendBias := BULLISH
         else
-            label.new(bar_index[lookbackRight], swingHighPrice + (labelOffset * syminfo.mintick), text="LH", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.red, style=label.style_label_down, size=textSizeValue)
+            label.new(bar_index[lookbackRight], swingHighPrice + (labelOffset * syminfo.mintick), 
+                     text=isSwingFailure ? "LH (Failure)" : "LH", 
+                     xloc=xloc.bar_index, yloc=yloc.price, 
+                     color=na, textcolor=isSwingFailure ? color.red : color.orange, 
+                     style=label.style_label_down, size=textSizeValue)
             if not inDowntrend
                 inDowntrend := true
                 inUptrend := false
@@ -91,7 +109,11 @@ if validSwingLow
                 inDowntrend := true
                 trendBias := BEARISH
         else
-            label.new(bar_index[lookbackRight], swingLowPrice - (labelOffset * syminfo.mintick), text="HL", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.green, style=label.style_label_up, size=textSizeValue)
+            label.new(bar_index[lookbackRight], swingLowPrice - (labelOffset * syminfo.mintick), 
+                     text=isSwingFailure ? "HL (Failure)" : "HL", 
+                     xloc=xloc.bar_index, yloc=yloc.price, 
+                     color=na, textcolor=isSwingFailure ? color.red : color.green, 
+                     style=label.style_label_up, size=textSizeValue)
             if not inUptrend
                 inUptrend := true
                 inDowntrend := false
@@ -99,11 +121,15 @@ if validSwingLow
     prevSwingLow := swingLowPrice
     lastSwingLowBar := bar_index[lookbackRight]
 
-// Plot minor swing points
-if validMinorSwingHigh
+// Plot potential trade entry signals
+plotshape(isSwingFailure, title="Swing Failure", location=location.belowbar, color=color.red, style=shape.circle, size=size.tiny)
+plotshape(isPotentialReversal, title="Potential Reversal", location=location.belowbar, color=color.purple, style=shape.diamond, size=size.tiny)
+
+// Plot minor swing points (only if they're significant enough)
+if validMinorSwingHigh and math.abs(minorSwingHigh - lastSwingHigh) > threshold * 0.75
     float minorHighPrice = minorSwingHigh
     label.new(bar_index[minorLookbackRight], minorHighPrice + (labelOffset * syminfo.mintick), text="h", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.new(color.gray, 40), style=label.style_label_down, size=size.tiny)
 
-if validMinorSwingLow
+if validMinorSwingLow and math.abs(minorSwingLow - lastSwingLow) > threshold * 0.75
     float minorLowPrice = minorSwingLow
     label.new(bar_index[minorLookbackRight], minorLowPrice - (labelOffset * syminfo.mintick), text="l", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.new(color.gray, 40), style=label.style_label_up, size=size.tiny) 
