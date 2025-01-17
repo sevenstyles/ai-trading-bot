@@ -128,16 +128,26 @@ if validSwingLow
         consecutiveHigher := 0
         consecutiveLower := consecutiveLower + 1
 
-// Strict market structure conditions
+// Improved trend conditions
 bool strongUptrend = consecutiveHigher >= 2 and close > sma20
 bool strongDowntrend = consecutiveLower >= 2 and close < sma20
-bool swingFailureUp = inDowntrend and validSwingHigh and high[lookbackRight] < lastSwingHigh and close > sma20
-bool swingFailureDown = inUptrend and validSwingLow and low[lookbackRight] > lastSwingLow and close < sma20
 
-// Enhanced trade signals with stricter conditions
-longSignal := validBosUp and close > sma20 and validMinorSwingLow and minorSwingLow > lastSwingLow
+// Enhanced swing failure conditions
+bool swingFailureUp = inDowntrend and validSwingHigh and high[lookbackRight] < lastSwingHigh and close > sma20 and validMinorSwingLow
+bool swingFailureDown = inUptrend and validSwingLow and low[lookbackRight] > lastSwingLow and close < sma20 and validMinorSwingHigh
 
-shortSignal := validBosDown and close < sma20 and validMinorSwingHigh and minorSwingHigh < lastSwingHigh
+// Break of Structure confirmation
+bool bosConfirmationUp = validBosUp and close > sma20 and validMinorSwingLow and minorSwingLow > lastSwingLow
+bool bosConfirmationDown = validBosDown and close < sma20 and validMinorSwingHigh and minorSwingHigh < lastSwingHigh
+
+// Trend continuation confirmation
+bool trendContinuationUp = strongUptrend and validMinorSwingLow and minorSwingLow > lastSwingLow and close > sma20
+bool trendContinuationDown = strongDowntrend and validMinorSwingHigh and minorSwingHigh < lastSwingHigh and close < sma20
+
+// Enhanced trade signals with comprehensive conditions
+longSignal := (bosConfirmationUp and not inUptrend) or (swingFailureUp and consecutiveLower >= 2) or (trendContinuationUp and not isSwingFailure)
+
+shortSignal := (bosConfirmationDown and not inDowntrend) or (swingFailureDown and consecutiveHigher >= 2) or (trendContinuationDown and not isSwingFailure)
 
 // Update swing points and plot text with improved BOS visualization
 if validSwingHigh
