@@ -4,24 +4,8 @@ indicator("Swing Structure", overlay=true, max_labels_count=500, max_lines_count
 // Constants
 var BULLISH = 1
 var BEARISH = -1
-
-// Input parameters
-lookbackLeft = input(50, "Lookback Left (Major Swings)")
-lookbackRight = input(50, "Lookback Right (Major Swings)")
-minorLookbackLeft = input(10, "Lookback Left (Minor Swings)")
-minorLookbackRight = input(10, "Lookback Right (Minor Swings)")
-labelOffset = input.float(2.0, "Text Offset", minval=0.1)
-swingThreshold = input.float(1.0, "Swing Threshold %", minval=0.1, step=0.1) / 100
-atrPeriod = input(14, "ATR Period")
-atrMultiplier = input.float(1.5, "ATR Multiplier for Swing Significance", minval=0.5, step=0.1)
-textSize = input.string("Small", "Text Size", options=["Tiny", "Small", "Normal", "Large"])
-
-// Convert text size input to label size
-textSizeValue = switch
-    textSize == "Tiny"   => size.tiny
-    textSize == "Small"  => size.small
-    textSize == "Normal" => size.normal
-    => size.large
+var BULLISH_LEG = 1
+var BEARISH_LEG = 0
 
 // Variables to store previous swing levels and market structure
 var float prevSwingHigh = na
@@ -34,11 +18,25 @@ var int lastSwingHighBar = na
 var int lastSwingLowBar = na
 var int trendBias = 0
 
-// Arrays to store all our visual elements
-var array<line> bosLines = array.new<line>()
-var array<label> swingLabels = array.new<label>()
+// Input parameters with more sensitive defaults
+lookbackLeft = input(5, "Lookback Left (Major Swings)")
+lookbackRight = input(3, "Lookback Right (Major Swings)")
+minorLookbackLeft = input(3, "Lookback Left (Minor Swings)")
+minorLookbackRight = input(2, "Lookback Right (Minor Swings)")
+labelOffset = input.float(2.0, "Text Offset", minval=0.1)
+swingThreshold = input.float(0.2, "Swing Threshold %", minval=0.1, step=0.1) / 100
+atrPeriod = input(10, "ATR Period")
+atrMultiplier = input.float(1.0, "ATR Multiplier for Swing Significance", minval=0.5, step=0.1)
+textSize = input.string("Small", "Text Size", options=["Tiny", "Small", "Normal", "Large"])
 
-// Pre-calculate moving average and crosses for consistency
+// Text size mapping
+textSizeValue = switch
+    textSize == "Tiny" => size.tiny
+    textSize == "Small" => size.small
+    textSize == "Normal" => size.normal
+    => size.large
+
+// Pre-calculate values for consistency
 var float sma20 = na
 sma20 := ta.sma(close, 20)
 var bool crossUnderSma = false
@@ -46,28 +44,52 @@ var bool crossOverSma = false
 crossUnderSma := ta.crossunder(close, sma20)
 crossOverSma := ta.crossover(close, sma20)
 
-// ATR for dynamic threshold - improved calculation
-var float atrValue = na
-atrValue := ta.atr(atrPeriod)
-float dynamicThreshold = math.max(atrValue * atrMultiplier, close * swingThreshold)
+// Enhanced leg detection
+getLeg(int size) =>
+    var leg = 0    
+    newLegHigh = high[size] > ta.highest(high, size)
+    newLegLow = low[size] < ta.lowest(low, size)
+    
+    if newLegHigh
+        leg := BEARISH_LEG
+    else if newLegLow
+        leg := BULLISH_LEG
+    leg
 
-// Function to detect swing high/low using pivot points with threshold
-float threshold = dynamicThreshold  // Using ATR-based threshold directly
+// Detect start of new leg
+isNewLeg(int leg) => ta.change(leg) != 0
+isBearishLeg(int leg) => ta.change(leg) == -1
+isBullishLeg(int leg) => ta.change(leg) == 1
 
-// Major swing points with more selective detection
+// More sensitive swing detection
+float threshold = math.min(ta.atr(atrPeriod) * atrMultiplier, close * swingThreshold)
+
+// Major swing points with more frequent detection
 swingHigh = ta.pivothigh(high, lookbackLeft, lookbackRight)
 swingLow = ta.pivotlow(low, lookbackLeft, lookbackRight)
 
-// Minor swing points
+// Minor swing points for confirmation
 minorSwingHigh = ta.pivothigh(high, minorLookbackLeft, minorLookbackRight)
 minorSwingLow = ta.pivotlow(low, minorLookbackLeft, minorLookbackRight)
 
-// Only consider swing points that exceed the dynamic threshold
+// Enhanced validation without volume
 validSwingHigh = not na(swingHigh) and (na(lastSwingHigh) or math.abs(swingHigh - lastSwingHigh) > threshold)
 validSwingLow = not na(swingLow) and (na(lastSwingLow) or math.abs(swingLow - lastSwingLow) > threshold)
 
+// More sensitive minor swing detection
 validMinorSwingHigh = not na(minorSwingHigh) and (na(lastSwingHigh) or math.abs(minorSwingHigh - lastSwingHigh) > threshold * 0.5)
 validMinorSwingLow = not na(minorSwingLow) and (na(lastSwingLow) or math.abs(minorSwingLow - lastSwingLow) > threshold * 0.5)
+
+// Enhanced trend change detection
+bool significantMove = math.abs(close - close[1]) > threshold
+
+// Improved BOS detection
+bool validBosUp = validSwingLow and low[lookbackRight] > lastSwingLow and significantMove
+bool validBosDown = validSwingHigh and high[lookbackRight] < lastSwingHigh and significantMove
+
+// Arrays to store all our visual elements
+var array<line> bosLines = array.new<line>()
+var array<label> swingLabels = array.new<label>()
 
 // Detect potential reversal zones and trade signals
 isSwingFailure = (validSwingHigh and high[lookbackRight] < lastSwingHigh and inUptrend) or 
@@ -80,17 +102,42 @@ isPotentialReversal = (validSwingHigh and crossUnderSma) or
 var bool longSignal = false
 var bool shortSignal = false
 
-// Improved entry conditions using minor swings and pre-calculated values
+// Improved entry conditions using minor swings
 bool minorSwingConfirmation = (validMinorSwingHigh and minorSwingHigh < lastSwingHigh) or 
                              (validMinorSwingLow and minorSwingLow > lastSwingLow)
 
-longSignal := (inDowntrend[1] and not inDowntrend and validSwingLow and low[lookbackRight] > lastSwingLow) or  // BOS followed by HL
-              (inDowntrend and validSwingHigh and high[lookbackRight] < lastSwingHigh and close > sma20) or  // Failed LH during downtrend
-              (inDowntrend and validMinorSwingLow and minorSwingLow > lastSwingLow and close > sma20)  // Minor HL confirmation
+// Enhanced market structure conditions
+var float lastValidBosLevel = na
+var int consecutiveHigher = 0
+var int consecutiveLower = 0
 
-shortSignal := (inUptrend[1] and not inUptrend and validSwingHigh and high[lookbackRight] < lastSwingHigh) or  // BOS followed by LH
-               (inUptrend and validSwingLow and low[lookbackRight] > lastSwingLow and close < sma20) or  // Failed HL during uptrend
-               (inUptrend and validMinorSwingHigh and minorSwingHigh < lastSwingHigh and close < sma20)  // Minor LH confirmation
+// Track consecutive higher highs/lows and lower highs/lows
+if validSwingHigh
+    if high[lookbackRight] > lastSwingHigh
+        consecutiveHigher := consecutiveHigher + 1
+        consecutiveLower := 0
+    else if high[lookbackRight] < lastSwingHigh
+        consecutiveHigher := 0
+        consecutiveLower := consecutiveLower + 1
+
+if validSwingLow
+    if low[lookbackRight] > lastSwingLow
+        consecutiveHigher := consecutiveHigher + 1
+        consecutiveLower := 0
+    else if low[lookbackRight] < lastSwingLow
+        consecutiveHigher := 0
+        consecutiveLower := consecutiveLower + 1
+
+// Strict market structure conditions
+bool strongUptrend = consecutiveHigher >= 2 and close > sma20
+bool strongDowntrend = consecutiveLower >= 2 and close < sma20
+bool swingFailureUp = inDowntrend and validSwingHigh and high[lookbackRight] < lastSwingHigh and close > sma20
+bool swingFailureDown = inUptrend and validSwingLow and low[lookbackRight] > lastSwingLow and close < sma20
+
+// Enhanced trade signals with stricter conditions
+longSignal := validBosUp and close > sma20 and validMinorSwingLow and minorSwingLow > lastSwingLow
+
+shortSignal := validBosDown and close < sma20 and validMinorSwingHigh and minorSwingHigh < lastSwingHigh
 
 // Update swing points and plot text with improved BOS visualization
 if validSwingHigh
@@ -98,11 +145,11 @@ if validSwingHigh
     lastSwingHigh := swingHighPrice
     
     if not na(prevSwingHigh)
+        currentLeg = getLeg(lookbackRight)
         if swingHighPrice > prevSwingHigh
             label.new(bar_index[lookbackRight], swingHighPrice + (labelOffset * syminfo.mintick), text="HH", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.green, style=label.style_label_down, size=textSizeValue)
             if inDowntrend
                 label.new(bar_index[lookbackRight], swingHighPrice + (3 * labelOffset * syminfo.mintick), text="BOS", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.purple, style=label.style_label_down, size=textSizeValue)
-                // Draw BOS line from close of breaking candle to previous structure
                 line.new(bar_index[lookbackRight], close[lookbackRight], lastSwingHighBar, prevSwingHigh, color=color.yellow, width=2)
                 inDowntrend := false
                 inUptrend := true
@@ -125,11 +172,11 @@ if validSwingLow
     lastSwingLow := swingLowPrice
     
     if not na(prevSwingLow)
+        currentLeg = getLeg(lookbackRight)
         if swingLowPrice < prevSwingLow
             label.new(bar_index[lookbackRight], swingLowPrice - (labelOffset * syminfo.mintick), text="LL", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.red, style=label.style_label_up, size=textSizeValue)
             if inUptrend
                 label.new(bar_index[lookbackRight], swingLowPrice - (3 * labelOffset * syminfo.mintick), text="BOS", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.purple, style=label.style_label_up, size=textSizeValue)
-                // Draw BOS line from close of breaking candle to previous structure
                 line.new(bar_index[lookbackRight], close[lookbackRight], lastSwingLowBar, prevSwingLow, color=color.yellow, width=2)
                 inUptrend := false
                 inDowntrend := true
@@ -150,10 +197,6 @@ if validSwingLow
 // Plot trade signals with arrows (in global scope)
 plotshape(longSignal, title="Long Signal", location=location.belowbar, color=color.green, style=shape.triangleup, size=size.normal)
 plotshape(shortSignal, title="Short Signal", location=location.abovebar, color=color.red, style=shape.triangledown, size=size.normal)
-
-// Plot minor swing confirmations (in global scope)
-plotshape(minorSwingConfirmation and inUptrend, title="Minor High Confirmation", location=location.abovebar, color=color.new(color.green, 50), style=shape.circle, size=size.tiny)
-plotshape(minorSwingConfirmation and inDowntrend, title="Minor Low Confirmation", location=location.belowbar, color=color.new(color.red, 50), style=shape.circle, size=size.tiny)
 
 // Plot swing failures and potential reversals (in global scope)
 plotshape(isSwingFailure, title="Swing Failure", location=location.abovebar, color=color.new(color.red, 0), style=shape.xcross, size=size.small)
