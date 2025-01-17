@@ -68,15 +68,21 @@ isSwingFailure = (validSwingHigh and high[lookbackRight] < lastSwingHigh and inU
 isPotentialReversal = (validSwingHigh and ta.crossunder(close, ta.sma(close, 20))) or 
                      (validSwingLow and ta.crossover(close, ta.sma(close, 20)))
 
-// Detect optimal trade entries
+// Detect optimal trade entries using both major and minor swings
 var bool longSignal = false
 var bool shortSignal = false
 
+// Improved entry conditions using minor swings
+bool minorSwingConfirmation = (validMinorSwingHigh and minorSwingHigh < lastSwingHigh) or 
+                             (validMinorSwingLow and minorSwingLow > lastSwingLow)
+
 longSignal := (inDowntrend[1] and not inDowntrend and validSwingLow and low[lookbackRight] > lastSwingLow) or  // BOS followed by HL
-              (inDowntrend and validSwingHigh and high[lookbackRight] < lastSwingHigh and close > ta.sma(close, 20))  // Failed LH during downtrend
+              (inDowntrend and validSwingHigh and high[lookbackRight] < lastSwingHigh and close > ta.sma(close, 20)) or  // Failed LH during downtrend
+              (inDowntrend and validMinorSwingLow and minorSwingLow > lastSwingLow and close > ta.sma(close, 20))  // Minor HL confirmation
 
 shortSignal := (inUptrend[1] and not inUptrend and validSwingHigh and high[lookbackRight] < lastSwingHigh) or  // BOS followed by LH
-               (inUptrend and validSwingLow and low[lookbackRight] > lastSwingLow and close < ta.sma(close, 20))  // Failed HL during uptrend
+               (inUptrend and validSwingLow and low[lookbackRight] > lastSwingLow and close < ta.sma(close, 20)) or  // Failed HL during uptrend
+               (inUptrend and validMinorSwingHigh and minorSwingHigh < lastSwingHigh and close < ta.sma(close, 20))  // Minor LH confirmation
 
 // Update swing points and plot text
 if validSwingHigh
@@ -131,18 +137,15 @@ if validSwingLow
     prevSwingLow := swingLowPrice
     lastSwingLowBar := bar_index[lookbackRight]
 
-// Plot trade signals
-if longSignal
-    label.new(bar_index[lookbackRight], low[lookbackRight] - (2 * labelOffset * syminfo.mintick), 
-              text="LONG", xloc=xloc.bar_index, yloc=yloc.price, 
-              color=na, textcolor=color.green, style=label.style_label_up, size=textSizeValue)
+// Plot trade signals with arrows (in global scope)
+plotshape(longSignal, title="Long Signal", location=location.belowbar, color=color.green, style=shape.triangleup, size=size.normal)
+plotshape(shortSignal, title="Short Signal", location=location.abovebar, color=color.red, style=shape.triangledown, size=size.normal)
 
-if shortSignal
-    label.new(bar_index[lookbackRight], high[lookbackRight] + (2 * labelOffset * syminfo.mintick), 
-              text="SHORT", xloc=xloc.bar_index, yloc=yloc.price, 
-              color=na, textcolor=color.red, style=label.style_label_down, size=textSizeValue)
+// Plot minor swing confirmations (in global scope)
+plotshape(minorSwingConfirmation and inUptrend, title="Minor High Confirmation", location=location.abovebar, color=color.new(color.green, 50), style=shape.circle, size=size.tiny)
+plotshape(minorSwingConfirmation and inDowntrend, title="Minor Low Confirmation", location=location.belowbar, color=color.new(color.red, 50), style=shape.circle, size=size.tiny)
 
-// Plot swing failures and potential reversals
+// Plot swing failures and potential reversals (in global scope)
 plotshape(isSwingFailure, title="Swing Failure", location=location.abovebar, color=color.new(color.red, 0), style=shape.xcross, size=size.small)
 plotshape(isPotentialReversal, title="Potential Reversal", location=location.belowbar, color=color.purple, style=shape.diamond, size=size.tiny)
 
