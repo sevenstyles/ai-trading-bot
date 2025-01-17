@@ -7,6 +7,17 @@ indicator(title="Fair Value Gaps", shorttitle="FVG", overlay=true, max_boxes_cou
 ext = input.int(10, "Extend FVGs")
 upcolor = input.color(defval = color.green, title = "Bullish color", group = "Aesthetics")
 downcolor = input.color(defval = color.red, title = "Bearish color", group = "Aesthetics")
+consecutive_upcolor = input.color(defval = color.new(color.blue, 15), title = "Consecutive Bullish color", group = "Aesthetics")
+consecutive_downcolor = input.color(defval = color.new(color.purple, 15), title = "Consecutive Bearish color", group = "Aesthetics")
+
+// FVG Size Filter
+use_size_filter = input.bool(true, "Filter by FVG Size", group="Size Filter")
+max_fvg_size = input.float(5.0, "Maximum FVG Size % of Candle", minval=0.1, step=0.1, group="Size Filter", tooltip="Only show FVGs where the gap height is less than this percentage of the candle height")
+
+// Consecutive FVG Settings
+use_consecutive = input.bool(true, "Filter for Consecutive FVGs", group="Consecutive FVG Filter")
+required_consecutive = input.int(2, "Required Consecutive FVGs", minval=2, maxval=5, group="Consecutive FVG Filter")
+highlight_consecutive = input.bool(true, "Highlight Consecutive FVGs", group="Consecutive FVG Filter")
 
 // Volume Spike Settings
 n_times = input.float(2.0, "Volume must be N times bigger", minval=1.0, step=0.1, group="Volume Spike Filter")
@@ -23,6 +34,10 @@ var box[] bullishBoxes = array.new_box()
 var float[] bullishLevels = array.new_float()
 var box[] bearishBoxes = array.new_box()
 var float[] bearishLevels = array.new_float()
+
+// Variables to track consecutive FVGs
+var int bullishConsecutive = 0
+var int bearishConsecutive = 0
 
 // Volume spike detection using MA comparison
 ma_func(x, length) =>
@@ -43,22 +58,39 @@ loc2 = loc > loc[1]
 locfiltb = inp3 ? loc2 : true
 locfilts = inp3 ? not loc2 : true
 
-// FVG Detection with volume spike filter
+// Size filter calculation
+check_fvg_size(fvg_height, candle_height) =>
+    percentage = math.abs(fvg_height / candle_height) * 100
+    not use_size_filter or percentage <= max_fvg_size
+
+// FVG Detection with all filters
 bfvg = low > high[2] and vol_filt and atrfilt and locfiltb
 sfvg = high < low[2] and vol_filt and atrfilt and locfilts
 
-// Create new FVG boxes
-if bfvg
-    box newBox = box.new(left = bar_index-2, top = low, right = bar_index + ext, bottom = high[2], 
-         border_color = color.new(color.gray, 100), bgcolor = color.new(upcolor, 85))
-    array.push(bullishBoxes, newBox)
-    array.push(bullishLevels, high[2])  // Store the bottom level of bullish FVG
+// Update consecutive counters
+bullishConsecutive := bfvg ? bullishConsecutive + 1 : 0
+bearishConsecutive := sfvg ? bearishConsecutive + 1 : 0
 
-if sfvg
-    box newBox = box.new(left = bar_index-2, top = high, right = bar_index + ext, bottom = low[2], 
-         border_color = color.new(color.gray, 100), bgcolor = color.new(downcolor, 85))
-    array.push(bearishBoxes, newBox)
-    array.push(bearishLevels, low[2])  // Store the top level of bearish FVG
+// Create new FVG boxes with size filter
+if bfvg and (not use_consecutive or bullishConsecutive >= required_consecutive)
+    fvg_height = low - high[2]  // Gap height
+    candle_height = high[2] - low[2]  // FVG candle height
+    if check_fvg_size(fvg_height, candle_height)
+        color boxColor = highlight_consecutive and bullishConsecutive >= required_consecutive ? consecutive_upcolor : upcolor
+        box newBox = box.new(left = bar_index-2, top = low, right = bar_index + ext, bottom = high[2], 
+             border_color = color.new(color.gray, 100), bgcolor = boxColor)
+        array.push(bullishBoxes, newBox)
+        array.push(bullishLevels, high[2])  // Store the bottom level of bullish FVG
+
+if sfvg and (not use_consecutive or bearishConsecutive >= required_consecutive)
+    fvg_height = low[2] - high  // Gap height
+    candle_height = high[2] - low[2]  // FVG candle height
+    if check_fvg_size(fvg_height, candle_height)
+        color boxColor = highlight_consecutive and bearishConsecutive >= required_consecutive ? consecutive_downcolor : downcolor
+        box newBox = box.new(left = bar_index-2, top = high, right = bar_index + ext, bottom = low[2], 
+             border_color = color.new(color.gray, 100), bgcolor = boxColor)
+        array.push(bearishBoxes, newBox)
+        array.push(bearishLevels, low[2])  // Store the top level of bearish FVG
 
 // Check for invalidation and remove boxes
 if array.size(bullishBoxes) > 0
