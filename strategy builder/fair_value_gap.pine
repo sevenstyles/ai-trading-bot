@@ -10,11 +10,6 @@ downcolor = input.color(defval = color.red, title = "Bearish color", group = "Ae
 consecutive_upcolor = input.color(defval = color.new(color.blue, 15), title = "Consecutive Bullish color", group = "Aesthetics")
 consecutive_downcolor = input.color(defval = color.new(color.purple, 15), title = "Consecutive Bearish color", group = "Aesthetics")
 
-// Label Settings
-show_labels = input.bool(true, "Show Long/Short Labels", group="Label Settings")
-label_size = input.string("small", "Label Size", options=["tiny", "small", "normal", "large"], group="Label Settings")
-label_offset = input.int(1, "Label Offset (bars)", minval=1, group="Label Settings")
-
 // Candle Size Filter
 use_candle_filter = input.bool(true, "Filter by Candle Size", group="Candle Size Filter")
 candle_multiplier = input.float(2.0, "Candle must be X times bigger", minval=1.0, step=0.1, group="Candle Size Filter")
@@ -24,16 +19,6 @@ lookback_periods = input.int(5, "Compare with previous X candles", minval=1, max
 use_consecutive = input.bool(true, "Filter for Consecutive FVGs", group="Consecutive FVG Filter")
 required_consecutive = input.int(2, "Required Consecutive FVGs", minval=2, maxval=5, group="Consecutive FVG Filter", tooltip="Only show FVGs when this many consecutive FVGs of the same type (bullish/bearish) have occurred")
 highlight_consecutive = input.bool(true, "Highlight Consecutive FVGs", group="Consecutive FVG Filter")
-
-// Volume Spike Settings
-n_times = input.float(2.0, "Volume must be N times bigger", minval=1.0, step=0.1, group="Volume Spike Filter")
-bars_back = input.int(10, "Than average volume in last X bars", minval=1, group="Volume Spike Filter")
-ma_type = input.string("SMA", "Moving Average Type", options=["SMA", "WMA", "EMA"], group="Volume Spike Filter")
-use_vol_spike = input.bool(true, "Use Volume Spike Filter", group="Volume Spike Filter")
-
-// Other Filters
-inp2 = input.bool(false, "ATR Filter", group = "Filters")
-inp3 = input.bool(false, "Trend Filter", group = "Filters")
 
 // Arrays to store boxes and their levels
 var box[] bullishBoxes = array.new_box()
@@ -47,14 +32,6 @@ var int bearishConsecutive = 0
 var bool lastWasBullish = false
 var bool lastWasBearish = false
 
-// Function to get label style based on input
-get_label_style(size) =>
-    switch size
-        "tiny" => size.tiny
-        "small" => size.small
-        "large" => size.large
-        => size.normal
-
 // Function to check if candle is significantly larger than previous candles
 is_significant_candle(index) =>
     current_size = math.abs(high[index] - low[index])
@@ -64,28 +41,9 @@ is_significant_candle(index) =>
     avg_prev_size := avg_prev_size / lookback_periods
     not use_candle_filter or current_size >= (avg_prev_size * candle_multiplier)
 
-// Volume spike detection using MA comparison
-ma_func(x, length) =>
-    switch ma_type
-        "WMA" => ta.wma(x, length)
-        "EMA" => ta.ema(x, length)
-        => ta.sma(x, length)
-
-vol_ma = ma_func(volume[1], bars_back)
-is_vol_spike = volume > vol_ma * n_times
-vol_filt = use_vol_spike ? is_vol_spike[2] : true  // Check volume spike on the FVG candle
-
-// Other filters calculation
-atr = ta.atr(20) / 1.5
-atrfilt = inp2 ? ((low - high[2] > atr) or (low[2] - high > atr)) : true
-loc = ta.sma(close, 54)
-loc2 = loc > loc[1]
-locfiltb = inp3 ? loc2 : true
-locfilts = inp3 ? not loc2 : true
-
-// FVG Detection with all filters
-bfvg = low > high[2] and vol_filt and atrfilt and locfiltb and is_significant_candle(2)
-sfvg = high < low[2] and vol_filt and atrfilt and locfilts and is_significant_candle(2)
+// FVG Detection with filters
+bfvg = low > high[2] and is_significant_candle(2)
+sfvg = high < low[2] and is_significant_candle(2)
 
 // Update consecutive counters with type checking
 if bfvg and lastWasBullish
@@ -106,21 +64,13 @@ else
 lastWasBullish := bfvg
 lastWasBearish := sfvg
 
-// Create new FVG boxes with size filter and labels
+// Create new FVG boxes
 if bfvg and (not use_consecutive or bullishConsecutive >= required_consecutive)
     color boxColor = highlight_consecutive and bullishConsecutive >= required_consecutive ? consecutive_upcolor : upcolor
     box newBox = box.new(left = bar_index-2, top = low, right = bar_index + ext, bottom = high[2], 
          border_color = color.new(color.gray, 100), bgcolor = boxColor)
     array.push(bullishBoxes, newBox)
     array.push(bullishLevels, high[2])  // Store the bottom level of bullish FVG
-    
-    // Add LONG label for consecutive bullish FVGs
-    if show_labels and bullishConsecutive >= required_consecutive
-        label.new(bar_index + label_offset, high, text="LONG", 
-             color=color.new(color.green, 20), 
-             textcolor=color.white,
-             style=label.style_label_down,
-             size=get_label_style(label_size))
 
 if sfvg and (not use_consecutive or bearishConsecutive >= required_consecutive)
     color boxColor = highlight_consecutive and bearishConsecutive >= required_consecutive ? consecutive_downcolor : downcolor
@@ -128,14 +78,6 @@ if sfvg and (not use_consecutive or bearishConsecutive >= required_consecutive)
          border_color = color.new(color.gray, 100), bgcolor = boxColor)
     array.push(bearishBoxes, newBox)
     array.push(bearishLevels, low[2])  // Store the top level of bearish FVG
-    
-    // Add SHORT label for consecutive bearish FVGs
-    if show_labels and bearishConsecutive >= required_consecutive
-        label.new(bar_index + label_offset, low, text="SHORT", 
-             color=color.new(color.red, 20), 
-             textcolor=color.white,
-             style=label.style_label_up,
-             size=get_label_style(label_size))
 
 // Check for invalidation and remove boxes
 if array.size(bullishBoxes) > 0
