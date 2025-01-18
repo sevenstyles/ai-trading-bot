@@ -178,13 +178,6 @@ if not na(lastSignificantLow) and low < lastSignificantLow and inDowntrend
     line.new(lastSignificantLowBar, lastSignificantLow, bar_index, lastSignificantLow, color=color.fuchsia, width=2)
     label.new(bar_index, lastSignificantLow, text="BOS", xloc=xloc.bar_index, yloc=yloc.price, 
              color=na, textcolor=color.fuchsia, style=label.style_label_up, size=textSizeValue)
-    // Draw ChoCH line only when we have a confirmed change in trend direction
-    if inDowntrend and lastWasHL and lastWasHH
-        line.new(lastSwingHighBar, prevSwingHigh, bar_index, prevSwingHigh, color=color.yellow, width=2)
-        label.new(bar_index, prevSwingHigh + dynamicOffset, text="ChoCH", xloc=xloc.bar_index, yloc=yloc.price,
-                 color=na, textcolor=color.yellow, style=label.style_label_down, size=textSizeValue)
-    // Draw diagonal trend break line
-    line.new(lastSwingHighBar, prevSwingHigh, bar_index[1], low[1], color=color.blue, width=2)
     if waitingForBullishBOS
         patternOneDetected := true
         waitingForBullishBOS := false
@@ -195,13 +188,6 @@ if not na(lastSignificantHigh) and high > lastSignificantHigh and inUptrend
     line.new(lastSignificantHighBar, lastSignificantHigh, bar_index, lastSignificantHigh, color=color.fuchsia, width=2)
     label.new(bar_index, lastSignificantHigh, text="BOS", xloc=xloc.bar_index, yloc=yloc.price, 
              color=na, textcolor=color.fuchsia, style=label.style_label_down, size=textSizeValue)
-    // Draw ChoCH line only when we have a confirmed change in trend direction
-    if inUptrend and lastWasLH and lastWasLL
-        line.new(lastSwingLowBar, prevSwingLow, bar_index, prevSwingLow, color=color.yellow, width=2)
-        label.new(bar_index, prevSwingLow - dynamicOffset, text="ChoCH", xloc=xloc.bar_index, yloc=yloc.price,
-                 color=na, textcolor=color.yellow, style=label.style_label_up, size=textSizeValue)
-    // Draw diagonal trend break line
-    line.new(lastSwingLowBar, prevSwingLow, bar_index[1], high[1], color=color.blue, width=2)
     if waitingForBearishBOS
         patternTwoDetected := true
         waitingForBearishBOS := false
