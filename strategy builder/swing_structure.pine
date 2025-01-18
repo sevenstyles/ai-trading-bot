@@ -19,14 +19,9 @@ var int lastSwingLowBar = na
 var int trendBias = 0
 
 // Initialize all boolean flags at the start
-var bool isSwingFailure = false
-var bool isSwingHighFailure = false
-var bool isSwingLowFailure = false
 var bool hasHigherLow = false
 var bool hasLowerHigh = false
 var bool validBosPattern = false
-var bool swingFailureUp = false
-var bool swingFailureDown = false
 var bool bosConfirmationUp = false
 var bool bosConfirmationDown = false
 var bool trendContinuationUp = false
@@ -258,10 +253,6 @@ updateRecentSwings() =>
 
 updateRecentSwings()
 
-// Enhanced failure pattern detection
-isSwingHighFailure := (validSwingHigh and array.size(recentSwingHighs) >= 2 and not na(array.get(recentSwingHighs, 0)) and not na(array.get(recentSwingHighs, 1)) and array.get(recentSwingHighs, 0) < array.get(recentSwingHighs, 1) and inUptrend)
-isSwingLowFailure := (validSwingLow and array.size(recentSwingLows) >= 2 and not na(array.get(recentSwingLows, 0)) and not na(array.get(recentSwingLows, 1)) and array.get(recentSwingLows, 0) > array.get(recentSwingLows, 1) and inDowntrend)
-
 // Track consecutive swings for trend strength
 if validSwingHigh
     if high[lookbackRight] > lastSwingHigh
@@ -309,18 +300,6 @@ if not na(lastSignificantHigh) and high > lastSignificantHigh and inUptrend
 trendContinuationUp := (consecutiveHigher >= 2 and validMinorSwingLow and minorSwingLow > lastSwingLow and close > sma20)
 trendContinuationDown := (consecutiveLower >= 2 and validMinorSwingHigh and minorSwingHigh < lastSwingHigh and close < sma20)
 
-// Plot swing failures
-plotshape(isSwingFailure, title="Swing Failure", location=location.abovebar, color=color.new(color.red, 0), style=shape.xcross, size=size.small)
-
-// Plot minor swing points
-if validMinorSwingHigh and math.abs(minorSwingHigh - lastSwingHigh) > threshold * 0.75
-    float minorHighPrice = minorSwingHigh
-    label.new(bar_index[minorLookbackRight], minorHighPrice + (dynamicOffset * 0.5), text="h", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.new(color.gray, 40), style=label.style_label_down, size=size.tiny)
-
-if validMinorSwingLow and math.abs(minorSwingLow - lastSwingLow) > threshold * 0.75
-    float minorLowPrice = minorSwingLow
-    label.new(bar_index[minorLookbackRight], minorLowPrice - (dynamicOffset * 0.5), text="l", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.new(color.gray, 40), style=label.style_label_up, size=size.tiny)
-
 // Update swing points and plot text with improved BOS visualization
 if validSwingHigh
     float swingHighPrice = swingHigh
@@ -336,7 +315,7 @@ if validSwingHigh
                 inUptrend := true
                 trendBias := BULLISH
         else
-            label.new(bar_index[lookbackRight], swingHighPrice + dynamicOffset, text=isSwingFailure ? "LH (Failure)" : "LH", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=isSwingFailure ? color.red : color.orange, style=label.style_label_down, size=textSizeValue)
+            label.new(bar_index[lookbackRight], swingHighPrice + dynamicOffset, text="LH", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.orange, style=label.style_label_down, size=textSizeValue)
             if not inDowntrend
                 inDowntrend := true
                 inUptrend := false
@@ -358,17 +337,13 @@ if validSwingLow
                 inDowntrend := true
                 trendBias := BEARISH
         else
-            label.new(bar_index[lookbackRight], swingLowPrice - dynamicOffset, text=isSwingFailure ? "HL (Failure)" : "HL", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=isSwingFailure ? color.red : color.green, style=label.style_label_up, size=textSizeValue)
+            label.new(bar_index[lookbackRight], swingLowPrice - dynamicOffset, text="HL", xloc=xloc.bar_index, yloc=yloc.price, color=na, textcolor=color.green, style=label.style_label_up, size=textSizeValue)
             if not inUptrend
                 inUptrend := true
                 inDowntrend := false
                 trendBias := BULLISH
     prevSwingLow := swingLowPrice
     lastSwingLowBar := bar_index[lookbackRight] 
-
-// Enhanced swing failure conditions
-swingFailureUp := (isSwingHighFailure and hasHigherLow and close > sma20 and validMinorSwingLow)
-swingFailureDown := (isSwingLowFailure and hasLowerHigh and close < sma20 and validMinorSwingHigh) 
 
 // Track the last BOS level and bar
 if validBosUp or validBosDown
@@ -381,7 +356,7 @@ if not na(lastBosLevel) and not na(lastBosBar)
     if barsFromBos <= lookbackLeft * 3  // Extended range for pattern completion
         if validBosUp and inUptrend
             // Bullish structure pattern
-            validBosPattern := validMinorSwingLow and minorSwingLow > lastBosLevel and close > sma20 and hasHigherLow and not isSwingFailure and array.get(recentSwingLows, 0) > array.get(recentSwingLows, 1)
+            validBosPattern := validMinorSwingLow and minorSwingLow > lastBosLevel and close > sma20 and hasHigherLow and array.get(recentSwingLows, 0) > array.get(recentSwingLows, 1)
         else if validBosDown and inDowntrend
             // Bearish structure pattern
-            validBosPattern := validMinorSwingHigh and minorSwingHigh < lastBosLevel and close < sma20 and hasLowerHigh and not isSwingFailure and array.get(recentSwingHighs, 0) < array.get(recentSwingHighs, 1) 
+            validBosPattern := validMinorSwingHigh and minorSwingHigh < lastBosLevel and close < sma20 and hasLowerHigh and array.get(recentSwingHighs, 0) < array.get(recentSwingHighs, 1) 
