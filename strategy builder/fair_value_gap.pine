@@ -9,11 +9,16 @@ upcolor = input.color(defval = color.green, title = "Bullish color", group = "Ae
 downcolor = input.color(defval = color.red, title = "Bearish color", group = "Aesthetics")
 consecutive_upcolor = input.color(defval = color.new(color.blue, 15), title = "Consecutive Bullish color", group = "Aesthetics")
 consecutive_downcolor = input.color(defval = color.new(color.purple, 15), title = "Consecutive Bearish color", group = "Aesthetics")
+overlap_upcolor = input.color(defval = color.new(color.yellow, 70), title = "Overlapping Bullish color", group = "Aesthetics")
+overlap_downcolor = input.color(defval = color.new(color.orange, 70), title = "Overlapping Bearish color", group = "Aesthetics")
 
 // Candle Size Filter
 use_candle_filter = input.bool(true, "Filter by Candle Size", group="Candle Size Filter")
 candle_multiplier = input.float(2.0, "Candle must be X times bigger", minval=1.0, step=0.1, group="Candle Size Filter")
 lookback_periods = input.int(5, "Compare with previous X candles", minval=1, maxval=20, group="Candle Size Filter")
+
+// Overlapping FVG Filter
+show_only_overlapping = input.bool(false, "Show Only Overlapping FVGs", group="Overlapping FVG Filter")
 
 // Swing Point Settings
 swing_lookback = input.int(10, "Swing Point Lookback Period", minval=3, maxval=50, group="Swing Point Settings", tooltip="Number of bars to look back for finding swing points")
@@ -25,12 +30,16 @@ highlight_consecutive = input.bool(true, "Highlight Consecutive FVGs", group="Co
 
 // Arrays to store boxes and their levels
 var box[] bullishBoxes = array.new_box()
-var float[] bullishLevels = array.new_float()
+var float[] bullishTops = array.new_float()
+var float[] bullishBottoms = array.new_float()
 var box[] bearishBoxes = array.new_box()
-var float[] bearishLevels = array.new_float()
+var float[] bearishTops = array.new_float()
+var float[] bearishBottoms = array.new_float()
+var box[] overlapBoxes = array.new_box()  // Store overlap boxes
+
 // Arrays to store swing labels
-var label[] bullishLabels = array.new_label()  // For PL labels
-var label[] bearishLabels = array.new_label()  // For PH labels
+var label[] bullishLabels = array.new_label()
+var label[] bearishLabels = array.new_label()
 
 // Variables to track consecutive FVGs
 var int bullishConsecutive = 0
@@ -82,78 +91,129 @@ find_swing_point(is_high) =>
             point_index := i
     [result, point_index]
 
+// Function to find overlapping regions
+find_overlaps(boxes, tops, bottoms, new_top, new_bottom) =>
+    overlaps = array.new_box()  // Remove var keyword to create new array each time
+    if array.size(boxes) > 0
+        for i = 0 to array.size(boxes) - 1
+            float box_top = array.get(tops, i)
+            float box_bottom = array.get(bottoms, i)
+            
+            // Check if there's an overlap - boxes overlap if they intersect
+            if (math.max(new_bottom, box_bottom) <= math.min(new_top, box_top))
+                float overlap_top = math.min(new_top, box_top)
+                float overlap_bottom = math.max(new_bottom, box_bottom)
+                box overlapBox = box.new(left=bar_index-2, top=overlap_top, right=bar_index+ext, bottom=overlap_bottom,
+                     border_color=color.new(color.gray, 100), bgcolor=overlap_upcolor)  // Add bgcolor here
+                array.push(overlaps, overlapBox)
+    overlaps
+
 // Create new FVG boxes
 if bfvg and (not use_consecutive or bullishConsecutive >= required_consecutive)
     float fvg_top = low
     float fvg_bottom = high[2]
     
-    // Create box with appropriate color
-    color boxColor = if highlight_consecutive and bullishConsecutive >= required_consecutive
-        consecutive_upcolor
-    else
-        upcolor
+    // Find overlapping regions
+    overlaps = find_overlaps(bullishBoxes, bullishTops, bullishBottoms, fvg_top, fvg_bottom)
+    bool has_overlaps = array.size(overlaps) > 0
     
-    box newBox = box.new(left = bar_index-2, top = fvg_top, right = bar_index + ext, bottom = fvg_bottom, 
-         border_color = color.new(color.gray, 100), bgcolor = boxColor)
-    array.push(bullishBoxes, newBox)
-    array.push(bullishLevels, fvg_bottom)
-    
-    // Add PL label at previous swing low
-    [swing_low, low_index] = find_swing_point(false)
-    label newLabel = label.new(bar_index - low_index, swing_low, text="PL", 
-         color=color.new(color.green, 80),
-         textcolor=color.green,
-         style=label.style_label_up)
-    array.push(bullishLabels, newLabel)
+    // Only proceed if we should show this FVG
+    if not show_only_overlapping or has_overlaps
+        // Create regular FVG box if not showing only overlaps
+        if not show_only_overlapping
+            color boxColor = if highlight_consecutive and bullishConsecutive >= required_consecutive
+                consecutive_upcolor
+            else
+                upcolor
+            
+            box newBox = box.new(left=bar_index-2, top=fvg_top, right=bar_index+ext, bottom=fvg_bottom,
+                 border_color=color.new(color.gray, 100), bgcolor=boxColor)
+            array.push(bullishBoxes, newBox)
+            array.push(bullishTops, fvg_top)
+            array.push(bullishBottoms, fvg_bottom)
+        
+        // Add overlap boxes to main array to track them
+        if has_overlaps
+            for i = 0 to array.size(overlaps) - 1
+                box overlapBox = array.get(overlaps, i)
+                array.push(overlapBoxes, overlapBox)
+        
+        // Add PL label
+        [swing_low, low_index] = find_swing_point(false)
+        label newLabel = label.new(bar_index-low_index, swing_low, text="PL",
+             color=color.new(color.green, 80), textcolor=color.green,
+             style=label.style_label_up)
+        array.push(bullishLabels, newLabel)
 
 if sfvg and (not use_consecutive or bearishConsecutive >= required_consecutive)
     float fvg_top = high
     float fvg_bottom = low[2]
     
-    // Create box with appropriate color
-    color boxColor = if highlight_consecutive and bearishConsecutive >= required_consecutive
-        consecutive_downcolor
-    else
-        downcolor
+    // Find overlapping regions
+    overlaps = find_overlaps(bearishBoxes, bearishTops, bearishBottoms, fvg_top, fvg_bottom)
+    bool has_overlaps = array.size(overlaps) > 0
     
-    box newBox = box.new(left = bar_index-2, top = fvg_top, right = bar_index + ext, bottom = fvg_bottom, 
-         border_color = color.new(color.gray, 100), bgcolor = boxColor)
-    array.push(bearishBoxes, newBox)
-    array.push(bearishLevels, fvg_top)
-    
-    // Add PH label at previous swing high
-    [swing_high, high_index] = find_swing_point(true)
-    label newLabel = label.new(bar_index - high_index, swing_high, text="PH", 
-         color=color.new(color.red, 80),
-         textcolor=color.red,
-         style=label.style_label_down)
-    array.push(bearishLabels, newLabel)
+    // Only proceed if we should show this FVG
+    if not show_only_overlapping or has_overlaps
+        // Create regular FVG box if not showing only overlaps
+        if not show_only_overlapping
+            color boxColor = if highlight_consecutive and bearishConsecutive >= required_consecutive
+                consecutive_downcolor
+            else
+                downcolor
+            
+            box newBox = box.new(left=bar_index-2, top=fvg_top, right=bar_index+ext, bottom=fvg_bottom,
+                 border_color=color.new(color.gray, 100), bgcolor=boxColor)
+            array.push(bearishBoxes, newBox)
+            array.push(bearishTops, fvg_top)
+            array.push(bearishBottoms, fvg_bottom)
+        
+        // Add overlap boxes to main array to track them
+        if has_overlaps
+            for i = 0 to array.size(overlaps) - 1
+                box overlapBox = array.get(overlaps, i)
+                array.push(overlapBoxes, overlapBox)
+        
+        // Add PH label
+        [swing_high, high_index] = find_swing_point(true)
+        label newLabel = label.new(bar_index-high_index, swing_high, text="PH",
+             color=color.new(color.red, 80), textcolor=color.red,
+             style=label.style_label_down)
+        array.push(bearishLabels, newLabel)
 
 // Check for invalidation and remove boxes
 if array.size(bullishBoxes) > 0
     for i = array.size(bullishBoxes) - 1 to 0
         box currentBox = array.get(bullishBoxes, i)
-        float level = array.get(bullishLevels, i)
+        float bottom = array.get(bullishBottoms, i)
         label currentLabel = array.get(bullishLabels, i)
-        if close < level  // Price closed below the FVG
+        if close < bottom
             box.delete(currentBox)
             label.delete(currentLabel)
             array.remove(bullishBoxes, i)
-            array.remove(bullishLevels, i)
+            array.remove(bullishTops, i)
+            array.remove(bullishBottoms, i)
             array.remove(bullishLabels, i)
         else
-            box.set_right(currentBox, bar_index + ext)  // Extend active boxes
+            box.set_right(currentBox, bar_index + ext)
 
 if array.size(bearishBoxes) > 0
     for i = array.size(bearishBoxes) - 1 to 0
         box currentBox = array.get(bearishBoxes, i)
-        float level = array.get(bearishLevels, i)
+        float top = array.get(bearishTops, i)
         label currentLabel = array.get(bearishLabels, i)
-        if close > level  // Price closed above the FVG
+        if close > top
             box.delete(currentBox)
             label.delete(currentLabel)
             array.remove(bearishBoxes, i)
-            array.remove(bearishLevels, i)
+            array.remove(bearishTops, i)
+            array.remove(bearishBottoms, i)
             array.remove(bearishLabels, i)
         else
-            box.set_right(currentBox, bar_index + ext)  // Extend active boxes
+            box.set_right(currentBox, bar_index + ext)
+
+// Extend overlap boxes
+if array.size(overlapBoxes) > 0
+    for i = array.size(overlapBoxes) - 1 to 0
+        box currentBox = array.get(overlapBoxes, i)
+        box.set_right(currentBox, bar_index + ext)
