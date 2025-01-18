@@ -25,6 +25,9 @@ var box[] bullishBoxes = array.new_box()
 var float[] bullishLevels = array.new_float()
 var box[] bearishBoxes = array.new_box()
 var float[] bearishLevels = array.new_float()
+// Arrays to store swing labels
+var label[] bullishLabels = array.new_label()  // For PL labels
+var label[] bearishLabels = array.new_label()  // For PH labels
 
 // Variables to track consecutive FVGs
 var int bullishConsecutive = 0
@@ -64,6 +67,18 @@ else
 lastWasBullish := bfvg
 lastWasBearish := sfvg
 
+// Function to find previous swing high/low
+find_swing_point(is_high) =>
+    float result = is_high ? high[2] : low[2]
+    int point_index = 2
+    
+    for i = 3 to 10  // Look back up to 10 bars
+        float curr_value = is_high ? high[i] : low[i]
+        if is_high ? (curr_value > result) : (curr_value < result)
+            result := curr_value
+            point_index := i
+    [result, point_index]
+
 // Create new FVG boxes
 if bfvg and (not use_consecutive or bullishConsecutive >= required_consecutive)
     color boxColor = highlight_consecutive and bullishConsecutive >= required_consecutive ? consecutive_upcolor : upcolor
@@ -71,6 +86,14 @@ if bfvg and (not use_consecutive or bullishConsecutive >= required_consecutive)
          border_color = color.new(color.gray, 100), bgcolor = boxColor)
     array.push(bullishBoxes, newBox)
     array.push(bullishLevels, high[2])  // Store the bottom level of bullish FVG
+    
+    // Add PL label at previous swing low
+    [swing_low, low_index] = find_swing_point(false)
+    label newLabel = label.new(bar_index - low_index, swing_low, text="PL", 
+         color=color.new(color.green, 80),
+         textcolor=color.green,
+         style=label.style_label_up)
+    array.push(bullishLabels, newLabel)
 
 if sfvg and (not use_consecutive or bearishConsecutive >= required_consecutive)
     color boxColor = highlight_consecutive and bearishConsecutive >= required_consecutive ? consecutive_downcolor : downcolor
@@ -78,16 +101,27 @@ if sfvg and (not use_consecutive or bearishConsecutive >= required_consecutive)
          border_color = color.new(color.gray, 100), bgcolor = boxColor)
     array.push(bearishBoxes, newBox)
     array.push(bearishLevels, low[2])  // Store the top level of bearish FVG
+    
+    // Add PH label at previous swing high
+    [swing_high, high_index] = find_swing_point(true)
+    label newLabel = label.new(bar_index - high_index, swing_high, text="PH", 
+         color=color.new(color.red, 80),
+         textcolor=color.red,
+         style=label.style_label_down)
+    array.push(bearishLabels, newLabel)
 
 // Check for invalidation and remove boxes
 if array.size(bullishBoxes) > 0
     for i = array.size(bullishBoxes) - 1 to 0
         box currentBox = array.get(bullishBoxes, i)
         float level = array.get(bullishLevels, i)
+        label currentLabel = array.get(bullishLabels, i)
         if close < level  // Price closed below the FVG
             box.delete(currentBox)
+            label.delete(currentLabel)
             array.remove(bullishBoxes, i)
             array.remove(bullishLevels, i)
+            array.remove(bullishLabels, i)
         else
             box.set_right(currentBox, bar_index + ext)  // Extend active boxes
 
@@ -95,9 +129,12 @@ if array.size(bearishBoxes) > 0
     for i = array.size(bearishBoxes) - 1 to 0
         box currentBox = array.get(bearishBoxes, i)
         float level = array.get(bearishLevels, i)
+        label currentLabel = array.get(bearishLabels, i)
         if close > level  // Price closed above the FVG
             box.delete(currentBox)
+            label.delete(currentLabel)
             array.remove(bearishBoxes, i)
             array.remove(bearishLevels, i)
+            array.remove(bearishLabels, i)
         else
             box.set_right(currentBox, bar_index + ext)  // Extend active boxes
