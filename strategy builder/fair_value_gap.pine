@@ -15,6 +15,9 @@ use_candle_filter = input.bool(true, "Filter by Candle Size", group="Candle Size
 candle_multiplier = input.float(2.0, "Candle must be X times bigger", minval=1.0, step=0.1, group="Candle Size Filter")
 lookback_periods = input.int(5, "Compare with previous X candles", minval=1, maxval=20, group="Candle Size Filter")
 
+// Swing Point Settings
+swing_lookback = input.int(10, "Swing Point Lookback Period", minval=3, maxval=50, group="Swing Point Settings", tooltip="Number of bars to look back for finding swing points")
+
 // Consecutive FVG Settings
 use_consecutive = input.bool(true, "Filter for Consecutive FVGs", group="Consecutive FVG Filter")
 required_consecutive = input.int(2, "Required Consecutive FVGs", minval=2, maxval=5, group="Consecutive FVG Filter", tooltip="Only show FVGs when this many consecutive FVGs of the same type (bullish/bearish) have occurred")
@@ -72,7 +75,7 @@ find_swing_point(is_high) =>
     float result = is_high ? high[2] : low[2]
     int point_index = 2
     
-    for i = 3 to 10  // Look back up to 10 bars
+    for i = 3 to swing_lookback  // Use the user-defined lookback period
         float curr_value = is_high ? high[i] : low[i]
         if is_high ? (curr_value > result) : (curr_value < result)
             result := curr_value
