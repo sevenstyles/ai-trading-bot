@@ -144,16 +144,12 @@ if validSwingHigh and not na(prevSwingHigh)
         lastWasHL := false
         lastWasLL := false
         lastWasLH := false
-        if lastWasHL
-            waitingForBullishBOS := true
     else
         lastPatternBar := updatePatternHistory("LH")
         lastWasLH := true
         lastWasHH := false
         lastWasHL := false
         lastWasLL := false
-        if lastWasLL
-            waitingForBearishBOS := true
 
 if validSwingLow and not na(prevSwingLow)
     if low[lookbackRight] < prevSwingLow
@@ -162,33 +158,43 @@ if validSwingLow and not na(prevSwingLow)
         lastWasHH := false
         lastWasHL := false
         lastWasLH := false
-        if lastWasLH
-            waitingForBearishBOS := true
     else
         lastPatternBar := updatePatternHistory("HL")
         lastWasHL := true
         lastWasHH := false
         lastWasLL := false
         lastWasLH := false
-        if lastWasHH
+        if lastWasHH  // Check for HH->HL sequence
             waitingForBullishBOS := true
 
-// Update BOS patterns more explicitly
+// Update BOS patterns and plot them
 if validBosUp and waitingForBullishBOS
     lastPatternBar := updatePatternHistory("BOS_UP")
     patternOneDetected := true
     waitingForBullishBOS := false
-    label.new(bar_index, low - (2 * dynamicOffset), text="BOS_UP", 
+    label.new(bar_index[lookbackRight], low[lookbackRight] - (2 * dynamicOffset), text="BOS_UP", 
              style=label.style_label_up, color=color.new(patternOneColor, 40), 
              textcolor=patternOneColor, size=size.normal)
+    label.new(bar_index[lookbackRight], low[lookbackRight] - (3 * dynamicOffset), text="HH->HL->BOS", 
+              style=label.style_label_up, color=color.new(patternOneColor, 40), 
+              textcolor=patternOneColor, size=size.large)
     
-if validBosDown and waitingForBearishBOS
+if validBosDown and lastWasLH and lastWasLL
     lastPatternBar := updatePatternHistory("BOS_DOWN")
     patternTwoDetected := true
     waitingForBearishBOS := false
-    label.new(bar_index, high + (2 * dynamicOffset), text="BOS_DOWN", 
+    label.new(bar_index[lookbackRight], high[lookbackRight] + (2 * dynamicOffset), text="BOS_DOWN", 
              style=label.style_label_down, color=color.new(patternTwoColor, 40), 
              textcolor=patternTwoColor, size=size.normal)
+    label.new(bar_index[lookbackRight], high[lookbackRight] + (3 * dynamicOffset), text="LL->LH->BOS", 
+              style=label.style_label_down, color=color.new(patternTwoColor, 40), 
+              textcolor=patternTwoColor, size=size.large)
+
+// Plot pattern signals in global scope
+plotshape(patternOneDetected, title="HH->HL->BOS Pattern", location=location.belowbar, 
+          color=patternOneColor, style=shape.triangleup, size=size.huge)
+plotshape(patternTwoDetected, title="LL->LH->BOS Pattern", location=location.abovebar, 
+          color=patternTwoColor, style=shape.triangledown, size=size.huge)
 
 // Reset pattern flags when conditions are broken
 if validSwingHigh or validSwingLow
@@ -198,23 +204,6 @@ if validSwingHigh or validSwingLow
     if not (lastWasLL or lastWasLH)
         waitingForBearishBOS := false
         patternTwoDetected := false
-
-// Plot pattern signals with larger size for visibility
-plotshape(patternOneDetected, title="HH->HL->BOS Pattern", location=location.belowbar, 
-          color=patternOneColor, style=shape.triangleup, size=size.huge)
-plotshape(patternTwoDetected, title="LL->LH->BOS Pattern", location=location.abovebar, 
-          color=patternTwoColor, style=shape.triangledown, size=size.huge)
-
-// Add pattern labels for clarity with increased visibility
-if patternOneDetected
-    label.new(bar_index, low - (3 * dynamicOffset), text="HH->HL->BOS", 
-              style=label.style_label_up, color=color.new(patternOneColor, 40), 
-              textcolor=patternOneColor, size=size.large)
-
-if patternTwoDetected
-    label.new(bar_index, high + (3 * dynamicOffset), text="LL->LH->BOS", 
-              style=label.style_label_down, color=color.new(patternTwoColor, 40), 
-              textcolor=patternTwoColor, size=size.large)
 
 // Enhanced leg detection
 getLeg(int size) =>
