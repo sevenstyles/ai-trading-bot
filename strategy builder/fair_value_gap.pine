@@ -12,11 +12,6 @@ downcolor = input.color(defval = color.red, title = "Bearish color", group = "Ae
 consecutive_upcolor = input.color(defval = color.new(color.blue, 15), title = "Consecutive Bullish color", group = "Aesthetics")
 consecutive_downcolor = input.color(defval = color.new(color.purple, 15), title = "Consecutive Bearish color", group = "Aesthetics")
 
-// Candle Size Filter
-use_candle_filter = input.bool(true, "Filter by Candle Size", group="Candle Size Filter")
-candle_multiplier = input.float(2.0, "Candle must be X times bigger", minval=1.0, step=0.1, group="Candle Size Filter")
-lookback_periods = input.int(5, "Compare with previous X candles", minval=1, maxval=50, group="Candle Size Filter")
-
 // Swing Point Settings
 swing_lookback = input.int(10, "Swing Point Lookback Period", minval=3, maxval=50, group="Swing Point Settings", tooltip="Number of bars to look back for finding swing points")
 
@@ -43,18 +38,10 @@ var int bearishConsecutive = 0
 var bool lastWasBullish = false
 var bool lastWasBearish = false
 
-// Function to check if candle is significantly larger than previous candles
-is_significant_candle(index) =>
-    current_size = math.abs(high[index] - low[index])
-    avg_prev_size = 0.0
-    for i = 1 to lookback_periods
-        avg_prev_size += math.abs(high[index + i] - low[index + i])
-    avg_prev_size := avg_prev_size / lookback_periods
-    not use_candle_filter or current_size >= (avg_prev_size * candle_multiplier)
-
 // FVG Detection with filters
-bfvg = low > high[2] and is_significant_candle(2)
-sfvg = high < low[2] and is_significant_candle(2)
+// Check if there's a gap between candle[3] and candle[1], and wait for candle[1] to close
+bfvg = low[1] > high[3] and barstate.isconfirmed
+sfvg = high[1] < low[3] and barstate.isconfirmed
 
 // Update consecutive counters with type checking
 if bfvg and lastWasBullish
@@ -77,10 +64,10 @@ lastWasBearish := sfvg
 
 // Function to find previous swing high/low
 find_swing_point(is_high) =>
-    float result = is_high ? high[2] : low[2]
-    int point_index = 2
+    float result = is_high ? high[1] : low[1]
+    int point_index = 1
     
-    for i = 3 to swing_lookback  // Use the user-defined lookback period
+    for i = 2 to swing_lookback  // Use the user-defined lookback period
         float curr_value = is_high ? high[i] : low[i]
         if is_high ? (curr_value > result) : (curr_value < result)
             result := curr_value
@@ -89,11 +76,11 @@ find_swing_point(is_high) =>
 
 // Create new FVG boxes
 if bfvg and (not use_consecutive or bullishConsecutive >= required_consecutive)
-    float fvg_top = low
-    float fvg_bottom = high[2]
+    float fvg_top = low[1]
+    float fvg_bottom = high[3]
     
     color boxColor = highlight_consecutive and bullishConsecutive >= required_consecutive ? consecutive_upcolor : upcolor
-    box newBox = box.new(left=bar_index-2, top=fvg_top, right=bar_index+ext, bottom=fvg_bottom,
+    box newBox = box.new(left=bar_index-3, top=fvg_top, right=bar_index+ext, bottom=fvg_bottom,
          border_color=color.new(color.gray, 100), bgcolor=boxColor)
     array.push(bullishBoxes, newBox)
     array.push(bullishTops, fvg_top)
@@ -107,11 +94,11 @@ if bfvg and (not use_consecutive or bullishConsecutive >= required_consecutive)
     array.push(bullishLabels, newLabel)
 
 if sfvg and (not use_consecutive or bearishConsecutive >= required_consecutive)
-    float fvg_top = high
-    float fvg_bottom = low[2]
+    float fvg_top = high[1]
+    float fvg_bottom = low[3]
     
     color boxColor = highlight_consecutive and bearishConsecutive >= required_consecutive ? consecutive_downcolor : downcolor
-    box newBox = box.new(left=bar_index-2, top=fvg_top, right=bar_index+ext, bottom=fvg_bottom,
+    box newBox = box.new(left=bar_index-3, top=fvg_top, right=bar_index+ext, bottom=fvg_bottom,
          border_color=color.new(color.gray, 100), bgcolor=boxColor)
     array.push(bearishBoxes, newBox)
     array.push(bearishTops, fvg_top)
