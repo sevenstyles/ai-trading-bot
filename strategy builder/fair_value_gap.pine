@@ -128,9 +128,13 @@ if sfvg and (not use_consecutive or bearishConsecutive >= required_consecutive)
 if array.size(bullishBoxes) > 0
     for i = array.size(bullishBoxes) - 1 to 0
         box currentBox = array.get(bullishBoxes, i)
+        float top = array.get(bullishTops, i)
         float bottom = array.get(bullishBottoms, i)
         label currentLabel = array.get(bullishLabels, i)
-        if close < bottom
+        
+        // For bullish FVGs, remove only when a candle CLOSES below the bottom of the FVG zone
+        // We use 'close' price to ensure it's the candle's closing price, not just a wick
+        if close < bottom  // Candle must close below the bottom of bullish FVG to invalidate it
             box.delete(currentBox)
             label.delete(currentLabel)
             array.remove(bullishBoxes, i)
@@ -144,8 +148,12 @@ if array.size(bearishBoxes) > 0
     for i = array.size(bearishBoxes) - 1 to 0
         box currentBox = array.get(bearishBoxes, i)
         float top = array.get(bearishTops, i)
+        float bottom = array.get(bearishBottoms, i)
         label currentLabel = array.get(bearishLabels, i)
-        if close > top
+        
+        // For bearish FVGs, remove only when a candle CLOSES above the top of the FVG zone
+        // We use 'close' price to ensure it's the candle's closing price, not just a wick
+        if close > top  // Candle must close above the top of bearish FVG to invalidate it
             box.delete(currentBox)
             label.delete(currentLabel)
             array.remove(bearishBoxes, i)
