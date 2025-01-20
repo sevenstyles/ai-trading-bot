@@ -59,8 +59,8 @@ are_three_candles_bearish(idx) =>
 // Only check for FVG after the current candle has closed
 if barstate.isconfirmed
     // Check for bullish FVG
-    if low[1] > high[3]  // Check the gap
-        if not use_candle_color_filter or are_three_candles_bullish(1)  // Check candle colors if filter is enabled
+    if low > high[2]  // Check the gap using current candle
+        if not use_candle_color_filter or are_three_candles_bullish(0)  // Check candle colors if filter is enabled
             bfvg := true
             canPlotFVG := true
         else
@@ -69,8 +69,8 @@ if barstate.isconfirmed
         bfvg := false
     
     // Check for bearish FVG
-    if high[1] < low[3]  // Check the gap
-        if not use_candle_color_filter or are_three_candles_bearish(1)  // Check candle colors if filter is enabled
+    if high < low[2]  // Check the gap using current candle
+        if not use_candle_color_filter or are_three_candles_bearish(0)  // Check candle colors if filter is enabled
             sfvg := true
             canPlotFVG := true
         else
@@ -116,11 +116,11 @@ find_swing_point(is_high) =>
 // Create new FVG boxes only when candle has closed
 if canPlotFVG
     if bfvg and (not use_consecutive or bullishConsecutive >= required_consecutive)
-        float fvg_top = low[1]
-        float fvg_bottom = high[3]
+        float fvg_top = low
+        float fvg_bottom = high[2]
         
         color boxColor = highlight_consecutive and bullishConsecutive >= required_consecutive ? consecutive_upcolor : upcolor
-        box newBox = box.new(left=bar_index-3, top=fvg_top, right=bar_index+ext, bottom=fvg_bottom,
+        box newBox = box.new(left=bar_index-2, top=fvg_top, right=bar_index+ext, bottom=fvg_bottom,
              border_color=color.new(color.gray, 100), bgcolor=boxColor)
         array.push(bullishBoxes, newBox)
         array.push(bullishTops, fvg_top)
@@ -134,11 +134,11 @@ if canPlotFVG
         array.push(bullishLabels, newLabel)
 
     if sfvg and (not use_consecutive or bearishConsecutive >= required_consecutive)
-        float fvg_top = high[1]
-        float fvg_bottom = low[3]
+        float fvg_top = high
+        float fvg_bottom = low[2]
         
         color boxColor = highlight_consecutive and bearishConsecutive >= required_consecutive ? consecutive_downcolor : downcolor
-        box newBox = box.new(left=bar_index-3, top=fvg_top, right=bar_index+ext, bottom=fvg_bottom,
+        box newBox = box.new(left=bar_index-2, top=fvg_top, right=bar_index+ext, bottom=fvg_bottom,
              border_color=color.new(color.gray, 100), bgcolor=boxColor)
         array.push(bearishBoxes, newBox)
         array.push(bearishTops, fvg_top)
