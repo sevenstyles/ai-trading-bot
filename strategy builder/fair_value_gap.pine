@@ -20,6 +20,9 @@ use_consecutive = input.bool(true, "Filter for Consecutive FVGs", group="Consecu
 required_consecutive = input.int(2, "Required Consecutive FVGs", minval=2, maxval=5, group="Consecutive FVG Filter", tooltip="Only show FVGs when this many consecutive FVGs of the same type (bullish/bearish) have occurred")
 highlight_consecutive = input.bool(true, "Highlight Consecutive FVGs", group="Consecutive FVG Filter")
 
+// Candle Color Filter
+use_candle_color_filter = input.bool(true, "Filter by Candle Color", group="Candle Color Filter", tooltip="Only show FVGs when all three candles are the same color")
+
 // Arrays to store boxes and their levels
 var box[] bullishBoxes = array.new_box()
 var float[] bullishTops = array.new_float()
@@ -38,10 +41,21 @@ var int bearishConsecutive = 0
 var bool lastWasBullish = false
 var bool lastWasBearish = false
 
+// Function to check if candle is bullish/bearish
+is_bullish_candle(idx) => close[idx] > open[idx]
+is_bearish_candle(idx) => close[idx] < open[idx]
+
+// Function to check if three candles are same color
+are_three_candles_bullish(idx) =>
+    is_bullish_candle(idx) and is_bullish_candle(idx+1) and is_bullish_candle(idx+2)
+
+are_three_candles_bearish(idx) =>
+    is_bearish_candle(idx) and is_bearish_candle(idx+1) and is_bearish_candle(idx+2)
+
 // FVG Detection with filters
 // Check if there's a gap between candle[3] and candle[1], and wait for candle[1] to close
-bfvg = low[1] > high[3] and barstate.isconfirmed
-sfvg = high[1] < low[3] and barstate.isconfirmed
+bfvg = low[1] > high[3] and barstate.isconfirmed and (not use_candle_color_filter or are_three_candles_bullish(1))
+sfvg = high[1] < low[3] and barstate.isconfirmed and (not use_candle_color_filter or are_three_candles_bearish(1))
 
 // Update consecutive counters with type checking
 if bfvg and lastWasBullish
