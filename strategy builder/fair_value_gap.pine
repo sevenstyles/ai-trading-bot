@@ -152,16 +152,15 @@ if canPlotFVG
         array.push(bearishLabels, newLabel)
 
 // Check for invalidation and remove boxes
-if array.size(bullishBoxes) > 0
+if array.size(bullishBoxes) > 0 and barstate.isconfirmed  // Only check on candle close
     for i = array.size(bullishBoxes) - 1 to 0
         box currentBox = array.get(bullishBoxes, i)
         float top = array.get(bullishTops, i)
         float bottom = array.get(bullishBottoms, i)
         label currentLabel = array.get(bullishLabels, i)
         
-        // For bullish FVGs, remove only when a candle CLOSES below the bottom of the FVG zone
-        // We use 'close' price to ensure it's the candle's closing price, not just a wick
-        if close < bottom  // Candle must close below the bottom of bullish FVG to invalidate it
+        // For bullish FVGs, remove only when a bearish candle CLOSES completely below the FVG zone
+        if close < bottom and close[1] < bottom and is_bearish_candle(0)  // Must be a bearish candle closing below the FVG
             box.delete(currentBox)
             label.delete(currentLabel)
             array.remove(bullishBoxes, i)
@@ -171,16 +170,15 @@ if array.size(bullishBoxes) > 0
         else
             box.set_right(currentBox, bar_index + ext)
 
-if array.size(bearishBoxes) > 0
+if array.size(bearishBoxes) > 0 and barstate.isconfirmed  // Only check on candle close
     for i = array.size(bearishBoxes) - 1 to 0
         box currentBox = array.get(bearishBoxes, i)
         float top = array.get(bearishTops, i)
         float bottom = array.get(bearishBottoms, i)
         label currentLabel = array.get(bearishLabels, i)
         
-        // For bearish FVGs, remove only when a candle CLOSES above the top of the FVG zone
-        // We use 'close' price to ensure it's the candle's closing price, not just a wick
-        if close > top  // Candle must close above the top of bearish FVG to invalidate it
+        // For bearish FVGs, remove only when a bullish candle CLOSES completely above the FVG zone
+        if close > top and close[1] > top and is_bullish_candle(0)  // Must be a bullish candle closing above the FVG
             box.delete(currentBox)
             label.delete(currentLabel)
             array.remove(bearishBoxes, i)
