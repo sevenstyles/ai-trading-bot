@@ -7,10 +7,10 @@ indicator(title="Fair Value Gaps", shorttitle="FVG", overlay=true, max_boxes_cou
 ext = input.int(10, "Extend FVGs")
 
 // Color Settings
-upcolor = input.color(defval = color.green, title = "Bullish color", group = "Aesthetics")
-downcolor = input.color(defval = color.red, title = "Bearish color", group = "Aesthetics")
-consecutive_upcolor = input.color(defval = color.new(color.blue, 15), title = "Consecutive Bullish color", group = "Aesthetics")
-consecutive_downcolor = input.color(defval = color.new(color.purple, 15), title = "Consecutive Bearish color", group = "Aesthetics")
+upcolor = input.color(defval = color.new(color.green, 77), title = "Bullish color", group = "Aesthetics")
+downcolor = input.color(defval = color.new(color.red, 77), title = "Bearish color", group = "Aesthetics")
+consecutive_upcolor = input.color(defval = color.new(color.blue, 77), title = "Consecutive Bullish color", group = "Aesthetics")
+consecutive_downcolor = input.color(defval = color.new(color.purple, 77), title = "Consecutive Bearish color", group = "Aesthetics")
 
 // Swing Point Settings
 swing_lookback = input.int(10, "Swing Point Lookback Period", minval=3, maxval=50, group="Swing Point Settings", tooltip="Number of bars to look back for finding swing points")
