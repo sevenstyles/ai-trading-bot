@@ -159,8 +159,8 @@ if array.size(bullishBoxes) > 0 and barstate.isconfirmed  // Only check on candl
         float bottom = array.get(bullishBottoms, i)
         label currentLabel = array.get(bullishLabels, i)
         
-        // For bullish FVGs, remove only when a bearish candle CLOSES completely below the FVG zone
-        if close < bottom and is_bearish_candle(0)  // Must be a bearish candle closing below the FVG
+        // For bullish FVGs, remove only when a bearish candle's ENTIRE body (open and close) is below the FVG zone
+        if is_bearish_candle(0) and close < bottom and open < bottom  // Must be a bearish candle with its ENTIRE body below FVG bottom
             box.delete(currentBox)
             label.delete(currentLabel)
             array.remove(bullishBoxes, i)
@@ -177,8 +177,8 @@ if array.size(bearishBoxes) > 0 and barstate.isconfirmed  // Only check on candl
         float bottom = array.get(bearishBottoms, i)
         label currentLabel = array.get(bearishLabels, i)
         
-        // For bearish FVGs, remove only when a bullish candle CLOSES completely above the FVG zone
-        if close > top and is_bullish_candle(0)  // Must be a bullish candle closing above the FVG
+        // For bearish FVGs, remove only when a bullish candle's ENTIRE body (open and close) is above the FVG top
+        if is_bullish_candle(0) and close > top and open > top  // Must be a bullish candle with its ENTIRE body above FVG top
             box.delete(currentBox)
             label.delete(currentLabel)
             array.remove(bearishBoxes, i)
