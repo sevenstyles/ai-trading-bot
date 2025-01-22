@@ -20,9 +20,6 @@ use_consecutive = input.bool(true, "Filter for Consecutive FVGs", group="Consecu
 required_consecutive = input.int(2, "Required Consecutive FVGs", minval=2, maxval=5, group="Consecutive FVG Filter", tooltip="Only show FVGs when this many consecutive FVGs of the same type (bullish/bearish) have occurred")
 highlight_consecutive = input.bool(true, "Highlight Consecutive FVGs", group="Consecutive FVG Filter")
 
-// Candle Color Filter
-use_candle_color_filter = input.bool(true, "Filter by Candle Color", group="Candle Color Filter", tooltip="Only show FVGs when all three candles are the same color")
-
 // Arrays to store boxes and their levels
 var box[] bullishBoxes = array.new_box()
 var float[] bullishTops = array.new_float()
@@ -49,33 +46,20 @@ var label trend_label = na
 is_bullish_candle(idx) => close[idx] > open[idx]
 is_bearish_candle(idx) => close[idx] < open[idx]
 
-// Function to check if three candles are same color
-are_three_candles_bullish(idx) =>
-    is_bullish_candle(idx) and is_bullish_candle(idx+1) and is_bullish_candle(idx+2)
-
-are_three_candles_bearish(idx) =>
-    is_bearish_candle(idx) and is_bearish_candle(idx+1) and is_bearish_candle(idx+2)
-
-// FVG Detection with filters
+// FVG Detection
 // Only check for FVG after the current candle has closed
 if barstate.isconfirmed
     // Check for bullish FVG
     if low > high[2]  // Check the gap using current candle
-        if not use_candle_color_filter or are_three_candles_bullish(0)  // Check candle colors if filter is enabled
-            bfvg := true
-            canPlotFVG := true
-        else
-            bfvg := false
+        bfvg := true
+        canPlotFVG := true
     else
         bfvg := false
     
     // Check for bearish FVG
     if high < low[2]  // Check the gap using current candle
-        if not use_candle_color_filter or are_three_candles_bearish(0)  // Check candle colors if filter is enabled
-            sfvg := true
-            canPlotFVG := true
-        else
-            sfvg := false
+        sfvg := true
+        canPlotFVG := true
     else
         sfvg := false
 else
