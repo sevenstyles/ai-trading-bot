@@ -10,15 +10,20 @@ trend_label_size = input.string("large", "Trend Label Size", options=["tiny", "s
 trend_label_position = input.string("top right", "Label Position", options=["top right", "top left", "bottom right", "bottom left"], group="Trend Strength Settings")
 
 // Color Settings
-upcolor = input.color(defval = color.new(color.green, 77), title = "Bullish color", group = "Aesthetics")
-downcolor = input.color(defval = color.new(color.red, 77), title = "Bearish color", group = "Aesthetics")
-consecutive_upcolor = input.color(defval = color.new(color.blue, 77), title = "Consecutive Bullish color", group = "Aesthetics")
-consecutive_downcolor = input.color(defval = color.new(color.purple, 77), title = "Consecutive Bearish color", group = "Aesthetics")
+upcolor = input.color(defval = color.new(color.green, 77), title = "Bullish FVG color", group = "Aesthetics")
+downcolor = input.color(defval = color.new(color.red, 77), title = "Bearish FVG color", group = "Aesthetics")
+consecutive_upcolor = input.color(defval = color.new(color.blue, 77), title = "Consecutive Bullish FVG color", group = "Aesthetics")
+consecutive_downcolor = input.color(defval = color.new(color.purple, 77), title = "Consecutive Bearish FVG color", group = "Aesthetics")
+ob_up_color = input.color(defval = color.new(color.green, 85), title = "Bullish Order Block color", group = "Aesthetics")
+ob_down_color = input.color(defval = color.new(color.red, 85), title = "Bearish Order Block color", group = "Aesthetics")
 
 // Consecutive FVG Settings
 use_consecutive = input.bool(true, "Filter for Consecutive FVGs", group="Consecutive FVG Filter")
 required_consecutive = input.int(2, "Required Consecutive FVGs", minval=2, maxval=5, group="Consecutive FVG Filter", tooltip="Only show FVGs when this many consecutive FVGs of the same type (bullish/bearish) have occurred")
 highlight_consecutive = input.bool(true, "Highlight Consecutive FVGs", group="Consecutive FVG Filter")
+
+// Order Block Settings
+show_order_blocks = input.bool(true, "Show Order Blocks", group="Order Block Settings")
 
 // Arrays to store boxes and their levels
 var box[] bullishBoxes = array.new_box()
@@ -27,6 +32,7 @@ var float[] bullishBottoms = array.new_float()
 var box[] bearishBoxes = array.new_box()
 var float[] bearishTops = array.new_float()
 var float[] bearishBottoms = array.new_float()
+var box[] orderBlockBoxes = array.new_box()  // Array to store order block boxes
 
 // Variables to track consecutive FVGs
 var int bullishConsecutive = 0
@@ -99,6 +105,12 @@ if canPlotFVG
         array.push(bullishTops, fvg_top)
         array.push(bullishBottoms, fvg_bottom)
 
+        // Add order block for bullish FVG
+        if show_order_blocks
+            box obBox = box.new(left=bar_index-2, top=high[2], right=bar_index-1, bottom=low[2],
+                 border_color=color.new(color.gray, 100), bgcolor=ob_up_color)
+            array.push(orderBlockBoxes, obBox)
+
     if sfvg and (not use_consecutive or bearishConsecutive >= required_consecutive)
         float fvg_top = high
         float fvg_bottom = low[2]
@@ -109,6 +121,12 @@ if canPlotFVG
         array.push(bearishBoxes, newBox)
         array.push(bearishTops, fvg_top)
         array.push(bearishBottoms, fvg_bottom)
+
+        // Add order block for bearish FVG
+        if show_order_blocks
+            box obBox = box.new(left=bar_index-2, top=high[2], right=bar_index-1, bottom=low[2],
+                 border_color=color.new(color.gray, 100), bgcolor=ob_down_color)
+            array.push(orderBlockBoxes, obBox)
 
 // Check for invalidation and remove boxes
 if array.size(bullishBoxes) > 0 and barstate.isconfirmed  // Only check on candle close
@@ -140,6 +158,11 @@ if array.size(bearishBoxes) > 0 and barstate.isconfirmed  // Only check on candl
             array.remove(bearishBottoms, i)
         else
             box.set_right(currentBox, bar_index + 10)
+
+// Clean up old order block boxes
+if array.size(orderBlockBoxes) > 200
+    box oldBox = array.shift(orderBlockBoxes)
+    box.delete(oldBox)
 
 // After the box removal checks, calculate and display trend strength
 if barstate.isconfirmed
