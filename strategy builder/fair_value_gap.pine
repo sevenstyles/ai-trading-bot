@@ -3,9 +3,6 @@
 //@version=5
 indicator(title="Fair Value Gaps", shorttitle="FVG", overlay=true, max_boxes_count = 200)
 
-// Input parameters
-ext = input.int(10, "Extend FVGs")
-
 // Trend Strength Settings
 trend_lookback = input.int(100, "Trend Strength Lookback", minval=10, maxval=500, group="Trend Strength Settings", tooltip="Number of bars to analyze for trend strength")
 trend_label_color = input.color(defval = color.new(color.white, 0), title = "Trend Label Text Color", group = "Trend Strength Settings")
@@ -17,14 +14,6 @@ upcolor = input.color(defval = color.new(color.green, 77), title = "Bullish colo
 downcolor = input.color(defval = color.new(color.red, 77), title = "Bearish color", group = "Aesthetics")
 consecutive_upcolor = input.color(defval = color.new(color.blue, 77), title = "Consecutive Bullish color", group = "Aesthetics")
 consecutive_downcolor = input.color(defval = color.new(color.purple, 77), title = "Consecutive Bearish color", group = "Aesthetics")
-opposite_signal_color = input.color(defval = color.new(color.blue, 0), title = "Opposite Signal color", group = "Aesthetics")
-
-// Plot size for the circle
-plot_size = input.string("small", "Signal Plot Size", options=["tiny", "small", "normal", "large"], group="Aesthetics")
-
-// Function to convert string size to plotshape size
-get_plot_size(size_str) =>
-    size_str == "tiny" ? size.tiny : size_str == "small" ? size.small : size_str == "normal" ? size.normal : size.large
 
 // Swing Point Settings
 swing_lookback = input.int(10, "Swing Point Lookback Period", minval=3, maxval=50, group="Swing Point Settings", tooltip="Number of bars to look back for finding swing points")
@@ -58,10 +47,6 @@ var bool bfvg = false
 var bool sfvg = false
 var bool canPlotFVG = false
 
-// Variables for opposite signal plotting
-var bool plot_bullish_signal = false
-var bool plot_bearish_signal = false
-
 // Variables for trend strength calculation
 var int total_bullish_fvgs = 0
 var int total_bearish_fvgs = 0
@@ -78,57 +63,32 @@ are_three_candles_bullish(idx) =>
 are_three_candles_bearish(idx) =>
     is_bearish_candle(idx) and is_bearish_candle(idx+1) and is_bearish_candle(idx+2)
 
-// Function to check if three candles form an opposite signal
-is_opposite_signal_bullish(idx) =>
-    // For bullish FVG: Check if first two candles are bullish and last candle is bearish
-    is_bullish_candle(idx+2) and is_bullish_candle(idx+1) and is_bearish_candle(idx)
-
-is_opposite_signal_bearish(idx) =>
-    // For bearish FVG: Check if first two candles are bearish and last candle is bullish
-    is_bearish_candle(idx+2) and is_bearish_candle(idx+1) and is_bullish_candle(idx)
-
 // FVG Detection with filters
 // Only check for FVG after the current candle has closed
 if barstate.isconfirmed
     // Check for bullish FVG
     if low > high[2]  // Check the gap using current candle
-        if not use_candle_color_filter  // If color filter is off
+        if not use_candle_color_filter or are_three_candles_bullish(0)  // Check candle colors if filter is enabled
             bfvg := true
             canPlotFVG := true
-            plot_bullish_signal := is_opposite_signal_bullish(0)  // Check for opposite signal pattern
-        else if are_three_candles_bullish(0)  // If using color filter, all must be bullish
-            bfvg := true
-            canPlotFVG := true
-            plot_bullish_signal := false  // No opposite signal if all candles must be same color
         else
             bfvg := false
-            plot_bullish_signal := false
     else
         bfvg := false
-        plot_bullish_signal := false
     
     // Check for bearish FVG
     if high < low[2]  // Check the gap using current candle
-        if not use_candle_color_filter  // If color filter is off
+        if not use_candle_color_filter or are_three_candles_bearish(0)  // Check candle colors if filter is enabled
             sfvg := true
             canPlotFVG := true
-            plot_bearish_signal := is_opposite_signal_bearish(0)  // Check for opposite signal pattern
-        else if are_three_candles_bearish(0)  // If using color filter, all must be bearish
-            sfvg := true
-            canPlotFVG := true
-            plot_bearish_signal := false  // No opposite signal if all candles must be same color
         else
             sfvg := false
-            plot_bearish_signal := false
     else
         sfvg := false
-        plot_bearish_signal := false
 else
     bfvg := false
     sfvg := false
     canPlotFVG := false
-    plot_bullish_signal := false
-    plot_bearish_signal := false
 
 // Update consecutive counters with type checking
 if bfvg and lastWasBullish
@@ -168,7 +128,7 @@ if canPlotFVG
         float fvg_bottom = high[2]
         
         color boxColor = highlight_consecutive and bullishConsecutive >= required_consecutive ? consecutive_upcolor : upcolor
-        box newBox = box.new(left=bar_index-2, top=fvg_top, right=bar_index+ext, bottom=fvg_bottom,
+        box newBox = box.new(left=bar_index-2, top=fvg_top, right=bar_index+10, bottom=fvg_bottom,
              border_color=color.new(color.gray, 100), bgcolor=boxColor)
         array.push(bullishBoxes, newBox)
         array.push(bullishTops, fvg_top)
@@ -186,7 +146,7 @@ if canPlotFVG
         float fvg_bottom = low[2]
         
         color boxColor = highlight_consecutive and bearishConsecutive >= required_consecutive ? consecutive_downcolor : downcolor
-        box newBox = box.new(left=bar_index-2, top=fvg_top, right=bar_index+ext, bottom=fvg_bottom,
+        box newBox = box.new(left=bar_index-2, top=fvg_top, right=bar_index+10, bottom=fvg_bottom,
              border_color=color.new(color.gray, 100), bgcolor=boxColor)
         array.push(bearishBoxes, newBox)
         array.push(bearishTops, fvg_top)
@@ -198,15 +158,6 @@ if canPlotFVG
              color=color.new(color.red, 80), textcolor=color.red,
              style=label.style_label_down)
         array.push(bearishLabels, newLabel)
-
-// Plot the signals at script level
-plotshape(plot_bullish_signal, title="Bullish Opposite Signal", 
-         style=shape.circle, location=location.abovebar, 
-         color=opposite_signal_color, size=size.small)
-
-plotshape(plot_bearish_signal, title="Bearish Opposite Signal", 
-         style=shape.circle, location=location.belowbar, 
-         color=opposite_signal_color, size=size.small)
 
 // Check for invalidation and remove boxes
 if array.size(bullishBoxes) > 0 and barstate.isconfirmed  // Only check on candle close
@@ -225,7 +176,7 @@ if array.size(bullishBoxes) > 0 and barstate.isconfirmed  // Only check on candl
             array.remove(bullishBottoms, i)
             array.remove(bullishLabels, i)
         else
-            box.set_right(currentBox, bar_index + ext)
+            box.set_right(currentBox, bar_index + 10)
 
 if array.size(bearishBoxes) > 0 and barstate.isconfirmed  // Only check on candle close
     for i = array.size(bearishBoxes) - 1 to 0
@@ -243,7 +194,7 @@ if array.size(bearishBoxes) > 0 and barstate.isconfirmed  // Only check on candl
             array.remove(bearishBottoms, i)
             array.remove(bearishLabels, i)
         else
-            box.set_right(currentBox, bar_index + ext)
+            box.set_right(currentBox, bar_index + 10)
 
 // After the box removal checks, calculate and display trend strength
 if barstate.isconfirmed
