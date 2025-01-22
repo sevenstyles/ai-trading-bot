@@ -15,9 +15,6 @@ downcolor = input.color(defval = color.new(color.red, 77), title = "Bearish colo
 consecutive_upcolor = input.color(defval = color.new(color.blue, 77), title = "Consecutive Bullish color", group = "Aesthetics")
 consecutive_downcolor = input.color(defval = color.new(color.purple, 77), title = "Consecutive Bearish color", group = "Aesthetics")
 
-// Swing Point Settings
-swing_lookback = input.int(10, "Swing Point Lookback Period", minval=3, maxval=50, group="Swing Point Settings", tooltip="Number of bars to look back for finding swing points")
-
 // Consecutive FVG Settings
 use_consecutive = input.bool(true, "Filter for Consecutive FVGs", group="Consecutive FVG Filter")
 required_consecutive = input.int(2, "Required Consecutive FVGs", minval=2, maxval=5, group="Consecutive FVG Filter", tooltip="Only show FVGs when this many consecutive FVGs of the same type (bullish/bearish) have occurred")
@@ -33,10 +30,6 @@ var float[] bullishBottoms = array.new_float()
 var box[] bearishBoxes = array.new_box()
 var float[] bearishTops = array.new_float()
 var float[] bearishBottoms = array.new_float()
-
-// Arrays to store swing labels
-var label[] bullishLabels = array.new_label()
-var label[] bearishLabels = array.new_label()
 
 // Variables to track consecutive FVGs
 var int bullishConsecutive = 0
@@ -109,18 +102,6 @@ else
 lastWasBullish := bfvg
 lastWasBearish := sfvg
 
-// Function to find previous swing high/low
-find_swing_point(is_high) =>
-    float result = is_high ? high[1] : low[1]
-    int point_index = 1
-    
-    for i = 2 to swing_lookback  // Use the user-defined lookback period
-        float curr_value = is_high ? high[i] : low[i]
-        if is_high ? (curr_value > result) : (curr_value < result)
-            result := curr_value
-            point_index := i
-    [result, point_index]
-
 // Create new FVG boxes only when candle has closed
 if canPlotFVG
     if bfvg and (not use_consecutive or bullishConsecutive >= required_consecutive)
@@ -133,13 +114,6 @@ if canPlotFVG
         array.push(bullishBoxes, newBox)
         array.push(bullishTops, fvg_top)
         array.push(bullishBottoms, fvg_bottom)
-        
-        // Add PL label
-        [swing_low, low_index] = find_swing_point(false)
-        label newLabel = label.new(bar_index-low_index, swing_low, text="PL",
-             color=color.new(color.green, 80), textcolor=color.green,
-             style=label.style_label_up)
-        array.push(bullishLabels, newLabel)
 
     if sfvg and (not use_consecutive or bearishConsecutive >= required_consecutive)
         float fvg_top = high
@@ -151,13 +125,6 @@ if canPlotFVG
         array.push(bearishBoxes, newBox)
         array.push(bearishTops, fvg_top)
         array.push(bearishBottoms, fvg_bottom)
-        
-        // Add PH label
-        [swing_high, high_index] = find_swing_point(true)
-        label newLabel = label.new(bar_index-high_index, swing_high, text="PH",
-             color=color.new(color.red, 80), textcolor=color.red,
-             style=label.style_label_down)
-        array.push(bearishLabels, newLabel)
 
 // Check for invalidation and remove boxes
 if array.size(bullishBoxes) > 0 and barstate.isconfirmed  // Only check on candle close
@@ -165,16 +132,13 @@ if array.size(bullishBoxes) > 0 and barstate.isconfirmed  // Only check on candl
         box currentBox = array.get(bullishBoxes, i)
         float top = array.get(bullishTops, i)
         float bottom = array.get(bullishBottoms, i)
-        label currentLabel = array.get(bullishLabels, i)
         
         // For bullish FVGs, remove only when a bearish candle's ENTIRE body (open and close) is below the FVG zone
         if is_bearish_candle(0) and close < bottom and open < bottom  // Must be a bearish candle with its ENTIRE body below FVG bottom
             box.delete(currentBox)
-            label.delete(currentLabel)
             array.remove(bullishBoxes, i)
             array.remove(bullishTops, i)
             array.remove(bullishBottoms, i)
-            array.remove(bullishLabels, i)
         else
             box.set_right(currentBox, bar_index + 10)
 
@@ -183,16 +147,13 @@ if array.size(bearishBoxes) > 0 and barstate.isconfirmed  // Only check on candl
         box currentBox = array.get(bearishBoxes, i)
         float top = array.get(bearishTops, i)
         float bottom = array.get(bearishBottoms, i)
-        label currentLabel = array.get(bearishLabels, i)
         
         // For bearish FVGs, remove only when a bullish candle's ENTIRE body (open and close) is above the FVG top
         if is_bullish_candle(0) and close > top and open > top  // Must be a bullish candle with its ENTIRE body above FVG top
             box.delete(currentBox)
-            label.delete(currentLabel)
             array.remove(bearishBoxes, i)
             array.remove(bearishTops, i)
             array.remove(bearishBottoms, i)
-            array.remove(bearishLabels, i)
         else
             box.set_right(currentBox, bar_index + 10)
 
