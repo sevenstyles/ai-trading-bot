@@ -6,6 +6,12 @@ indicator(title="Fair Value Gaps", shorttitle="FVG", overlay=true, max_boxes_cou
 // Input parameters
 ext = input.int(10, "Extend FVGs")
 
+// Trend Strength Settings
+trend_lookback = input.int(100, "Trend Strength Lookback", minval=10, maxval=500, group="Trend Strength Settings", tooltip="Number of bars to analyze for trend strength")
+trend_label_color = input.color(defval = color.new(color.white, 0), title = "Trend Label Text Color", group = "Trend Strength Settings")
+trend_label_size = input.string("large", "Trend Label Size", options=["tiny", "small", "normal", "large"], group="Trend Strength Settings")
+trend_label_position = input.string("top right", "Label Position", options=["top right", "top left", "bottom right", "bottom left"], group="Trend Strength Settings")
+
 // Color Settings
 upcolor = input.color(defval = color.new(color.green, 77), title = "Bullish color", group = "Aesthetics")
 downcolor = input.color(defval = color.new(color.red, 77), title = "Bearish color", group = "Aesthetics")
@@ -55,6 +61,11 @@ var bool canPlotFVG = false
 // Variables for opposite signal plotting
 var bool plot_bullish_signal = false
 var bool plot_bearish_signal = false
+
+// Variables for trend strength calculation
+var int total_bullish_fvgs = 0
+var int total_bearish_fvgs = 0
+var label trend_label = na
 
 // Function to check if candle is bullish/bearish
 is_bullish_candle(idx) => close[idx] > open[idx]
@@ -233,3 +244,58 @@ if array.size(bearishBoxes) > 0 and barstate.isconfirmed  // Only check on candl
             array.remove(bearishLabels, i)
         else
             box.set_right(currentBox, bar_index + ext)
+
+// After the box removal checks, calculate and display trend strength
+if barstate.isconfirmed
+    // Reset counters
+    int bullish_count = 0
+    int bearish_count = 0
+    
+    // Count bullish FVGs within lookback period
+    if array.size(bullishBoxes) > 0
+        for i = 0 to array.size(bullishBoxes) - 1
+            box currentBox = array.get(bullishBoxes, i)
+            int box_left = box.get_left(currentBox)
+            if bar_index - box_left <= trend_lookback
+                bullish_count += 1
+    
+    // Count bearish FVGs within lookback period
+    if array.size(bearishBoxes) > 0
+        for i = 0 to array.size(bearishBoxes) - 1
+            box currentBox = array.get(bearishBoxes, i)
+            int box_left = box.get_left(currentBox)
+            if bar_index - box_left <= trend_lookback
+                bearish_count += 1
+    
+    // Update totals
+    total_bullish_fvgs := bullish_count
+    total_bearish_fvgs := bearish_count
+    
+    // Calculate percentages
+    float total_fvgs = total_bullish_fvgs + total_bearish_fvgs
+    float bullish_percentage = total_fvgs > 0 ? (total_bullish_fvgs / total_fvgs) * 100 : 0
+    float bearish_percentage = total_fvgs > 0 ? (total_bearish_fvgs / total_fvgs) * 100 : 0
+    
+    // Delete old label
+    if not na(trend_label)
+        label.delete(trend_label)
+    
+    // Determine label position
+    int x_pos = trend_label_position == "top right" or trend_label_position == "bottom right" ? bar_index + 2 : bar_index - 50
+    float y_pos = trend_label_position == "top right" or trend_label_position == "top left" ? ta.highest(high, 20) * 1.02 : ta.lowest(low, 20) * 0.98
+    
+    // Create label text with proper formatting
+    string label_text = "Lookback: " + str.tostring(trend_lookback) + " bars\n" +
+                       "Bullish FVGs: " + str.tostring(total_bullish_fvgs) + " (" + str.tostring(bullish_percentage, "#.##") + "%)\n" +
+                       "Bearish FVGs: " + str.tostring(total_bearish_fvgs) + " (" + str.tostring(bearish_percentage, "#.##") + "%)"
+    
+    // Create new label with percentages
+    trend_label := label.new(
+         x=x_pos,
+         y=y_pos,
+         text=label_text,
+         color=color.new(color.black, 100),  // Transparent background
+         style=trend_label_position == "top right" or trend_label_position == "bottom right" ? label.style_label_left : label.style_label_right,
+         textcolor=trend_label_color,
+         size=trend_label_size == "tiny" ? size.tiny : trend_label_size == "small" ? size.small : 
+              trend_label_size == "normal" ? size.normal : size.large)
