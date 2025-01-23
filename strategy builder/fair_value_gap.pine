@@ -27,7 +27,8 @@ show_order_blocks = input.bool(true, "Show Order Blocks", group="Order Block Set
 
 // Strong FVG Settings
 strong_fvg_bars = input.int(30, "Strong FVG Bars", minval=5, maxval=100, group="Strong FVG Settings", tooltip="Number of bars before an FVG is considered strong")
-strong_fvg_line_color = input.color(defval = color.new(color.yellow, 0), title = "Strong FVG Line Color", group = "Strong FVG Settings")
+strong_bullish_line_color = input.color(defval = color.new(color.yellow, 0), title = "Strong Bullish FVG Line Color", group = "Strong FVG Settings")
+strong_bearish_line_color = input.color(defval = color.new(color.orange, 0), title = "Strong Bearish FVG Line Color", group = "Strong FVG Settings")
 strong_fvg_line_width = input.int(2, "Strong FVG Line Width", minval=1, maxval=4, group="Strong FVG Settings")
 strong_fvg_line_style = input.string("solid", "Strong FVG Line Style", options=["solid", "dashed", "dotted"], group="Strong FVG Settings")
 max_strong_lines = input.int(50, "Maximum Strong FVG Lines", minval=1, maxval=100, group="Strong FVG Settings")
@@ -274,7 +275,7 @@ if barstate.isconfirmed
                          y1=bottom, 
                          x2=bar_index + 10, 
                          y2=bottom, 
-                         color=strong_fvg_line_color, 
+                         color=strong_bullish_line_color, 
                          width=strong_fvg_line_width,
                          style=(strong_fvg_line_style == "solid" ? line.style_solid : 
                                strong_fvg_line_style == "dashed" ? line.style_dashed : 
@@ -304,7 +305,7 @@ if barstate.isconfirmed
                          y1=top, 
                          x2=bar_index + 10, 
                          y2=top, 
-                         color=strong_fvg_line_color, 
+                         color=strong_bearish_line_color, 
                          width=strong_fvg_line_width,
                          style=(strong_fvg_line_style == "solid" ? line.style_solid : 
                                strong_fvg_line_style == "dashed" ? line.style_dashed : 
