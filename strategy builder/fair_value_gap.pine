@@ -4,7 +4,7 @@
 indicator(title="Fair Value Gaps", shorttitle="FVG", overlay=true, max_boxes_count = 200)
 
 // Trend Strength Settings
-trend_lookback = input.int(100, "Trend Strength Lookback", minval=10, maxval=500, group="Trend Strength Settings", tooltip="Number of bars to analyze for trend strength")
+trend_lookback = input.int(100, "Trend Strength Lookback", minval=10, maxval=1000, group="Trend Strength Settings", tooltip="Number of bars to analyze for trend strength")
 trend_label_color = input.color(defval = color.new(color.white, 0), title = "Trend Label Text Color", group = "Trend Strength Settings")
 trend_label_size = input.string("large", "Trend Label Size", options=["tiny", "small", "normal", "large"], group="Trend Strength Settings")
 trend_label_position = input.string("top right", "Label Position", options=["top right", "top left", "bottom right", "bottom left"], group="Trend Strength Settings")
@@ -25,6 +25,13 @@ highlight_consecutive = input.bool(true, "Highlight Consecutive FVGs", group="Co
 // Order Block Settings
 show_order_blocks = input.bool(true, "Show Order Blocks", group="Order Block Settings")
 
+// Strong FVG Settings
+strong_fvg_bars = input.int(30, "Strong FVG Bars", minval=5, maxval=100, group="Strong FVG Settings", tooltip="Number of bars before an FVG is considered strong")
+strong_fvg_line_color = input.color(defval = color.new(color.yellow, 0), title = "Strong FVG Line Color", group = "Strong FVG Settings")
+strong_fvg_line_width = input.int(2, "Strong FVG Line Width", minval=1, maxval=4, group="Strong FVG Settings")
+strong_fvg_line_style = input.string("solid", "Strong FVG Line Style", options=["solid", "dashed", "dotted"], group="Strong FVG Settings")
+max_strong_lines = input.int(50, "Maximum Strong FVG Lines", minval=1, maxval=100, group="Strong FVG Settings")
+
 // Arrays to store boxes and their levels
 var box[] bullishBoxes = array.new_box()
 var float[] bullishTops = array.new_float()
@@ -33,6 +40,16 @@ var box[] bearishBoxes = array.new_box()
 var float[] bearishTops = array.new_float()
 var float[] bearishBottoms = array.new_float()
 var box[] orderBlockBoxes = array.new_box()  // Array to store order block boxes
+
+// Arrays to store FVG creation times and lines
+var int[] bullishFVGStartBars = array.new_int()
+var int[] bearishFVGStartBars = array.new_int()
+var line[] bullishStrongLines = array.new_line()  // Separate arrays for bullish and bearish lines
+var line[] bearishStrongLines = array.new_line()
+var int[] bullishLineIndices = array.new_int()  // Separate indices for bullish and bearish
+var int[] bearishLineIndices = array.new_int()
+var bool[] bullishLineCreated = array.new_bool()  // Separate tracking for bullish and bearish
+var bool[] bearishLineCreated = array.new_bool()
 
 // Variables to track consecutive FVGs
 var int bullishConsecutive = 0
@@ -104,6 +121,8 @@ if canPlotFVG
         array.push(bullishBoxes, newBox)
         array.push(bullishTops, fvg_top)
         array.push(bullishBottoms, fvg_bottom)
+        array.push(bullishFVGStartBars, bar_index)
+        array.push(bullishLineCreated, false)  // Use bullish tracking array
 
         // Add order block for bullish FVG
         if show_order_blocks
@@ -121,6 +140,8 @@ if canPlotFVG
         array.push(bearishBoxes, newBox)
         array.push(bearishTops, fvg_top)
         array.push(bearishBottoms, fvg_bottom)
+        array.push(bearishFVGStartBars, bar_index)
+        array.push(bearishLineCreated, false)  // Use bearish tracking array
 
         // Add order block for bearish FVG
         if show_order_blocks
@@ -128,34 +149,52 @@ if canPlotFVG
                  border_color=color.new(color.gray, 100), bgcolor=ob_down_color)
             array.push(orderBlockBoxes, obBox)
 
-// Check for invalidation and remove boxes
-if array.size(bullishBoxes) > 0 and barstate.isconfirmed  // Only check on candle close
+// Modify box removal sections
+// In bullish box removal:
+if array.size(bullishBoxes) > 0 and barstate.isconfirmed
     for i = array.size(bullishBoxes) - 1 to 0
         box currentBox = array.get(bullishBoxes, i)
         float top = array.get(bullishTops, i)
         float bottom = array.get(bullishBottoms, i)
         
-        // For bullish FVGs, remove only when a bearish candle's ENTIRE body (open and close) is below the FVG zone
-        if is_bearish_candle(0) and close < bottom and open < bottom  // Must be a bearish candle with its ENTIRE body below FVG bottom
+        if is_bearish_candle(0) and close < bottom and open < bottom
             box.delete(currentBox)
+            // Find and remove the corresponding line
+            int lineIndex = array.indexof(bullishLineIndices, i)
+            if lineIndex >= 0 and lineIndex < array.size(bullishStrongLines)
+                line oldLine = array.get(bullishStrongLines, lineIndex)
+                line.delete(oldLine)
+                array.remove(bullishStrongLines, lineIndex)
+                array.remove(bullishLineIndices, lineIndex)
             array.remove(bullishBoxes, i)
             array.remove(bullishTops, i)
             array.remove(bullishBottoms, i)
+            array.remove(bullishFVGStartBars, i)
+            array.remove(bullishLineCreated, i)
         else
             box.set_right(currentBox, bar_index + 10)
 
-if array.size(bearishBoxes) > 0 and barstate.isconfirmed  // Only check on candle close
+// In bearish box removal:
+if array.size(bearishBoxes) > 0 and barstate.isconfirmed
     for i = array.size(bearishBoxes) - 1 to 0
         box currentBox = array.get(bearishBoxes, i)
         float top = array.get(bearishTops, i)
         float bottom = array.get(bearishBottoms, i)
         
-        // For bearish FVGs, remove only when a bullish candle's ENTIRE body (open and close) is above the FVG top
-        if is_bullish_candle(0) and close > top and open > top  // Must be a bullish candle with its ENTIRE body above FVG top
+        if is_bullish_candle(0) and close > top and open > top
             box.delete(currentBox)
+            // Find and remove the corresponding line
+            int lineIndex = array.indexof(bearishLineIndices, i)
+            if lineIndex >= 0 and lineIndex < array.size(bearishStrongLines)
+                line oldLine = array.get(bearishStrongLines, lineIndex)
+                line.delete(oldLine)
+                array.remove(bearishStrongLines, lineIndex)
+                array.remove(bearishLineIndices, lineIndex)
             array.remove(bearishBoxes, i)
             array.remove(bearishTops, i)
             array.remove(bearishBottoms, i)
+            array.remove(bearishFVGStartBars, i)
+            array.remove(bearishLineCreated, i)
         else
             box.set_right(currentBox, bar_index + 10)
 
@@ -218,3 +257,76 @@ if barstate.isconfirmed
          textcolor=trend_label_color,
          size=trend_label_size == "tiny" ? size.tiny : trend_label_size == "small" ? size.small : 
               trend_label_size == "normal" ? size.normal : size.large)
+
+// Replace the strong FVG line creation section
+if barstate.isconfirmed
+    // Check bullish FVGs
+    if array.size(bullishBoxes) > 0
+        for i = array.size(bullishBoxes) - 1 to 0
+            if i < array.size(bullishFVGStartBars) and i < array.size(bullishLineCreated)
+                int startBar = array.get(bullishFVGStartBars, i)
+                bool hasLine = array.get(bullishLineCreated, i)
+                
+                if not hasLine and bar_index - startBar >= strong_fvg_bars
+                    float bottom = array.get(bullishBottoms, i)
+                    line strongLine = line.new(
+                         x1=startBar, 
+                         y1=bottom, 
+                         x2=bar_index + 10, 
+                         y2=bottom, 
+                         color=strong_fvg_line_color, 
+                         width=strong_fvg_line_width,
+                         style=(strong_fvg_line_style == "solid" ? line.style_solid : 
+                               strong_fvg_line_style == "dashed" ? line.style_dashed : 
+                               line.style_dotted))
+                    array.push(bullishStrongLines, strongLine)
+                    array.push(bullishLineIndices, i)
+                    array.set(bullishLineCreated, i, true)
+                else if hasLine
+                    // Find the corresponding line
+                    int lineIndex = array.indexof(bullishLineIndices, i)
+                    if lineIndex >= 0 and lineIndex < array.size(bullishStrongLines)
+                        line existingLine = array.get(bullishStrongLines, lineIndex)
+                        if not na(existingLine)
+                            line.set_x2(existingLine, bar_index + 10)
+    
+    // Check bearish FVGs
+    if array.size(bearishBoxes) > 0
+        for i = array.size(bearishBoxes) - 1 to 0
+            if i < array.size(bearishFVGStartBars) and i < array.size(bearishLineCreated)
+                int startBar = array.get(bearishFVGStartBars, i)
+                bool hasLine = array.get(bearishLineCreated, i)
+                
+                if not hasLine and bar_index - startBar >= strong_fvg_bars
+                    float top = array.get(bearishTops, i)
+                    line strongLine = line.new(
+                         x1=startBar, 
+                         y1=top, 
+                         x2=bar_index + 10, 
+                         y2=top, 
+                         color=strong_fvg_line_color, 
+                         width=strong_fvg_line_width,
+                         style=(strong_fvg_line_style == "solid" ? line.style_solid : 
+                               strong_fvg_line_style == "dashed" ? line.style_dashed : 
+                               line.style_dotted))
+                    array.push(bearishStrongLines, strongLine)
+                    array.push(bearishLineIndices, i)
+                    array.set(bearishLineCreated, i, true)
+                else if hasLine
+                    // Find the corresponding line
+                    int lineIndex = array.indexof(bearishLineIndices, i)
+                    if lineIndex >= 0 and lineIndex < array.size(bearishStrongLines)
+                        line existingLine = array.get(bearishStrongLines, lineIndex)
+                        if not na(existingLine)
+                            line.set_x2(existingLine, bar_index + 10)
+
+// Clean up old lines that are no longer needed
+if array.size(bullishStrongLines) > max_strong_lines
+    line oldLine = array.shift(bullishStrongLines)
+    array.shift(bullishLineIndices)
+    line.delete(oldLine)
+
+if array.size(bearishStrongLines) > max_strong_lines
+    line oldLine = array.shift(bearishStrongLines)
+    array.shift(bearishLineIndices)
+    line.delete(oldLine)
