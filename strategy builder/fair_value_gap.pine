@@ -132,17 +132,17 @@ if canPlotFVG
             array.push(orderBlockBoxes, obBox)
 
     if sfvg and (not use_consecutive or bearishConsecutive >= required_consecutive)
-        float fvg_top = high
-        float fvg_bottom = low[2]
+        float fvg_top = low[2]  // This is actually the top of the gap
+        float fvg_bottom = high  // This is the bottom of the gap
         
         color boxColor = highlight_consecutive and bearishConsecutive >= required_consecutive ? consecutive_downcolor : downcolor
         box newBox = box.new(left=bar_index-2, top=fvg_top, right=bar_index+10, bottom=fvg_bottom,
              border_color=color.new(color.gray, 100), bgcolor=boxColor)
         array.push(bearishBoxes, newBox)
-        array.push(bearishTops, fvg_top)
+        array.push(bearishTops, fvg_top)  // Store the actual top of the gap
         array.push(bearishBottoms, fvg_bottom)
         array.push(bearishFVGStartBars, bar_index)
-        array.push(bearishLineCreated, false)  // Use bearish tracking array
+        array.push(bearishLineCreated, false)
 
         // Add order block for bearish FVG
         if show_order_blocks
@@ -299,12 +299,12 @@ if barstate.isconfirmed
                 bool hasLine = array.get(bearishLineCreated, i)
                 
                 if not hasLine and bar_index - startBar >= strong_fvg_bars
-                    float top = array.get(bearishTops, i)
+                    float top = array.get(bearishTops, i)  // Get the top value from bearishTops array
                     line strongLine = line.new(
                          x1=startBar, 
-                         y1=top, 
+                         y1=top,  // Use top value for y-coordinates
                          x2=bar_index + 10, 
-                         y2=top, 
+                         y2=top,  // Use top value for y-coordinates
                          color=strong_bearish_line_color, 
                          width=strong_fvg_line_width,
                          style=(strong_fvg_line_style == "solid" ? line.style_solid : 
@@ -319,7 +319,10 @@ if barstate.isconfirmed
                     if lineIndex >= 0 and lineIndex < array.size(bearishStrongLines)
                         line existingLine = array.get(bearishStrongLines, lineIndex)
                         if not na(existingLine)
+                            float top = array.get(bearishTops, i)  // Get top value for updating line
                             line.set_x2(existingLine, bar_index + 10)
+                            line.set_y1(existingLine, top)  // Ensure y1 is at the top
+                            line.set_y2(existingLine, top)  // Ensure y2 is at the top
 
 // Clean up old lines that are no longer needed
 if array.size(bullishStrongLines) > max_strong_lines
