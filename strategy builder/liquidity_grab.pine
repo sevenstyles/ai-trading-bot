@@ -1,0 +1,76 @@
+//@version=5
+indicator("Liquidity Grab", overlay=true)
+
+// Input parameters
+lookback_length = input.int(10, "Lookback Period", minval=1, maxval=50, tooltip="Number of bars to look back for swing points")
+min_swing_strength = input.float(1.0, "Minimum Swing Strength (ATR)", minval=0.1, maxval=5.0, step=0.1, 
+     tooltip="Minimum size of swing in ATR units to be considered significant")
+
+// Color settings
+bull_color = input.color(color.green, "Bullish Grab Color")
+bear_color = input.color(color.red, "Bearish Grab Color")
+line_style = input.string("dotted", "Line Style", options=["solid", "dotted", "dashed"])
+line_width = input.int(2, "Line Width", minval=1, maxval=4)
+
+// Function to detect swing high
+is_swing_high(len) =>
+    high[len] > high[len + 1] and high[len] > high[len - 1]
+
+// Function to detect swing low
+is_swing_low(len) =>
+    low[len] < low[len + 1] and low[len] < low[len - 1]
+
+// Get ATR for swing strength comparison
+atr = ta.atr(14)
+
+// Variables to store recent swing points and their levels
+var float last_swing_high = na
+var float last_swing_low = na
+var int last_swing_high_bar = na
+var int last_swing_low_bar = na
+var float lowest_after_high = na
+var float highest_after_low = na
+
+// Update swing points
+for i = 1 to lookback_length
+    if is_swing_high(i) and (na(last_swing_high) or high[i] != last_swing_high)
+        swing_strength = (high[i] - math.min(low[i+1], low[i-1])) / atr
+        if swing_strength >= min_swing_strength
+            last_swing_high := high[i]
+            last_swing_high_bar := bar_index[i]
+            lowest_after_high := high[i]  // Initialize the lowest point after swing high
+            break
+
+    if is_swing_low(i) and (na(last_swing_low) or low[i] != last_swing_low)
+        swing_strength = (math.max(high[i+1], high[i-1]) - low[i]) / atr
+        if swing_strength >= min_swing_strength
+            last_swing_low := low[i]
+            last_swing_low_bar := bar_index[i]
+            highest_after_low := low[i]  // Initialize the highest point after swing low
+            break
+
+// Track lowest point after swing high and highest point after swing low
+if not na(last_swing_high)
+    lowest_after_high := math.min(nz(lowest_after_high), low)
+
+if not na(last_swing_low)
+    highest_after_low := math.max(nz(highest_after_low), high)
+
+// Detect and draw liquidity grabs
+if not na(last_swing_high)
+    // Bullish liquidity grab: Wick above swing high but close below lowest point
+    if high > last_swing_high and close < lowest_after_high and close[1] >= lowest_after_high
+        line.new(last_swing_high_bar, lowest_after_high, bar_index, lowest_after_high, 
+             color=bear_color, 
+             style=line_style == "solid" ? line.style_solid : line_style == "dotted" ? line.style_dotted : line.style_dashed,
+             width=line_width)
+        last_swing_high := na  // Reset after drawing
+
+if not na(last_swing_low)
+    // Bearish liquidity grab: Wick below swing low but close above highest point
+    if low < last_swing_low and close > highest_after_low and close[1] <= highest_after_low
+        line.new(last_swing_low_bar, highest_after_low, bar_index, highest_after_low,
+             color=bull_color,
+             style=line_style == "solid" ? line.style_solid : line_style == "dotted" ? line.style_dotted : line.style_dashed,
+             width=line_width)
+        last_swing_low := na  // Reset after drawing 
