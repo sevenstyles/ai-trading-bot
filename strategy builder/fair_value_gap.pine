@@ -4,7 +4,19 @@
 indicator(title="Fair Value Gaps", shorttitle="FVG", overlay=true, max_boxes_count = 200)
 
 // Trend Strength Settings
-trend_lookback = input.int(100, "Trend Strength Lookback", minval=10, maxval=1000, group="Trend Strength Settings", tooltip="Number of bars to analyze for trend strength")
+var string tooltip_text = "Dynamic lookback that adapts to market volatility. Higher volatility = shorter lookback, lower volatility = longer lookback"
+base_lookback = input.int(100, "Base Lookback Period", minval=10, maxval=1000, group="Trend Strength Settings")
+volatility_sensitivity = input.float(1.5, "Volatility Sensitivity", minval=0.5, maxval=3.0, step=0.1, group="Trend Strength Settings", tooltip="Higher values make lookback more sensitive to volatility changes")
+min_lookback = input.int(20, "Minimum Lookback", minval=10, maxval=100, group="Trend Strength Settings")
+max_lookback = input.int(200, "Maximum Lookback", minval=100, maxval=1000, group="Trend Strength Settings")
+
+// Calculate dynamic lookback based on ATR
+float current_atr = ta.atr(14)
+float baseline_atr = ta.sma(ta.atr(14), 100)  // Long-term average ATR as baseline
+float volatility_ratio = current_atr / baseline_atr
+int dynamic_lookback = math.round(base_lookback / math.pow(volatility_ratio, volatility_sensitivity))
+dynamic_lookback := math.max(min_lookback, math.min(max_lookback, dynamic_lookback))
+
 trend_label_color = input.color(defval = color.new(color.white, 0), title = "Trend Label Text Color", group = "Trend Strength Settings")
 trend_label_size = input.string("large", "Trend Label Size", options=["tiny", "small", "normal", "large"], group="Trend Strength Settings")
 trend_label_position = input.string("top right", "Label Position", options=["top right", "top left", "bottom right", "bottom left"], group="Trend Strength Settings")
@@ -297,7 +309,7 @@ if barstate.isconfirmed
         for i = array.size(bullishBoxes) - 1 to 0
             box currentBox = array.get(bullishBoxes, i)
             int box_left = box.get_left(currentBox)
-            if bar_index - box_left <= trend_lookback
+            if bar_index - box_left <= dynamic_lookback
                 bullish_count += 1
                 float curr_vol = volume[bar_index - box_left]
                 bullish_volume += curr_vol
@@ -316,7 +328,7 @@ if barstate.isconfirmed
         for i = array.size(bearishBoxes) - 1 to 0
             box currentBox = array.get(bearishBoxes, i)
             int box_left = box.get_left(currentBox)
-            if bar_index - box_left <= trend_lookback
+            if bar_index - box_left <= dynamic_lookback
                 bearish_count += 1
                 float curr_vol = volume[bar_index - box_left]
                 bearish_volume += curr_vol
@@ -354,26 +366,26 @@ if barstate.isconfirmed
     if array.size(bullishFVGStartBars) > 0
         for i = 0 to array.size(bullishFVGStartBars) - 1
             int start_bar = array.get(bullishFVGStartBars, i)
-            if bar_index - start_bar <= trend_lookback
+            if bar_index - start_bar <= dynamic_lookback
                 total_bull_count += 1
     
     if array.size(bearishFVGStartBars) > 0
         for i = 0 to array.size(bearishFVGStartBars) - 1
             int start_bar = array.get(bearishFVGStartBars, i)
-            if bar_index - start_bar <= trend_lookback
+            if bar_index - start_bar <= dynamic_lookback
                 total_bear_count += 1
     
     // Then count filled FVGs
     if array.size(filled_bullish_fvgs) > 0
         for i = array.size(filled_bullish_fvgs) - 1 to 0
             int fill_bar = array.get(filled_bullish_fvgs, i)
-            if bar_index - fill_bar <= trend_lookback
+            if bar_index - fill_bar <= dynamic_lookback
                 filled_bull_count += 1
     
     if array.size(filled_bearish_fvgs) > 0
         for i = array.size(filled_bearish_fvgs) - 1 to 0
             int fill_bar = array.get(filled_bearish_fvgs, i)
-            if bar_index - fill_bar <= trend_lookback
+            if bar_index - fill_bar <= dynamic_lookback
                 filled_bear_count += 1
     
     // Calculate momentum strength (replaces fill rate)
@@ -448,7 +460,7 @@ if barstate.isconfirmed
                        "LONG: " + format_percent(long_score, 45, 65) + 
                        " | SHORT: " + format_percent(short_score, 45, 65) + 
                        signal_text + "\n\n" +
-                       "📊 FVG Distribution (" + str.tostring(trend_lookback) + " bars)\n" +
+                       "📊 FVG Distribution (" + str.tostring(dynamic_lookback) + " bars | ATR: " + str.tostring(math.round(volatility_ratio * 100, 1)) + "% norm)\n" +
                        "Bull: " + format_percent(bullish_percentage, 45, 65) + 
                        " (" + str.tostring(total_bullish_fvgs) + " FVGs)\n" +
                        "Bear: " + format_percent(bearish_percentage, 45, 65) + 
