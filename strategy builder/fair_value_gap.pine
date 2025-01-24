@@ -78,7 +78,6 @@ signal_distribution_threshold = input.float(65, "Distribution % Threshold", minv
 signal_volume_threshold = input.float(60, "Volume % Threshold", minval=50, maxval=90, group="Signal Settings")
 signal_strength_threshold = input.float(110, "Volume Strength % Threshold", minval=100, maxval=150, group="Signal Settings")
 signal_gap_threshold = input.float(50, "Gap Size % Threshold", minval=30, maxval=100, group="Signal Settings")
-signal_fill_threshold = input.float(60, "Fill Rate % Threshold", minval=40, maxval=90, group="Signal Settings")
 
 // Arrays to store boxes and their levels
 var box[] bullishBoxes = array.new_box()
@@ -397,58 +396,44 @@ if barstate.isconfirmed
     float short_score = calculate_score(bearish_percentage, bearish_vol_percentage,
          latest_bear_vol_strength, latest_bear_gap_size) * 100
 
-    // Optimized signal conditions for better accuracy
+    // Optimized signal conditions based on aligned percentages
     bool long_signal = 
-         // Primary Trend Conditions
-         bearish_percentage >= 60 and              // Market is bearish biased
+         // All bullish percentages must show strength (green)
+         bullish_percentage >= 65 and              // FVG Distribution
+         bullish_vol_percentage >= 65 and          // Volume Dominance
+         latest_bull_vol_strength >= 150 and       // Volume Strength
+         latest_bull_gap_size >= 75 and           // Gap Size
+         bull_momentum >= 60                       // Momentum
          
-         // Volume Analysis (at least one must be true)
-         (bearish_vol_percentage >= 60 or          // Strong bearish volume dominance
-          latest_bear_vol_strength >= 120) and     // OR very high recent bearish volume
-         
-         // Momentum Confirmation
-         bear_momentum >= 55 and                   // Strong bearish momentum (exhaustion signal)
-         
-         // Technical Validation
-         latest_bear_gap_size >= 30 and           // Significant gap size
-         long_score >= 50                         // Overall bullish potential
-    
     bool short_signal = 
-         // Primary Trend Conditions
-         bullish_percentage >= 60 and              // Market is bullish biased
-         
-         // Volume Analysis (at least one must be true)
-         (bullish_vol_percentage >= 60 or          // Strong bullish volume dominance
-          latest_bull_vol_strength >= 120) and     // OR very high recent bullish volume
-         
-         // Momentum Confirmation
-         bull_momentum >= 55 and                   // Strong bullish momentum (exhaustion signal)
-         
-         // Technical Validation
-         latest_bull_gap_size >= 30 and           // Significant gap size
-         short_score >= 50                        // Overall bearish potential
+         // All bearish percentages must show strength (green)
+         bearish_percentage >= 65 and              // FVG Distribution
+         bearish_vol_percentage >= 65 and          // Volume Dominance
+         latest_bear_vol_strength >= 150 and       // Volume Strength
+         latest_bear_gap_size >= 75 and           // Gap Size
+         bear_momentum >= 60                       // Momentum
 
-    // Plot signals on chart with more visible styling
+    // Plot signals on chart with larger arrows
     if long_signal
-        label.new(bar_index, low * 0.999, "▲", 
+        label.new(bar_index, low * 0.999, "⬆", 
              color=color.new(color.black, 100),  // Transparent background
              style=label.style_label_up,
              textcolor=color.new(color.green, 0),
-             size=size.normal)                    // Increased size for better visibility
+             size=size.huge)                    // Increased size for better visibility
     
     if short_signal
-        label.new(bar_index, high * 1.001, "▼", 
+        label.new(bar_index, high * 1.001, "⬇", 
              color=color.new(color.black, 100),  // Transparent background
              style=label.style_label_down,
              textcolor=color.new(color.red, 0),
-             size=size.normal)                    // Increased size for better visibility
+             size=size.huge)                    // Increased size for better visibility
 
     // Add signal info to the stats display
     string signal_text = ""
     if long_signal
-        signal_text := "\n🎯 LONG Signal Detected!"
+        signal_text := "\n🎯 STRONG BULLISH ALIGNMENT!"
     if short_signal
-        signal_text := signal_text + "\n🎯 SHORT Signal Detected!"
+        signal_text := signal_text + "\n🎯 STRONG BEARISH ALIGNMENT!"
     
     // Delete old label
     if not na(trend_label)
