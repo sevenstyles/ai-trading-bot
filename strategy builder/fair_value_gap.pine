@@ -17,6 +17,9 @@ consecutive_downcolor = input.color(defval = color.new(color.purple, 77), title 
 ob_up_color = input.color(defval = color.new(color.green, 85), title = "Bullish Order Block color", group = "Aesthetics")
 ob_down_color = input.color(defval = color.new(color.red, 85), title = "Bearish Order Block color", group = "Aesthetics")
 
+// Volume Display Settings
+show_box_volume = input.bool(false, "Show Volume in FVG Boxes", group="Volume Settings")
+
 // Consecutive FVG Settings
 use_consecutive = input.bool(true, "Filter for Consecutive FVGs", group="Consecutive FVG Filter")
 required_consecutive = input.int(2, "Required Consecutive FVGs", minval=2, maxval=5, group="Consecutive FVG Filter", tooltip="Only show FVGs when this many consecutive FVGs of the same type (bullish/bearish) have occurred")
@@ -116,9 +119,19 @@ if canPlotFVG
         float fvg_top = low
         float fvg_bottom = high[2]
         
+        // Calculate volume info
+        float current_vol = volume
+        float prev_vol = volume[1]
+        string vol_text = show_box_volume ? "Vol: " + str.tostring(current_vol, "#.#") + "\nPrev: " + str.tostring(prev_vol, "#.#") : ""
+        
         color boxColor = highlight_consecutive and bullishConsecutive >= required_consecutive ? consecutive_upcolor : upcolor
         box newBox = box.new(left=bar_index-2, top=fvg_top, right=bar_index+10, bottom=fvg_bottom,
-             border_color=color.new(color.gray, 100), bgcolor=boxColor)
+             border_color=color.new(color.gray, 100), bgcolor=boxColor,
+             text=vol_text,
+             text_size=size.small,
+             text_color=color.new(color.white, 0),
+             text_halign=text.align_center,
+             text_valign=text.align_center)
         array.push(bullishBoxes, newBox)
         array.push(bullishTops, fvg_top)
         array.push(bullishBottoms, fvg_bottom)
@@ -135,9 +148,19 @@ if canPlotFVG
         float fvg_top = low[2]  // This is actually the top of the gap
         float fvg_bottom = high  // This is the bottom of the gap
         
+        // Calculate volume info for bearish FVG
+        float current_vol = volume
+        float prev_vol = volume[1]
+        string vol_text = show_box_volume ? "Vol: " + str.tostring(current_vol, "#.#") + "\nPrev: " + str.tostring(prev_vol, "#.#") : ""
+        
         color boxColor = highlight_consecutive and bearishConsecutive >= required_consecutive ? consecutive_downcolor : downcolor
         box newBox = box.new(left=bar_index-2, top=fvg_top, right=bar_index+10, bottom=fvg_bottom,
-             border_color=color.new(color.gray, 100), bgcolor=boxColor)
+             border_color=color.new(color.gray, 100), bgcolor=boxColor,
+             text=vol_text,
+             text_size=size.small,
+             text_color=color.new(color.white, 0),
+             text_halign=text.align_center,
+             text_valign=text.align_center)
         array.push(bearishBoxes, newBox)
         array.push(bearishTops, fvg_top)  // Store the actual top of the gap
         array.push(bearishBottoms, fvg_bottom)
@@ -209,31 +232,40 @@ if barstate.isconfirmed
     // Reset counters
     int bullish_count = 0
     int bearish_count = 0
+    float bullish_volume = 0.0
+    float bearish_volume = 0.0
     
-    // Count bullish FVGs within lookback period
+    // Count bullish FVGs and volumes within lookback period
     if array.size(bullishBoxes) > 0
         for i = 0 to array.size(bullishBoxes) - 1
             box currentBox = array.get(bullishBoxes, i)
             int box_left = box.get_left(currentBox)
             if bar_index - box_left <= trend_lookback
                 bullish_count += 1
+                bullish_volume += volume[bar_index - box_left]
     
-    // Count bearish FVGs within lookback period
+    // Count bearish FVGs and volumes within lookback period
     if array.size(bearishBoxes) > 0
         for i = 0 to array.size(bearishBoxes) - 1
             box currentBox = array.get(bearishBoxes, i)
             int box_left = box.get_left(currentBox)
             if bar_index - box_left <= trend_lookback
                 bearish_count += 1
+                bearish_volume += volume[bar_index - box_left]
     
     // Update totals
     total_bullish_fvgs := bullish_count
     total_bearish_fvgs := bearish_count
     
-    // Calculate percentages
+    // Calculate FVG percentages
     float total_fvgs = total_bullish_fvgs + total_bearish_fvgs
     float bullish_percentage = total_fvgs > 0 ? (total_bullish_fvgs / total_fvgs) * 100 : 0
     float bearish_percentage = total_fvgs > 0 ? (total_bearish_fvgs / total_fvgs) * 100 : 0
+    
+    // Calculate volume percentages
+    float total_volume = bullish_volume + bearish_volume
+    float bullish_vol_percentage = total_volume > 0 ? (bullish_volume / total_volume) * 100 : 0
+    float bearish_vol_percentage = total_volume > 0 ? (bearish_volume / total_volume) * 100 : 0
     
     // Delete old label
     if not na(trend_label)
@@ -246,7 +278,9 @@ if barstate.isconfirmed
     // Create label text with proper formatting
     string label_text = "Lookback: " + str.tostring(trend_lookback) + " bars\n" +
                        "Bullish FVGs: " + str.tostring(total_bullish_fvgs) + " (" + str.tostring(bullish_percentage, "#.##") + "%)\n" +
-                       "Bearish FVGs: " + str.tostring(total_bearish_fvgs) + " (" + str.tostring(bearish_percentage, "#.##") + "%)"
+                       "Bearish FVGs: " + str.tostring(total_bearish_fvgs) + " (" + str.tostring(bearish_percentage, "#.##") + "%)\n" +
+                       "Bull Vol: " + str.tostring(bullish_volume, "#.#") + " (" + str.tostring(bullish_vol_percentage, "#.##") + "%)\n" +
+                       "Bear Vol: " + str.tostring(bearish_volume, "#.#") + " (" + str.tostring(bearish_vol_percentage, "#.##") + "%)"
     
     // Create new label with percentages
     trend_label := label.new(
