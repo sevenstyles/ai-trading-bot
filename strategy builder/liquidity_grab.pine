@@ -2,75 +2,53 @@
 indicator("Liquidity Grab", overlay=true)
 
 // Input parameters
-lookback = input.int(10, "Lookback Period", minval=1, maxval=50)
+lookback = input.int(5, "Lookback Period", minval=1, maxval=20)
 
 // Color settings
 bull_color = input.color(color.green, "Bullish Grab Color")
 bear_color = input.color(color.red, "Bearish Grab Color")
 line_width = input.int(2, "Line Width", minval=1, maxval=4)
 
-// Function to detect swing high
-is_swing_high(len) =>
-    high[len] > high[len + 1] and high[len] > high[len - 1]
+// Get recent high and its location
+float recent_high = high[1]
+int recent_high_bar = bar_index - 1
 
-// Function to detect swing low
-is_swing_low(len) =>
-    low[len] < low[len + 1] and low[len] < low[len - 1]
+// Look back to find if this is the highest in recent bars
+for i = 2 to lookback
+    if high[i] > recent_high
+        recent_high := high[i]
+        recent_high_bar := bar_index - i
 
-// Variables to store the most recent swing points
-var float swing_high = na
-var float swing_low = na
-var int swing_high_bar = na
-var int swing_low_bar = na
-var float lowest_between = na
-var float highest_between = na
-
-// Find new swing points
-for i = 1 to lookback
-    if is_swing_high(i)
-        swing_high := high[i]
-        swing_high_bar := bar_index - i
-        lowest_between := low[i-1]  // Initialize with the low of the bar after swing
-        break
-
-    if is_swing_low(i)
-        swing_low := low[i]
-        swing_low_bar := bar_index - i
-        highest_between := high[i-1]  // Initialize with the high of the bar after swing
-        break
-
-// Update the extreme points between swing and current bar
-if not na(swing_high)
-    lowest_between := math.min(nz(lowest_between, low), low)
-
-if not na(swing_low)
-    highest_between := math.max(nz(highest_between, high), high)
+// Find the lowest low between the recent high and current bar
+float lowest_between = low[1]
+for i = 1 to bar_index - recent_high_bar
+    lowest_between := math.min(lowest_between, low[i])
 
 // Plot for debugging
-plot(swing_high, "Swing High", color=color.new(color.blue, 50), style=plot.style_circles)
+plot(recent_high, "Recent High", color=color.new(color.blue, 50), style=plot.style_circles)
 plot(lowest_between, "Lowest Between", color=color.new(color.yellow, 50), style=plot.style_circles)
 
-// Detect and draw liquidity grabs
-if not na(swing_high) and not na(lowest_between)
-    if high > swing_high and close < lowest_between
-        line.new(swing_high_bar, lowest_between, bar_index, lowest_between,
-             color=bear_color,
-             width=line_width)
-        label.new(bar_index, lowest_between, "Bear Grab", 
-             style=label.style_label_down,
-             color=bear_color,
-             textcolor=color.white)
-        swing_high := na
-        lowest_between := na
+// Check for liquidity grab pattern
+if high > recent_high and close < lowest_between
+    line.new(recent_high_bar, lowest_between, bar_index, lowest_between,
+         color=bear_color,
+         width=line_width)
+    line.new(bar_index, recent_high, bar_index, lowest_between,
+         color=bear_color,
+         style=line.style_dashed,
+         width=1)
+    label.new(bar_index, high, "Break ▼", 
+         style=label.style_label_down,
+         color=color.new(bear_color, 50),
+         textcolor=color.white,
+         size=size.tiny)
 
-if not na(swing_low) and not na(highest_between)
-    if low < swing_low and close > highest_between
-        line.new(swing_low_bar, highest_between, bar_index, highest_between,
-             color=bull_color,
-             width=line_width)
-        label.new(bar_index, highest_between, "Bull Grab",
-             style=label.style_label_up,
-             color=bull_color,
-             textcolor=color.white)
-        swing_low := na
-        highest_between := na 
+// Add debugging label
+if barstate.islast
+    label.new(bar_index, high, 
+         text="Recent High: " + str.tostring(recent_high) + 
+              "\nLowest Between: " + str.tostring(lowest_between) + 
+              "\nCurrent High: " + str.tostring(high),
+         style=label.style_label_down,
+         color=color.new(color.black, 100),
+         textcolor=color.white) 
