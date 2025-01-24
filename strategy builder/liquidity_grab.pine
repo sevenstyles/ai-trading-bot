@@ -2,7 +2,7 @@
 indicator("Liquidity Grab", overlay=true)
 
 // Input parameters
-lookback = input.int(5, "Lookback Period", minval=1, maxval=20)
+lookback = input.int(5, "Lookback Period", minval=1, maxval=50)
 
 // Color settings
 bull_color = input.color(color.green, "Bullish Grab Color")
