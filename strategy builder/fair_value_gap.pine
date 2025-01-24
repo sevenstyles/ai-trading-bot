@@ -40,6 +40,39 @@ strong_fvg_line_width = input.int(2, "Strong FVG Line Width", minval=1, maxval=4
 strong_fvg_line_style = input.string("solid", "Strong FVG Line Style", options=["solid", "dashed", "dotted"], group="Strong FVG Settings")
 max_strong_lines = input.int(50, "Maximum Strong FVG Lines", minval=1, maxval=100, group="Strong FVG Settings")
 
+// Score Weights
+float DISTRIBUTION_WEIGHT = 0.3
+float VOLUME_WEIGHT = 0.25
+float STRENGTH_WEIGHT = 0.25
+float GAP_WEIGHT = 0.2
+
+// Function to calculate weighted score
+calculate_score(fvg_percent, vol_percent, strength_percent, gap_size) =>
+    float distribution_score = fvg_percent / 100
+    float volume_score = vol_percent / 100
+    float strength_score = math.min(strength_percent / 150, 1.0)  // Cap at 150%
+    float gap_score = math.min(gap_size / 100, 1.0)  // Cap at 100% of ATR
+    
+    float total_score = 0.0
+    total_score := (distribution_score * DISTRIBUTION_WEIGHT) +
+                   (volume_score * VOLUME_WEIGHT) +
+                   (strength_score * STRENGTH_WEIGHT) +
+                   (gap_score * GAP_WEIGHT)
+    total_score
+
+// Function to get color based on value
+get_value_color(value, neutral_threshold, good_threshold) =>
+    value <= neutral_threshold ? color.red : 
+         value >= good_threshold ? color.green : 
+         color.yellow
+
+// Function to format percentage with color
+format_percent(value, neutral_threshold, good_threshold) =>
+    color_code = get_value_color(value, neutral_threshold, good_threshold)
+    color_str = color_code == color.red ? "🔴" : 
+         color_code == color.green ? "🟢" : "🟡"
+    color_str + " " + str.tostring(value, "#.#") + "%"
+
 // Arrays to store boxes and their levels
 var box[] bullishBoxes = array.new_box()
 var float[] bullishTops = array.new_float()
@@ -72,6 +105,8 @@ var bool canPlotFVG = false
 var int total_bullish_fvgs = 0
 var int total_bearish_fvgs = 0
 var label trend_label = na
+var int[] filled_bullish_fvgs = array.new_int()  // Track filled FVGs
+var int[] filled_bearish_fvgs = array.new_int()  // Track filled FVGs
 
 // Function to check if candle is bullish/bearish
 is_bullish_candle(idx) => close[idx] > open[idx]
@@ -187,6 +222,7 @@ if array.size(bullishBoxes) > 0 and barstate.isconfirmed
         
         if is_bearish_candle(0) and close < bottom and open < bottom
             box.delete(currentBox)
+            array.push(filled_bullish_fvgs, bar_index)  // Track when FVG was filled
             // Find and remove the corresponding line
             int lineIndex = array.indexof(bullishLineIndices, i)
             if lineIndex >= 0 and lineIndex < array.size(bullishStrongLines)
@@ -211,6 +247,7 @@ if array.size(bearishBoxes) > 0 and barstate.isconfirmed
         
         if is_bullish_candle(0) and close > top and open > top
             box.delete(currentBox)
+            array.push(filled_bearish_fvgs, bar_index)  // Track when FVG was filled
             // Find and remove the corresponding line
             int lineIndex = array.indexof(bearishLineIndices, i)
             if lineIndex >= 0 and lineIndex < array.size(bearishStrongLines)
@@ -301,9 +338,23 @@ if barstate.isconfirmed
     float bullish_vol_percentage = total_volume > 0 ? (bullish_volume / total_volume) * 100 : 0
     float bearish_vol_percentage = total_volume > 0 ? (bearish_volume / total_volume) * 100 : 0
     
-    // Calculate success rates
-    float bull_success_rate = bullish_count > 0 ? (bullish_filled / bullish_count) * 100 : 0
-    float bear_success_rate = bearish_count > 0 ? (bearish_filled / bearish_count) * 100 : 0
+    // Count filled FVGs within lookback period
+    int filled_bull_count = 0
+    int filled_bear_count = 0
+    
+    if array.size(filled_bullish_fvgs) > 0
+        for i = array.size(filled_bullish_fvgs) - 1 to 0
+            if bar_index - array.get(filled_bullish_fvgs, i) <= trend_lookback
+                filled_bull_count += 1
+    
+    if array.size(filled_bearish_fvgs) > 0
+        for i = array.size(filled_bearish_fvgs) - 1 to 0
+            if bar_index - array.get(filled_bearish_fvgs, i) <= trend_lookback
+                filled_bear_count += 1
+    
+    // Calculate success rates using filled counts
+    float bull_success_rate = bullish_count > 0 ? (filled_bull_count / bullish_count) * 100 : 0
+    float bear_success_rate = bearish_count > 0 ? (filled_bear_count / bearish_count) * 100 : 0
     
     // Calculate latest FVG metrics if they exist
     float latest_bull_vol_strength = found_latest_bull ? (latest_bull_vol / avg_volume) * 100 : 0
@@ -315,6 +366,12 @@ if barstate.isconfirmed
     float latest_bear_gap_size = array.size(bearishBoxes) > 0 ? 
          ((array.get(bearishTops, array.size(bearishTops)-1) - array.get(bearishBottoms, array.size(bearishBottoms)-1)) / atr) * 100 : 0
     
+    // Calculate scores (0-100)
+    float long_score = calculate_score(bullish_percentage, bullish_vol_percentage, 
+         latest_bull_vol_strength, latest_bull_gap_size) * 100
+    float short_score = calculate_score(bearish_percentage, bearish_vol_percentage,
+         latest_bear_vol_strength, latest_bear_gap_size) * 100
+
     // Delete old label
     if not na(trend_label)
         label.delete(trend_label)
@@ -323,23 +380,27 @@ if barstate.isconfirmed
     int x_pos = trend_label_position == "top right" or trend_label_position == "bottom right" ? bar_index + 2 : bar_index - 50
     float y_pos = trend_label_position == "top right" or trend_label_position == "top left" ? ta.highest(high, 20) * 1.02 : ta.lowest(low, 20) * 0.98
     
-    // Create enhanced label text with validation metrics
-    string label_text = "Lookback: " + str.tostring(trend_lookback) + " bars\n" +
-                       "=== FVG Distribution ===\n" +
-                       "Bull: " + str.tostring(total_bullish_fvgs) + " (" + str.tostring(bullish_percentage, "#.#") + "%)\n" +
-                       "Bear: " + str.tostring(total_bearish_fvgs) + " (" + str.tostring(bearish_percentage, "#.#") + "%)\n" +
-                       "=== Volume ===\n" +
-                       "Bull: " + str.tostring(bullish_vol_percentage, "#.#") + "% | " +
-                       "Bear: " + str.tostring(bearish_vol_percentage, "#.#") + "%\n" +
-                       "=== Latest Strength ===\n" +
-                       "Bull Vol/Avg: " + str.tostring(latest_bull_vol_strength, "#.#") + "%\n" +
-                       "Bear Vol/Avg: " + str.tostring(latest_bear_vol_strength, "#.#") + "%\n" +
-                       "=== Gap Size/ATR ===\n" +
-                       "Bull: " + str.tostring(latest_bull_gap_size, "#.#") + "% | " +
-                       "Bear: " + str.tostring(latest_bear_gap_size, "#.#") + "%\n" +
-                       "=== Fill Rate ===\n" +
-                       "Bull: " + str.tostring(bull_success_rate, "#.#") + "% | " +
-                       "Bear: " + str.tostring(bear_success_rate, "#.#") + "%"
+    // Create enhanced label text with validation metrics and colors
+    string label_text = "⚡ SIGNAL SCORES ⚡\n" +
+                       "LONG: " + format_percent(long_score, 40, 60) + 
+                       " | SHORT: " + format_percent(short_score, 40, 60) + "\n\n" +
+                       "📊 FVG Distribution (" + str.tostring(trend_lookback) + " bars)\n" +
+                       "Bull: " + format_percent(bullish_percentage, 40, 60) + 
+                       " (" + str.tostring(total_bullish_fvgs) + " FVGs)\n" +
+                       "Bear: " + format_percent(bearish_percentage, 40, 60) + 
+                       " (" + str.tostring(total_bearish_fvgs) + " FVGs)\n\n" +
+                       "📈 Volume Analysis\n" +
+                       "Bull: " + format_percent(bullish_vol_percentage, 40, 60) + "\n" +
+                       "Bear: " + format_percent(bearish_vol_percentage, 40, 60) + "\n\n" +
+                       "💪 Latest Strength\n" +
+                       "Bull Vol/Avg: " + format_percent(latest_bull_vol_strength, 80, 120) + "\n" +
+                       "Bear Vol/Avg: " + format_percent(latest_bear_vol_strength, 80, 120) + "\n\n" +
+                       "📏 Gap Size/ATR\n" +
+                       "Bull: " + format_percent(latest_bull_gap_size, 30, 70) + "\n" +
+                       "Bear: " + format_percent(latest_bear_gap_size, 30, 70) + "\n\n" +
+                       "✅ Fill Rate\n" +
+                       "Bull: " + format_percent(bull_success_rate, 30, 70) + "\n" +
+                       "Bear: " + format_percent(bear_success_rate, 30, 70)
     
     // Create new label with enhanced metrics
     trend_label := label.new(
