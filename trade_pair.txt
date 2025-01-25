@@ -1,2 +1,1 @@
-# Enter your trading pair in uppercase (e.g. BTCUSDT, ETHUSDT)
-ETHUSDT 
+BNBUSDT

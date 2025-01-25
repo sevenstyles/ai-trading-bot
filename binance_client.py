@@ -130,16 +130,22 @@ def send_to_deepseek(data):
         return None
 
 def get_trading_pair():
-    """Read trading pair from text file with fallback"""
+    """Read trading pair from text file"""
     try:
         file_path = os.path.join(os.path.dirname(__file__), 'trade_pair.txt')
         with open(file_path, 'r') as f:
             for line in f:
-                if not line.startswith('#'):
-                    return line.strip().upper()
+                clean_line = line.split('#')[0].strip()  # Handle inline comments
+                if clean_line:
+                    if not clean_line.isalpha():
+                        print(f"Error: Invalid characters in pair '{clean_line}'")
+                        exit(1)
+                    return clean_line.upper()
+            print("Error: Empty trade_pair.txt")
+            exit(1)
     except FileNotFoundError:
-        print("Create binance_data/trade_pair.txt to customize pair (using BTCUSDT)")
-    return 'BTCUSDT'  # Default fallback
+        print("Error: Missing binance_data/trade_pair.txt")
+        exit(1)
 
 if __name__ == "__main__":
     client = BinanceClient()
@@ -151,6 +157,18 @@ if __name__ == "__main__":
     }
     multi_data = client.get_multi_timeframe_data(symbol, intervals)  # Use dynamic symbol
     if multi_data:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        print(f"\n=== DEBUG ===")
+        print(f"1. Using trading pair: '{symbol}'")
+        print(f"2. Type of symbol: {type(symbol)}")
+        print(f"3. Time intervals: {intervals}\n")
+        for timeframe, data in multi_data.items():
+            filename = f"ohlc_{symbol}_{timeframe}_{timestamp}.json"
+            print(f"4. Generating filename: {filename}")
+            with open(filename, 'w') as f:
+                json.dump(data, f, default=str, indent=2)
+            print(f"Saved {len(data)} {timeframe} candles to {filename}")
+        
         response = send_to_deepseek(multi_data)
         if response:
             print("DeepSeek response:", response) 
