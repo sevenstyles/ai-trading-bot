@@ -1,5 +1,7 @@
 Analyze this hourly OHLC data including volume:
 
+
+================================
 1. Key support/resistance levels
 2. Current trend direction with confidence level (1-5)
 3. Volume patterns and their significance
@@ -8,6 +10,7 @@ Analyze this hourly OHLC data including volume:
 6. Liquidity sweeps
 4. High probability trading setup
 5. Risk-reward ratio assessment
+================================
 
 Format your analysis with clear headings and bullet points. Keep technical terms to a minimum but maintain professional rigor.
 
