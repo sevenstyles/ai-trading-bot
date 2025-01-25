@@ -240,3 +240,18 @@
 2025-01-17 12:08:27,923 - INFO - Closed existing position
 2025-01-17 12:08:28,076 - INFO - Main order placed: {'orderId': 4078199422, 'symbol': 'BTCUSDT', 'status': 'NEW', 'clientOrderId': 'JpsV3rQt1E9MDYQ3WdNSMo', 'price': '0.00', 'avgPrice': '0.00', 'origQty': '0.002', 'executedQty': '0.000', 'cumQty': '0.000', 'cumQuote': '0.00000', 'timeInForce': 'GTC', 'type': 'MARKET', 'reduceOnly': False, 'closePosition': False, 'side': 'BUY', 'positionSide': 'BOTH', 'stopPrice': '0.00', 'workingType': 'CONTRACT_PRICE', 'priceProtect': False, 'origType': 'MARKET', 'priceMatch': 'NONE', 'selfTradePreventionMode': 'NONE', 'goodTillDate': 0, 'updateTime': 1737076107844}
 2025-01-17 12:08:29,507 - ERROR - Error in main execution: Main order not filled yet
+2025-01-25 10:21:43,432 - INFO - Symbol info - Price precision: 1, Tick size: 0.1
+2025-01-25 10:21:43,433 - INFO - Symbol info - Quantity precision: 1, Step size: 0.001
+2025-01-25 10:21:43,711 - INFO - Exported OHLC data to ohlc_data_20250125_102143.json
+2025-01-25 10:21:43,711 - INFO - Current price: 104554.0
+2025-01-25 10:21:45,878 - INFO - HTTP Request: POST https://api.deepseek.com/chat/completions "HTTP/1.1 200 OK"
+2025-01-25 10:21:49,688 - INFO - Received strategy: {'entry': 104528, 'exit': 104000, 'stop_loss': 105000, 'direction': 'SHORT', 'reasoning': 'The price has been in a downtrend with lower highs and lower lows, and the recent price action shows a rejection at higher levels. A short trade is suggested with a stop-loss above the recent high to limit risk and a take-profit target below the recent low to capture potential downside movement.'}
+2025-01-25 10:21:49,688 - INFO - Trade strategy received: {'entry': 104528, 'exit': 104000, 'stop_loss': 105000, 'direction': 'SHORT', 'reasoning': 'The price has been in a downtrend with lower highs and lower lows, and the recent price action shows a rejection at higher levels. A short trade is suggested with a stop-loss above the recent high to limit risk and a take-profit target below the recent low to capture potential downside movement.'}
+2025-01-25 10:21:49,689 - WARNING - Adjusting quantity to meet minimum notional value requirement
+2025-01-25 10:21:49,690 - INFO - Calculated quantity: 0.001 BTC
+2025-01-25 10:21:49,690 - INFO - Notional value: 104.55 USDT
+2025-01-25 10:21:49,690 - INFO - Adjusted stop-loss to maintain minimum distance: 105076.77
+2025-01-25 10:21:50,660 - INFO - Leverage set to 20x
+2025-01-25 10:21:51,226 - INFO - Closed existing position
+2025-01-25 10:21:51,637 - INFO - Main order placed: {'orderId': 4081887193, 'symbol': 'BTCUSDT', 'status': 'NEW', 'clientOrderId': 'sVtmEIR6uofGXnGd7yrBVW', 'price': '0.00', 'avgPrice': '0.00', 'origQty': '0.001', 'executedQty': '0.000', 'cumQty': '0.000', 'cumQuote': '0.00000', 'timeInForce': 'GTC', 'type': 'MARKET', 'reduceOnly': False, 'closePosition': False, 'side': 'SELL', 'positionSide': 'BOTH', 'stopPrice': '0.00', 'workingType': 'CONTRACT_PRICE', 'priceProtect': False, 'origType': 'MARKET', 'priceMatch': 'NONE', 'selfTradePreventionMode': 'NONE', 'goodTillDate': 0, 'updateTime': 1737760911331}
+2025-01-25 10:21:52,799 - ERROR - Error in main execution: Main order not filled yet

@@ -4,6 +4,7 @@ from binance.um_futures import UMFutures
 from binance.error import ClientError
 from precision import PrecisionHandler
 import time
+from binance.client import Client
 
 # Initialize Binance Futures client
 def initialize_binance_client():
@@ -134,3 +135,24 @@ def place_orders(client, symbol, direction, quantity, current_price, stop_loss, 
                     logging.error(f"Error cancelling {order_type} order: {cancel_error}")
         
         raise 
+
+def get_ohlcv_data(symbol, interval, start_time=None, end_time=None):
+    client = Client(api_key=os.getenv('BINANCE_API_KEY'), api_secret=os.getenv('BINANCE_API_SECRET'))
+    
+    # The interval parameter determines the timeframe - here's where 15m is specified
+    klines = client.get_klines(
+        symbol=symbol,
+        interval=interval,  # This parameter controls the timeframe
+        startTime=start_time,
+        endTime=end_time
+    )
+    # ... rest of function ... 
+
+# Example usage:
+def fetch_btcusdt_15m_data():
+    return get_ohlcv_data(
+        symbol="BTCUSDT",
+        interval=Client.KLINE_INTERVAL_15MINUTE,  # This is where 15m is defined
+        start_time="7 days ago UTC",
+        end_time=None
+    ) 
