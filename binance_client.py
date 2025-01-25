@@ -132,9 +132,9 @@ def send_to_deepseek(data):
 if __name__ == "__main__":
     client = BinanceClient()
     intervals = {
-        '1d': 100,   # 100 daily candles (~3 months)
-        '1h': 100,   # 100 hourly candles (~4 days) 
-        '15m': 100   # 100 15-min candles (~25 hours)
+        '1d': 100,   # Daily - Institutional footprint analysis
+        '4h': 100,    # 4-Hour - Market structure confirmation
+        '1h': 100     # Hourly - Entry precision & order flow
     }
     multi_data = client.get_multi_timeframe_data("BTCUSDT", intervals)
     if multi_data:
