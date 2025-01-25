@@ -7,11 +7,13 @@ Core Analysis Components:
    - HTF Market Phase (Impulse/Retracement/Consolidation)
    - MTF Fair Value Gap Identification
    - Recent Liquidity Sweeps (Stop Hunts/Equal Highs-Lows)
+   - Structural Breaks (BOS/CHoCH) Across 3 Timeframes
 
 2. Liquidity Analysis:
    - Institutional Inducement Patterns (Sweep->Run->Retest)
    - Stop Cluster Density Mapping (Recent 3 swing points)
    - Volume-Weighted Liquidity Pools
+   - V-Shaped Reversals Post-Liquidation Events
 
 3. Order Flow Footprints:
    - Large Imbalance Candles (2x average range)
@@ -32,15 +34,17 @@ High Probability Setup Criteria:
    - Recent Liquidity Sweep within 3% of current price
    - Volume Spike (150%+ of 20-period average)
    - Clear Institutional Footprint (Pinning Bar/FVG/OB)
+   - Unmitigated Order Blocks (<3 touches)
 
 2. Entry Execution Rules:
    - Limit Orders Only (No Market Entries)
    - Entry Trigger: Retest of Swept Liquidity Zone + MTF OB/OS
    - Confirm with LTF Break of Structure (BOS) or Change of Character (CHoCH)
+   - Require 2nd Test of Key Level After Initial Sweep
 
 3. Risk Management Protocol:
    - Stop Loss: [based on analysis]
-   - Profit Taking: Minimum 1:2 RR Ratio
+   - Profit Taking: Minimum 1:3 RR Ratio
 
 Example Response Framework:
 ---------------------------
