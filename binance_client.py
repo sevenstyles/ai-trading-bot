@@ -87,6 +87,16 @@ def send_to_deepseek(data):
         with open(response_filename, 'w') as f:
             json.dump(response_data, f, indent=2)
             
+        # Also save text version
+        analysis_text = response_data.get('choices', [{}])[0].get('message', {}).get('content', 'No analysis content')
+        text_filename = f"deepseek_analysis_{timestamp}.txt"
+        with open(text_filename, 'w', encoding='utf-8') as f:
+            f.write(f"DeepSeek Analysis ({timestamp})\n")
+            f.write("="*40 + "\n\n")
+            f.write(analysis_text)
+            
+        print(f"Saved analysis to {text_filename}")
+            
         return response_data
         
     except Exception as e:
