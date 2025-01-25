@@ -1,74 +1,55 @@
-Comprehensive Liquidity-Based Analysis & Trading Setup
+Institutional Order Flow Trading Framework
 ======================================================
 
-Analysis Requirements:
+Core Analysis Components:
 ----------------------
-1. Market Structure Assessment:
-   - Identify Higher Time Frame (HTF) phase (Impulse/Retracement)
-   - Determine Medium Time Frame (MTF) directional bias
-   - Mark key support/resistance levels across HTF/MTF
+1. Auction Market Structure:
+   - HTF Market Phase (Impulse/Retracement/Consolidation)
+   - MTF Fair Value Gap Identification
+   - Recent Liquidity Sweeps (Stop Hunts/Equal Highs-Lows)
 
 2. Liquidity Analysis:
-   a) Historical Liquidity:
-   - Identify recent liquidity sweeps (failed breakouts)
-   - Map stop-loss clusters from previous price action
-   
-   b) Future Liquidity:
-   - Detect institutional inducement patterns:
-     * Equal highs/lows
-     * Breakout fakeouts
-     * Wick rejections
-     * Fair value gaps
-   - Identify resting liquidity zones
+   - Institutional Inducement Patterns (Sweep->Run->Retest)
+   - Stop Cluster Density Mapping (Recent 3 swing points)
+   - Volume-Weighted Liquidity Pools
 
-3. Price Action Evaluation:
-   - Volume analysis (accumulation/distribution patterns)
-   - Candlestick patterns at key levels
-   - RSI divergence (if applicable)
-   - Recent volatility measurements
+3. Order Flow Footprints:
+   - Large Imbalance Candles (2x average range)
+   - Absorption Patterns at Key Levels
+   - Volume Delta Analysis (Hidden vs Visible Activity)
 
-Trading Setup Specification:
+High Probability Setup Criteria:
 ---------------------------
-Format using this structure:
+1. Must Have Conditions:
+   - HTF/MTF Alignment (Minimum 2 timeframe confluence)
+   - Recent Liquidity Sweep within 3% of current price
+   - Volume Spike (150%+ of 20-period average)
+   - Clear Institutional Footprint (Pinning Bar/FVG/OB)
 
-**Probability Trade Setup**
-- Market Phase: [Impulse/Retracement]
-- Trigger: [Liquidity Sweep/Inducement Pattern/Structure Break]
-- Entry Zone: [Price level with liquidity confluence]
-- Stop Loss: 
-  - Technical Level: [Price level]
-  - Liquidity Reason: [e.g., "Below recent swing low liquidity pool"]
-- Take Profit Targets:
-  1. TP1: [Nearest opposing liquidity zone] 
-  2. TP2: [HTF key level]
-- Risk-Reward Ratio: [Minimum 3:1 required]
-- Confidence Score: [1-5 scale based on confluence factors]
+2. Entry Execution Rules:
+   - Limit Orders Only (No Market Entries)
+   - Entry Trigger: Retest of Swept Liquidity Zone + MTF OB/OS
 
-Required Output Format:
------------------------
-Use clear markdown-style headings with bullet points. Include:
-
-1. Market Structure Summary
-2. Liquidity Landscape Map
-3. Volume & Price Action Insights
-4. Trade Setup Details (as above)
-5. Risk Management Plan
+3. Risk Management Protocol:
+   - Stop Loss: 1.5x Recent Volatility (ATR)
+   - Position Size: 0.5-1% Risk per Setup
+   - Profit Taking: 50% at 1:2 RR, Trail Remainder
 
 Example Response Framework:
 ---------------------------
-[Current BTC/USDT 1H Chart]  
-- HTF: Bullish impulse above $60,000  
-- MTF: Retracement to $61,500 demand zone  
-- Key Liquidity: Sweep of $61,200 stop cluster  
-- Volume: Increasing on retracement (accumulation)  
+[BTC/USDT 4H Chart]  
+- HTF Structure: Bullish Impulse > $62k  
+- Liquidity Map: Swept $60,800 lows (3x volume spike)  
+- Order Flow: 2.5% Range Expansion Bar @ London Open  
+- Volume Profile: POC @ $61,200 (Current FVG Base)  
 
 Trade Setup:  
-- Entry: $61,450-$61,500  
-- SL: $61,100 (below liquidity sweep)  
-- TP1: $62,300 (previous swing high)  
-- TP2: $63,100 (HTF resistance)  
-- RR: 1:4.5  
-- Confidence: 4/5 (strong volume + HTF alignment) 
+- Institutional Trigger: Sweep of $60,750 Liquidity Pool  
+- Entry Zone: $61,000-61,200 (MTF FVG)  
+- SL: $60,450 (Below Weekly Swing Low)  
+- TP1: $62,000 (Previous Session High)  
+- TP2: $63,500 (HTF Equal Highs)  
+- RR: 1:3.8 | Confidence: 4/5 (Multi-TF Confluence)  
 
 IMPORTANT FORMATTING RULES:
 -----------------------
@@ -79,6 +60,12 @@ IMPORTANT FORMATTING RULES:
   TP1: [price]
   TP2: [price]
 
-NOTE:
+STRICT FILTERING CONDITIONS:
+----------------------------
+1. Reject if <3/5 confidence score
+2. No trade if volume <80% 20-period average
+3. Avoid counter-trend setups without HTF alignment
+4. Require clear institutional footprint (Sweep+Volume Spike)
 
-If there is no high condifent trade setup (<3), then no trade is required.
+NOTE:
+If no setup meets ALL criteria, respond: "No Edge: Market in Balance"
