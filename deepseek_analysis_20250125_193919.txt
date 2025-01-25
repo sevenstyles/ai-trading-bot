@@ -1,0 +1,26 @@
+DeepSeek Analysis (20250125_193919)
+========================================
+
+**SHORT SETUP** 🔴  
+=======================  
+
+- **HTF Structure**: Bearish Impulse < 0.255  
+- **Liquidity Map**: Swept 0.2367 lows (3x volume spike on 2025-01-25 10:00 15m)  
+- **Order Flow**: Absorption at 0.242-0.244 (failed retest of 15m imbalance zone)  
+- **Volume Profile**: POC @ 0.244 (LTF rejection cluster)  
+- **LTF Structure**: BOS failure below 0.2449 (15m swing high)  
+
+**Trade Setup**:  
+- **Institutional Trigger**: Failed retest of 0.244 liquidity pool after sweep  
+- **Entry Zone**: 0.242-0.244 (MTF FVG + LTF supply cluster)  
+- **SL**: 0.245 (above 15m swing high + 1.5x ATR)  
+- **TP1**: 0.2367 (recent swept liquidity low)  
+- **TP2**: 0.2300 (HTF equal lows confluence)  
+
+🎯 Entry Zone: 0.242-0.244  
+🛑 Stop Loss: 0.245  
+🏹 Take Profit:  
+  1. TP1: 0.2367  
+  2. TP2: 0.2300  
+💹 RR Ratio: 1:3.8  
+🔒 Confidence: 4/5 (HTF/MTF/LTF bearish alignment + volume spike)

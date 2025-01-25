@@ -39,8 +39,9 @@ High Probability Setup Criteria:
    - Confirm with LTF Break of Structure (BOS) or Change of Character (CHoCH)
 
 3. Risk Management Protocol:
-   - Stop Loss: [based on analysis]
-   - Profit Taking: Minimum 1:2 RR Ratio
+   - Stop Loss: 1.5x Recent Volatility (ATR)
+   - Position Size: 0.5-1% Risk per Setup
+   - Profit Taking: 50% at 1:2 RR, Trail Remainder
 
 Example Response Framework:
 ---------------------------
