@@ -1,0 +1,28 @@
+DeepSeek Analysis (20250125_191417)
+========================================
+
+**SHORT SETUP** 🔴  
+=======================  
+
+- **HTF Structure**: Bearish Impulse < 85.34  
+- **Liquidity Map**: Swept 73.75 lows (34k volume spike on 1h breakdown)  
+- **Order Flow**: 1h FVG (74.8 - 76.15) + Absorption at MTF resistance  
+- **Volume Profile**: Weakness below 74.8 with high selling volume  
+
+**Trade Setup**:  
+- **Institutional Trigger**: Breakdown below 74.8 liquidity pool  
+- **Entry Zone**: 74.8-75.0 (Retest of FVG/MTF resistance)  
+- **SL**: 76.26 (Above FVG & swing high)  
+- **TP1**: 73.75 (Recent liquidity low)  
+- **TP2**: 70.0 (HTF equal lows extension)  
+
+---------------------------------  
+🎯 Entry Zone: 74.8-75.0  
+🛑 Stop Loss: 76.26  
+🏹 Take Profit:  
+  1. TP1: 73.75  
+  2. TP2: 70.0  
+💹 RR Ratio: 1:3.8  
+🔒 Confidence: 4/5 (HTF/MTF bearish confluence + volume spike)  
+
+**Note**: Await price reaction at FVG retest. Reject if price sustains >75.0 with bullish volume.

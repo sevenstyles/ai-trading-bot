@@ -37,10 +37,10 @@ High Probability Setup Criteria:
 
 Example Response Framework:
 ---------------------------
-- HTF Structure: Bullish Impulse > $62k  
-- Liquidity Map: Swept $XXXX lows (3x volume spike)  
+- HTF Structure: Bullish Impulse > $[price]  
+- Liquidity Map: Swept $[price] lows (3x volume spike)  
 - Order Flow: 2.5% Range Expansion Bar  
-- Volume Profile: POC @ $XXXX (Current FVG Base)  
+- Volume Profile: POC @ $[price] (Current FVG Base)  
 
 Trade Setup:  
 - Institutional Trigger: Sweep of $[price] Liquidity Pool  
@@ -62,9 +62,8 @@ IMPORTANT FORMATTING RULES:
 STRICT FILTERING CONDITIONS:
 ----------------------------
 1. Reject if <3/5 confidence score
-2. No trade if volume <80% 20-period average
-3. Avoid counter-trend setups without HTF alignment
-4. Require clear institutional footprint (Sweep+Volume Spike)
+2. Avoid counter-trend setups without HTF alignment
+3. Require clear institutional footprint
 
 NOTE:
 [TRADE DIRECTION HEADER]

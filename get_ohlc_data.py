@@ -16,13 +16,13 @@ from datetime import datetime
 # Load environment variables from .env file
 load_dotenv()
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    filename='trading_bot.log',
-    filemode='a',
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+# Remove the file logging configuration
+# logging.basicConfig(
+#     level=logging.INFO,
+#     filename='trading_bot.log',
+#     filemode='a',
+#     format='%(asctime)s - %(levelname)s - %(message)s'
+# )
 
 def main():
     client = BinanceClient()
