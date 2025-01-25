@@ -1,0 +1,51 @@
+DeepSeek Analysis (20250125_124644)
+========================================
+
+1. **Market Structure Summary**  
+- **HTF Phase**: Bullish impulse above $100,000 (peaking at $109,588), currently in retracement.  
+- **MTF Bias**: Neutral-to-bearish below $106,500, with $104,361 as critical support.  
+- **Key Levels**:  
+  - *Support*: 104361.89 (swing low), 102750.00 (consolidation base)  
+  - *Resistance*: 107120.00 (recent swing high), 109588.00 (HTF peak)  
+
+2. **Liquidity Landscape Map**  
+- **Historical Liquidity**:  
+  - Stop clusters below $104,361 (swing low) and above $107,120 (failed breakout).  
+  - Sweep of $102,750 (Jan 24) triggered short-term rebound.  
+- **Future Liquidity**:  
+  - Institutional inducement at $107,120 (double-top wick rejection).  
+  - Resting liquidity pool at $102,750–$103,500 (previous consolidation).  
+  - Fair value gap between $105,500–$106,500 (rapid sell-off zone).  
+
+3. **Volume & Price Action Insights**  
+- **Volume**: Elevated sell-side volume at $107,120 rejection (Jan 25), declining volume during consolidation.  
+- **Candlestick Patterns**: Bearish engulfing at $107,120, followed by weak retracement rallies.  
+- **Volatility**: 5.8% daily range contraction post-rejection (bullish momentum fading).  
+
+---
+
+**High Probability Trade Setup**  
+- **Market Phase**: Retracement within HTF bullish impulse.  
+- **Trigger**: Liquidity sweep below $104,361.89 + bullish reversal candle.  
+- **Entry Zone**: 104300.00–104500.00 (demand zone confluence).  
+- **Stop Loss**:  
+  - *Technical Level*: 103900.00  
+  - *Liquidity Reason*: Below Jan 24 swing low and FVG midpoint.  
+- **Take Profit Targets**:  
+  1. **TP1**: 105500.00 (fair value gap close)  
+  2. **TP2**: 107120.00 (liquidity pool above rejection)  
+- **Risk-Reward Ratio**: 1:4.3 (400-point risk vs 1,720-point reward).  
+- **Confidence Score**: 4/5 (HTF alignment, strong liquidity confluence).  
+
+**Risk Management Plan**  
+- Position size: ≤2% capital (volatility-adjusted).  
+- Trailing stop: Activate at $106,000 (breakeven + 1R).  
+- Early close: Partial 50% at TP1, monitor volume at TP2.  
+
+---  
+
+**Trade Levels**  
+Entry: 104400.00  
+SL: 103900.00  
+TP1: 105500.00  
+TP2: 107120.00

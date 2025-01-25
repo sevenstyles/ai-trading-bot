@@ -69,3 +69,11 @@ Trade Setup:
 - TP2: $63,100 (HTF resistance)  
 - RR: 1:4.5  
 - Confidence: 4/5 (strong volume + HTF alignment) 
+
+IMPORTANT FORMATTING RULES:
+- Always output price levels as numbers only (e.g. 61250.50)
+- Use this exact format for trade levels:
+  Entry: [price]
+  SL: [price]
+  TP1: [price]
+  TP2: [price]
