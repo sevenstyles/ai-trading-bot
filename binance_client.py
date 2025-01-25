@@ -69,7 +69,7 @@ def send_to_deepseek(data):
         prompt_path = os.path.join(current_dir, 'deepseek_prompt.txt')
         
         # Read prompt from file
-        with open(prompt_path, 'r') as f:
+        with open(prompt_path, 'r', encoding='utf-8') as f:
             system_prompt = f.read().strip()
             
         # Formatting multi-timeframe data
@@ -129,14 +129,27 @@ def send_to_deepseek(data):
         print(f"DeepSeek API error: {str(e)[:200]}")  # Truncate long errors
         return None
 
+def get_trading_pair():
+    """Read trading pair from text file with fallback"""
+    try:
+        file_path = os.path.join(os.path.dirname(__file__), 'trade_pair.txt')
+        with open(file_path, 'r') as f:
+            for line in f:
+                if not line.startswith('#'):
+                    return line.strip().upper()
+    except FileNotFoundError:
+        print("Create binance_data/trade_pair.txt to customize pair (using BTCUSDT)")
+    return 'BTCUSDT'  # Default fallback
+
 if __name__ == "__main__":
     client = BinanceClient()
+    symbol = get_trading_pair()  # Get pair from file
     intervals = {
         '1d': 100,   
         '4h': 100,    
         '1h': 100    
     }
-    multi_data = client.get_multi_timeframe_data("BTCUSDT", intervals)
+    multi_data = client.get_multi_timeframe_data(symbol, intervals)  # Use dynamic symbol
     if multi_data:
         response = send_to_deepseek(multi_data)
         if response:

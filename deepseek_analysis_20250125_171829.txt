@@ -1,0 +1,12 @@
+DeepSeek Analysis (20250125_171829)
+========================================
+
+**NO TRADE** ⚪️ (Market in Balance)
+
+**Rationale:**  
+- *Volume Filter Triggered*: Current daily volume (2855.32 BTC) < 80% of recent average (~20k+ BTC)  
+- *HTF Structure*: Choppy price action between $104k-$107k after failed breakout attempt  
+- *Liquidity Profile*: Recent sweep of $104.2k lows lacked sufficient follow-through volume  
+- *Order Flow*: No clear absorption/vol delta signals in critical zones  
+
+*No Edge: Market in Balance*
