@@ -27,7 +27,7 @@ url = 'https://api.binance.com/api/v3/klines'
 params = {
     'symbol': 'BTCUSDT',
     'interval': '15m',
-    'limit': 500
+    'limit': 10
 }
 response = requests.get(url, params=params)
 data = response.json()
