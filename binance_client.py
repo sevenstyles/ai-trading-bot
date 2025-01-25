@@ -151,9 +151,9 @@ if __name__ == "__main__":
     client = BinanceClient()
     symbol = get_trading_pair()  # Get pair from file
     intervals = {
-        '1d': 100,   
-        '4h': 100,    
-        '1h': 100    
+        '1d': 90,   # 3 months daily (covers quarterly institutional cycles)
+        '4h': 180,  # 30 days of 4h (720 hours - captures full market rotations)
+        '1h': 168   # 7 days of 1h (full week of intraday liquidity patterns)
     }
     multi_data = client.get_multi_timeframe_data(symbol, intervals)  # Use dynamic symbol
     if multi_data:
