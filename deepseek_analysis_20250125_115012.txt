@@ -1,0 +1,59 @@
+DeepSeek Analysis (20250125_115012)
+========================================
+
+### Analysis Summary  
+
+#### 1. **Key Support/Resistance Levels**  
+- **Support**:  
+  - **104,000 - 104,500**: Repeated tests here (e.g., 2025-01-25 07:00-08:00) suggest buyers are defending this zone.  
+  - **102,500 - 103,000**: Major swing low from 2025-01-23-24; high-volume rejection here.  
+- **Resistance**:  
+  - **105,500 - 106,000**: Recent failed breakout attempts (2025-01-25 04:00-05:00).  
+  - **107,200**: All-time high (2025-01-22 05:00).  
+
+#### 2. **Current Trend Direction & Confidence Level**  
+- **Short-term**: **Downtrend** (lower highs: 107,240 → 106,699 → 106,327).  
+- **Confidence**: **3/5** – Bearish momentum but still within a broader uptrend structure.  
+
+#### 3. **Volume Patterns**  
+- **High-volume sell-offs**: Spikes on 2025-01-24 (02:00: 9,216) and 2025-01-25 (01:00: 2,210) indicate strong selling pressure.  
+- **Low-volume consolidation**: Recent hours show reduced volume (e.g., 611-753), signaling indecision.  
+
+#### 4. **Fair Value Gaps (FVGs)**  
+- **104,000 - 105,263**: Gap from 2025-01-24 02:00-03:00 (price traded from 105,263 to 102,643).  
+- **105,760 - 106,458**: Gap from 2025-01-25 05:00-06:00 (unfilled bullish imbalance).  
+
+#### 5. **Resting Liquidity**  
+- **Above 107,200**: Likely buy-stop orders above the all-time high.  
+- **Below 104,000**: Sell-stops under the current consolidation range.  
+
+#### 6. **Liquidity Sweeps**  
+- **107,240 sweep**: Price spiked to 107,240 (2025-01-22 05:00) before reversing.  
+- **102,500 sweep**: Sharp drop to 101,281 (2025-01-24 00:00) before a rally.  
+
+---
+
+### High-Probability Trade Setup  
+
+#### **Scenario**: *Bullish Reversal from Support*  
+- **Entry**: **104,500** (test of support zone + FVG at 104,000-105,263).  
+- **Stop Loss**: **103,800** (below the swing low and FVG).  
+- **Take Profit**:  
+  - **TP1**: **105,500** (near-term resistance).  
+  - **TP2**: **106,500** (liquidity above 106,000).  
+
+#### **Risk-Reward Ratio**:  
+- **Risk**: 700 points (104,500 → 103,800).  
+- **Reward**: 1,000-2,000 points (105,500-106,500).  
+- **RRR**: **1:1.4 to 1:2.8** (favorable).  
+
+---
+
+### Trade Execution Plan  
+1. **Entry**: 104,500 (limit order).  
+2. **Stop Loss**: 103,800.  
+3. **Take Profit**:  
+   - **TP1**: 105,500 (50% position).  
+   - **TP2**: 106,500 (50% position).  
+
+**Rationale**: Price is retesting a strong support zone (104,000-104,500) with a bullish FVG. Reduced selling volume and a potential liquidity sweep below 104,000 increase reversal odds.

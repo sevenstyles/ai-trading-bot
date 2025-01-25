@@ -38,7 +38,7 @@ SYMBOL = 'BTCUSDT'
 def main():
     client = BinanceClient()
     print("Fetching OHLC data...")
-    ohlc_data = client.get_ohlc_data("BTCUSDT", "1h", 10)
+    ohlc_data = client.get_ohlc_data("BTCUSDT", "1h", 100)
     
     if ohlc_data:
         # Save OHLC data

@@ -9,7 +9,7 @@ class BinanceClient:
         load_dotenv()
         self.base_url = os.getenv('BINANCE_BASE_URL')
         
-    def get_ohlc_data(self, symbol, interval, limit=20):
+    def get_ohlc_data(self, symbol, interval, limit=100):
         """Retrieve OHLC data from Binance"""
         endpoint = "/api/v3/klines"
         params = {
@@ -51,20 +51,28 @@ def send_to_deepseek(data):
     }
     
     try:
-        # Format data for DeepSeek's chat API
-        data_str = "\n".join([f"{candle['timestamp']} O:{candle['open']} H:{candle['high']} L:{candle['low']} C:{candle['close']}" 
-                             for candle in data])
+        # Get the directory of the current script
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        prompt_path = os.path.join(current_dir, 'deepseek_prompt.txt')
+        
+        # Read prompt from file
+        with open(prompt_path, 'r') as f:
+            system_prompt = f.read().strip()
+            
+        # Format data for DeepSeek
+        data_str = "\n".join([f"{c['timestamp']} | O:{c['open']} H:{c['high']} L:{c['low']} C:{c['close']} V:{c['volume']}"
+                             for c in data])
         
         payload = {
             "model": "deepseek-reasoner",
             "messages": [
                 {
                     "role": "system", 
-                    "content": "Analyze this OHLC data. Provide technical analysis focusing on key support/resistance levels, trends, and potential trading opportunities."
+                    "content": system_prompt  # Use file content here
                 },
                 {
                     "role": "user",
-                    "content": f"Here's the recent OHLC data:\n{data_str}\nPlease provide your analysis:"
+                    "content": f"Here's the latest BTC/USDT hourly data:\n{data_str}\nPlease provide your analysis:"
                 }
             ],
             "temperature": 0.3,
