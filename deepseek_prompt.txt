@@ -68,4 +68,21 @@ STRICT FILTERING CONDITIONS:
 4. Require clear institutional footprint (Sweep+Volume Spike)
 
 NOTE:
+[TRADE DIRECTION HEADER]
+=======================
+Begin response with ONE of these:
+- **LONG SETUP** 🟢
+- **SHORT SETUP** 🔴 
+- **NO TRADE** ⚪️ (Market in Balance)
+
+Required format for valid setups:
+---------------------------------
+🎯 Entry Zone: [price1]-[price2]
+🛑 Stop Loss: [price] 
+🏹 Take Profit: 
+  1. TP1: [price] 
+  2. TP2: [price]
+💹 RR Ratio: [1:x.x]
+🔒 Confidence: [x/5]
+
 If no setup meets ALL criteria, respond: "No Edge: Market in Balance"

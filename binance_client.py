@@ -90,7 +90,7 @@ def send_to_deepseek(data):
                 },
                 {
                     "role": "user",
-                    "content": f"Here's the latest BTC/USDT hourly data:\n{data_str}\nPlease provide your analysis:"
+                    "content": f"Here's the latest OHLC data for trade analysis:\n{data_str}\nPlease provide your analysis:"
                 }
             ],
             "temperature": 0.3,
@@ -132,9 +132,9 @@ def send_to_deepseek(data):
 if __name__ == "__main__":
     client = BinanceClient()
     intervals = {
-        '1d': 100,   # Daily - Institutional footprint analysis
-        '4h': 100,    # 4-Hour - Market structure confirmation
-        '1h': 100     # Hourly - Entry precision & order flow
+        '1d': 100,   
+        '4h': 100,    
+        '1h': 100    
     }
     multi_data = client.get_multi_timeframe_data("BTCUSDT", intervals)
     if multi_data:
