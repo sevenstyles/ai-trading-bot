@@ -11,9 +11,6 @@ from tabulate import tabulate
 from binance.um_futures import UMFutures
 from binance.error import ClientError
 from binance_client import BinanceClient, send_to_deepseek
-from precision import PrecisionHandler
-from strategy_handler import get_trading_strategy
-from utils import validate_price_levels, calculate_position_size
 from datetime import datetime
 
 # Load environment variables from .env file
@@ -39,11 +36,11 @@ def main():
     client = BinanceClient()
     print("Fetching OHLC data...")
     
-    # Define timeframes and candle counts
+    # Update the interval values here
     intervals = {
-        '1d': 30,   # 30 daily candles
-        '1h': 100,  # 100 hourly candles
-        '15m': 50   # 50 15-min candles
+        '1d': 100,  
+        '1h': 100,  
+        '15m': 100  
     }
     
     # Get multi-timeframe data

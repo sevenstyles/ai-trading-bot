@@ -31,7 +31,7 @@ Trading Setup Specification:
 ---------------------------
 Format using this structure:
 
-**High Probability Trade Setup**
+**Probability Trade Setup**
 - Market Phase: [Impulse/Retracement]
 - Trigger: [Liquidity Sweep/Inducement Pattern/Structure Break]
 - Entry Zone: [Price level with liquidity confluence]
@@ -71,9 +71,14 @@ Trade Setup:
 - Confidence: 4/5 (strong volume + HTF alignment) 
 
 IMPORTANT FORMATTING RULES:
+-----------------------
 - Always output price levels as numbers only (e.g. 61250.50)
 - Use this exact format for trade levels:
   Entry: [price]
   SL: [price]
   TP1: [price]
   TP2: [price]
+
+NOTE:
+
+If there is no high condifent trade setup (<3), then no trade is required.
