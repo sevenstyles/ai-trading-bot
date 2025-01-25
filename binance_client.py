@@ -41,6 +41,19 @@ class BinanceClient:
             'volume': float(d[5])
         } for d in data]
 
+    def get_multi_timeframe_data(self, symbol, intervals):
+        """Retrieve OHLC data for multiple timeframes"""
+        data = {}
+        for interval, limit in intervals.items():
+            endpoint = "/api/v3/klines"
+            params = {
+                'symbol': symbol,
+                'interval': interval,
+                'limit': limit
+            }
+            data[interval] = self._send_request(endpoint, params)
+        return data
+
 def send_to_deepseek(data):
     """Send formatted OHLC data to DeepSeek API using the reasoning model"""
     load_dotenv()
@@ -59,9 +72,14 @@ def send_to_deepseek(data):
         with open(prompt_path, 'r') as f:
             system_prompt = f.read().strip()
             
-        # Format data for DeepSeek
-        data_str = "\n".join([f"{c['timestamp']} | O:{c['open']} H:{c['high']} L:{c['low']} C:{c['close']} V:{c['volume']}"
-                             for c in data])
+        # Formatting multi-timeframe data
+        formatted = []
+        for tf, candles in data.items():
+            tf_data = "\n".join([f"{c['timestamp']} | O:{c['open']} H:{c['high']} L:{c['low']} C:{c['close']} V:{c['volume']}"
+                                for c in candles])
+            formatted.append(f"{tf} Timeframe:\n{tf_data}")
+        
+        data_str = "\n\n".join(formatted)
         
         payload = {
             "model": "deepseek-reasoner",
@@ -113,8 +131,13 @@ def send_to_deepseek(data):
 
 if __name__ == "__main__":
     client = BinanceClient()
-    ohlc_data = client.get_ohlc_data("BTCUSDT", "1h")
-    if ohlc_data:
-        response = send_to_deepseek(ohlc_data)
+    intervals = {
+        '1d': 30,   # 30 daily candles (~1 month)
+        '1h': 100,  # 100 hourly candles (~4 days)
+        '15m': 50   # 50 15-min candles (~12 hours)
+    }
+    multi_data = client.get_multi_timeframe_data("BTCUSDT", intervals)
+    if multi_data:
+        response = send_to_deepseek(multi_data)
         if response:
             print("DeepSeek response:", response) 

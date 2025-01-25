@@ -38,20 +38,30 @@ SYMBOL = 'BTCUSDT'
 def main():
     client = BinanceClient()
     print("Fetching OHLC data...")
-    ohlc_data = client.get_ohlc_data("BTCUSDT", "1h", 100)
+    
+    # Define timeframes and candle counts
+    intervals = {
+        '1d': 30,   # 30 daily candles
+        '1h': 100,  # 100 hourly candles
+        '15m': 50   # 50 15-min candles
+    }
+    
+    # Get multi-timeframe data
+    ohlc_data = client.get_multi_timeframe_data("BTCUSDT", intervals)
     
     if ohlc_data:
-        # Save OHLC data
+        # Save each timeframe's data
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        ohlc_filename = f"ohlc_data_{timestamp}.json"
-        with open(ohlc_filename, 'w') as f:
-            json.dump(ohlc_data, f, default=str, indent=2)  # Handle datetime serialization
-        print(f"Saved {len(ohlc_data)} candles to {ohlc_filename}")
+        for timeframe, data in ohlc_data.items():
+            filename = f"ohlc_{timeframe}_{timestamp}.json"
+            with open(filename, 'w') as f:
+                json.dump(data, f, default=str, indent=2)
+            print(f"Saved {len(data)} {timeframe} candles to {filename}")
         
-        # Send to DeepSeek and save response
+        # Send to DeepSeek
         deepseek_response = send_to_deepseek(ohlc_data)
         if deepseek_response:
-            print("Received DeepSeek analysis:", deepseek_response.get('summary', 'No summary available'))
+            print("Received DeepSeek analysis")
     else:
         print("Failed to retrieve data")
 
