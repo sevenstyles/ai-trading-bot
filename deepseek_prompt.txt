@@ -34,7 +34,7 @@ Core Analysis Components:
 
 High Probability Setup Criteria:
 ---------------------------
-1. Must Have Conditions:
+1. Consider Conditions:
    - HTF/MTF/LTF Tri-Timeframe Confluence
    - Recent Liquidity Sweep within 3% of current price
    - Volume Spike (150%+ of 20-period average)
@@ -47,7 +47,7 @@ High Probability Setup Criteria:
    - Entry Trigger: Retest of Swept Liquidity Zone + MTF OB/OS
    - Confirm with LTF Break of Structure (BOS) or Change of Character (CHoCH)
    - Require 2nd Test of Key Level After Initial Sweep
-   - Validate with 1H Volume Surge (>200% 20-period avg)
+   - Validate with 1H Volume Surge
 
 3. Risk Management Protocol:
    - Stop Loss: [based on analysis]
@@ -60,14 +60,18 @@ Example Response Framework:
 - LTF Confirmation: 1H BOS above $[price]
 - Volume Profile: POC @ $[price] (4H FVG Base)  
 - Delta Flow: 2:1 Buyer Dominance
+- Confidence score: [reasoning]
 
 Trade Setup:  
-- Institutional Trigger: Sweep of $[price] Liquidity Pool  
+- Institutional Trigger 
+- Trade entry confidence score: X/5 (Confluence based on multi-timeframe analyisis) 
 - Entry Zone: $[price]-[price] (MTF FVG + LTF Imbalance)  
 - SL: $[price] (Below Weekly Swing Low)  
 - TP1: $[price] (Previous Session High)  
 - TP2: $[price] (HTF Equal Highs)  
-- RR: 1:3.8 | Confidence: 4/5 (Multi-TF Confluence)  
+- RR: 1:3.8 
+
+
 
 IMPORTANT FORMATTING RULES:
 -----------------------
@@ -84,7 +88,6 @@ STRICT FILTERING CONDITIONS:
 2. Avoid counter-trend setups without HTF alignment
 3. Require clear institutional footprint
 4. Reject if Daily/4H in Consolidation >3 sessions
-5. Require 1H Close > 20-period EMA for longs
 
 NOTE:
 [TRADE DIRECTION HEADER]

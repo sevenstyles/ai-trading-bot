@@ -34,9 +34,9 @@ def main():
     
     # Update the interval values here
     intervals = {
-        '1d': 100,
-        '1h': 100,
-        '15m': 100
+        '1d': 90,    # 3 months daily (covers quarterly institutional cycles)
+        '4h': 180,   # 30 days of 4h (720 hours - captures full market rotations)
+        '1h': 168    # 7 days of 1h (full week of intraday liquidity patterns)
     }
     
     # Get multi-timeframe data using the symbol from file
