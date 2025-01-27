@@ -65,14 +65,12 @@ class BinanceClient:
             # Determine trade status
             trade_status = "TRADE" if "SETUP" in clean_text else "NO TRADE"
             
-            # Parse details only for valid trades
-            entry_match = sl_match = tp1_match = tp2_match = confidence_match = None
-            if trade_status == "TRADE":
-                entry_match = re.search(r"Entry Zone: ([\d\.]+)-([\d\.]+)", clean_text)
-                sl_match = re.search(r"Stop Loss: ([\d\.]+)", clean_text)
-                tp1_match = re.search(r"TP1: ([\d\.]+)", clean_text)
-                tp2_match = re.search(r"TP2: ([\d\.]+)", clean_text)
-                confidence_match = re.search(r"Confidence: (\d/5)", clean_text)
+            # Parse trade details
+            entry_match = re.search(r"Entry: ([\d\.]+)", clean_text)
+            sl_match = re.search(r"SL: ([\d\.]+)", clean_text)
+            tp_match = re.search(r"TP: ([\d\.]+)", clean_text)
+            rr_match = re.search(r"RR Ratio: (1:[\d\.]+)", clean_text)
+            confidence_match = re.search(r"Confidence: ([\d/5]+)", clean_text)
 
             # Create trades directory if needed
             os.makedirs('trades', exist_ok=True)
@@ -85,25 +83,44 @@ class BinanceClient:
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'symbol': symbol,
                 'status': trade_status,
-                'entry_low': entry_match.group(1) if entry_match else '',
-                'entry_high': entry_match.group(2) if entry_match else '',
+                'entry': entry_match.group(1) if entry_match else '',
                 'sl': sl_match.group(1) if sl_match else '',
-                'tp1': tp1_match.group(1) if tp1_match else '',
-                'tp2': tp2_match.group(1) if tp2_match else '',
+                'tp': tp_match.group(1) if tp_match else '',
+                'rr_ratio': rr_match.group(1) if rr_match else '',
                 'confidence': confidence_match.group(1) if confidence_match else '',
-                'analysis': clean_text[:500]  # Store first 500 chars of clean text
+                'analysis': clean_text[:500]
             }
             
             # Write/append to CSV
             file_exists = os.path.exists(csv_path)
             with open(csv_path, 'a', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=trade_data.keys())
+                writer = csv.DictWriter(f, fieldnames=[
+                    'timestamp',
+                    'symbol', 
+                    'status',
+                    'entry',
+                    'sl',
+                    'tp',
+                    'rr_ratio',
+                    'confidence',
+                    'analysis'
+                ])
                 if not file_exists:
                     writer.writeheader()
                 writer.writerow(trade_data)
                 
             print(f"Logged {trade_status} to {csv_path}")
             
+            # Add this migration check to the save_trade_to_csv method
+            if file_exists:
+                # Check if old format exists
+                with open(csv_path, 'r') as f:
+                    first_line = f.readline()
+                    if 'entry_low' in first_line:
+                        # Backup old file
+                        os.rename(csv_path, f"{csv_path}.bak")
+                        print(f"Migrated old CSV format to {csv_path}.bak")
+                
         except Exception as e:
             print(f"Error saving trade: {str(e)}")
 
