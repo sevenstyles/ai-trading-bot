@@ -134,7 +134,7 @@ def send_to_deepseek(data, symbol):
     try:
         # Get the directory of the current script
         current_dir = os.path.dirname(os.path.abspath(__file__))
-        prompt_path = os.path.join(current_dir, 'deepseek_prompt.txt')
+        prompt_path = os.path.join(current_dir, 'deepseek_trade_prompt.txt')
         
         # Read prompt from file
         with open(prompt_path, 'r', encoding='utf-8') as f:

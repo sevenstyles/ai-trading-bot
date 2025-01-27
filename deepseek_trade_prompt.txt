@@ -93,5 +93,5 @@ STRICT RESPONSE OUTPUT FORMAT:
 - TP:[price]
 - RR Ratio: [1:x.x]
 - Confidence: [x/5]
-- Analysis: [Analysis]
+- Analysis: [Institutional Order Flow Trading Framework Analysis]
 
