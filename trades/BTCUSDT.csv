@@ -1,0 +1,13 @@
+timestamp,symbol,status,entry_low,entry_high,sl,tp1,tp2,confidence,analysis
+2025-01-27 11:22:18,BTCUSDT,TRADE,103260.0,103910.34,104330.21,102313.12,100333.0,3/5,"**SHORT SETUP**   
+=======================  
+
+**HTF Phase:** Retracement within Bullish Impulse (Daily)  
+**MTF Structure:** 4H FVG @ 103691.64-104957.99 (Unfilled sell-side liquidity)  
+**LTF Confirmation:** 1H BOS below 102520.44 (Sweep of Jan 27 low)  
+**Volume Profile:** POC @ 103910.34 (Aligned with 4H resistance)  
+**Delta Flow:** 3:1 Seller Dominance at 102520.44 sweep  
+
+**Confidence score:** 3/5  
+- Confluence from LTF liquidity sweep & MTF FVG  
+- Volume confirms institutional particip"

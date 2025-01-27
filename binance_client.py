@@ -3,6 +3,8 @@ import os
 import requests
 from dotenv import load_dotenv
 import json
+import csv
+import re
 
 class BinanceClient:
     def __init__(self):
@@ -54,7 +56,58 @@ class BinanceClient:
             data[interval] = self._send_request(endpoint, params)
         return data
 
-def send_to_deepseek(data):
+    def save_trade_to_csv(self, symbol, analysis_text):
+        """Save trade analysis with clean text formatting"""
+        try:
+            # Remove emojis and special characters
+            clean_text = re.sub(r'[^\x00-\x7F]+', '', analysis_text)
+            
+            # Determine trade status
+            trade_status = "TRADE" if "SETUP" in clean_text else "NO TRADE"
+            
+            # Parse details only for valid trades
+            entry_match = sl_match = tp1_match = tp2_match = confidence_match = None
+            if trade_status == "TRADE":
+                entry_match = re.search(r"Entry Zone: ([\d\.]+)-([\d\.]+)", clean_text)
+                sl_match = re.search(r"Stop Loss: ([\d\.]+)", clean_text)
+                tp1_match = re.search(r"TP1: ([\d\.]+)", clean_text)
+                tp2_match = re.search(r"TP2: ([\d\.]+)", clean_text)
+                confidence_match = re.search(r"Confidence: (\d/5)", clean_text)
+
+            # Create trades directory if needed
+            os.makedirs('trades', exist_ok=True)
+            
+            # CSV file path
+            csv_path = f"trades/{symbol}.csv"
+            
+            # Trade data structure
+            trade_data = {
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'symbol': symbol,
+                'status': trade_status,
+                'entry_low': entry_match.group(1) if entry_match else '',
+                'entry_high': entry_match.group(2) if entry_match else '',
+                'sl': sl_match.group(1) if sl_match else '',
+                'tp1': tp1_match.group(1) if tp1_match else '',
+                'tp2': tp2_match.group(1) if tp2_match else '',
+                'confidence': confidence_match.group(1) if confidence_match else '',
+                'analysis': clean_text[:500]  # Store first 500 chars of clean text
+            }
+            
+            # Write/append to CSV
+            file_exists = os.path.exists(csv_path)
+            with open(csv_path, 'a', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=trade_data.keys())
+                if not file_exists:
+                    writer.writeheader()
+                writer.writerow(trade_data)
+                
+            print(f"Logged {trade_status} to {csv_path}")
+            
+        except Exception as e:
+            print(f"Error saving trade: {str(e)}")
+
+def send_to_deepseek(data, symbol):
     """Send formatted OHLC data to DeepSeek API using the reasoning model"""
     load_dotenv()
     api_key = os.getenv('DEEPSEEK_API_KEY')
@@ -115,13 +168,8 @@ def send_to_deepseek(data):
             
         # Also save text version
         analysis_text = response_data.get('choices', [{}])[0].get('message', {}).get('content', 'No analysis content')
-        text_filename = f"deepseek_analysis_{timestamp}.txt"
-        with open(text_filename, 'w', encoding='utf-8') as f:
-            f.write(f"DeepSeek Analysis ({timestamp})\n")
-            f.write("="*40 + "\n\n")
-            f.write(analysis_text)
-            
-        print(f"Saved analysis to {text_filename}")
+        
+        BinanceClient().save_trade_to_csv(symbol, analysis_text)
             
         return response_data
         
@@ -169,6 +217,9 @@ if __name__ == "__main__":
                 json.dump(data, f, default=str, indent=2)
             print(f"Saved {len(data)} {timeframe} candles to {filename}")
         
-        response = send_to_deepseek(multi_data)
+        response = send_to_deepseek(multi_data, symbol)
         if response:
-            print("DeepSeek response:", response) 
+            print("DeepSeek response:", response)
+            # Get symbol from data (first timeframe's first candle)
+            symbol = get_trading_pair()  # Get symbol from trade_pair.txt
+            BinanceClient().save_trade_to_csv(symbol, response.get('choices', [{}])[0].get('message', {}).get('content', 'No analysis content')) 

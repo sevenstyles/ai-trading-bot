@@ -34,9 +34,9 @@ def main():
     
     # Update the interval values here
     intervals = {
-        '1d': 90,    # 3 months daily (covers quarterly institutional cycles)
-        '4h': 180,   # 30 days of 4h (720 hours - captures full market rotations)
-        '1h': 168    # 7 days of 1h (full week of intraday liquidity patterns)
+        '1d': 10,    # 3 months daily
+        '4h': 40,   # 30 days of 4h
+        '1h': 100    # 7 days of 1h
     }
     
     # Get multi-timeframe data using the symbol from file
@@ -52,7 +52,7 @@ def main():
             print(f"Saved {len(data)} {timeframe} candles to {filename}")
         
         # Send to DeepSeek
-        deepseek_response = send_to_deepseek(ohlc_data)
+        deepseek_response = send_to_deepseek(ohlc_data, symbol)
         if deepseek_response:
             print("Received DeepSeek analysis")
     else:
