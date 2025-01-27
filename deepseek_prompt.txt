@@ -92,9 +92,9 @@ NOTE:
 [TRADE DIRECTION HEADER]
 =======================
 Begin response with ONE of these:
-- **LONG SETUP** 🟢
-- **SHORT SETUP** 🔴 
-- **NO TRADE** ⚪️ (Market in Balance)
+- **LONG SETUP**
+- **SHORT SETUP**
+- **NO TRADE** (Market in Balance)
 
 Required format for valid setups:
 ---------------------------------
