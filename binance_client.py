@@ -11,14 +11,45 @@ class BinanceClient:
         load_dotenv()
         self.base_url = os.getenv('BINANCE_BASE_URL')
         
+    def _read_end_date(self):
+        """Read and parse human-readable END date from text file"""
+        try:
+            file_path = os.path.join(os.path.dirname(__file__), 'ohlc_data_end_date.txt')
+            if os.path.exists(file_path):
+                with open(file_path, 'r') as f:
+                    for line in f:
+                        line = line.split('#')[0].strip()
+                        if line:
+                            for fmt in ('%Y-%m-%d %H:%M:%S', 
+                                      '%Y-%m-%d %H:%M',
+                                      '%Y-%m-%d'):
+                                try:
+                                    dt = datetime.strptime(line, fmt)
+                                    return int(dt.timestamp() * 1000)
+                                except ValueError:
+                                    continue
+                            print(f"Warning: Couldn't parse date: {line}")
+            return None
+        except Exception as e:
+            print(f"Error reading end date: {e}")
+            return None
+
     def get_ohlc_data(self, symbol, interval, limit=100):
-        """Retrieve OHLC data from Binance"""
+        """Retrieve historical OHLC data from Binance"""
         endpoint = "/api/v3/klines"
         params = {
             'symbol': symbol,
             'interval': interval,
             'limit': limit
         }
+        
+        # Add END time if specified
+        end_time = self._read_end_date()
+        if end_time:
+            params['endTime'] = end_time
+            human_time = datetime.fromtimestamp(end_time/1000).strftime('%Y-%m-%d %H:%M:%S')
+            print(f"\nDEBUG: Fetching {limit} candles ending at {human_time} (UTC)")
+
         return self._send_request(endpoint, params)
     
     def _send_request(self, endpoint, params=None):
@@ -44,8 +75,14 @@ class BinanceClient:
         } for d in data]
 
     def get_multi_timeframe_data(self, symbol, intervals):
-        """Retrieve OHLC data for multiple timeframes"""
+        """Retrieve historical OHLC data for multiple timeframes"""
         data = {}
+        end_time = self._read_end_date()
+        end_suffix = ""
+        
+        if end_time:
+            end_suffix = f"_until_{datetime.fromtimestamp(end_time/1000).strftime('%Y%m%d')}"
+            
         for interval, limit in intervals.items():
             endpoint = "/api/v3/klines"
             params = {
@@ -53,8 +90,12 @@ class BinanceClient:
                 'interval': interval,
                 'limit': limit
             }
+            if end_time:
+                params['endTime'] = end_time
+                
             data[interval] = self._send_request(endpoint, params)
-        return data
+            
+        return data, end_suffix
 
     def save_trade_to_csv(self, symbol, analysis_text):
         """Save trade analysis with strict format parsing"""
@@ -123,73 +164,102 @@ class BinanceClient:
             print(f"CSV save error: {str(e)}")
 
 def send_to_deepseek(data, symbol):
-    """Send formatted OHLC data to DeepSeek API using the reasoning model"""
+    """Send formatted OHLC data to DeepSeek API with better error handling"""
     load_dotenv()
     api_key = os.getenv('DEEPSEEK_API_KEY')
+    
+    if not api_key:
+        print("Error: Missing DEEPSEEK_API_KEY in environment variables")
+        return None
+
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
     }
     
     try:
-        # Get the directory of the current script
+        # Validate data before sending
+        if not data or not any(data.values()):
+            print("Error: Empty or invalid OHLC data provided to DeepSeek")
+            return None
+
+        # Read prompt template
         current_dir = os.path.dirname(os.path.abspath(__file__))
         prompt_path = os.path.join(current_dir, 'deepseek_trade_prompt.txt')
         
-        # Read prompt from file
         with open(prompt_path, 'r', encoding='utf-8') as f:
             system_prompt = f.read().strip()
             
-        # Formatting multi-timeframe data
+        # Format data payload
         formatted = []
         for tf, candles in data.items():
+            if not candles:
+                print(f"Warning: Empty candles for {tf} timeframe")
+                continue
+                
             tf_data = "\n".join([f"{c['timestamp']} | O:{c['open']} H:{c['high']} L:{c['low']} C:{c['close']} V:{c['volume']}"
                                 for c in candles])
             formatted.append(f"{tf} Timeframe:\n{tf_data}")
-        
+
+        if not formatted:
+            print("Error: No valid data to send to DeepSeek")
+            return None
+            
         data_str = "\n\n".join(formatted)
         
+        # Create API payload
         payload = {
             "model": "deepseek-reasoner",
             "messages": [
-                {
-                    "role": "system", 
-                    "content": system_prompt  # Use file content here
-                },
-                {
-                    "role": "user",
-                    "content": f"Here's the latest OHLC data for trade analysis:\n{data_str}\nPlease provide your analysis:"
-                }
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Analyze this market data:\n{data_str}"}
             ],
             "temperature": 0.3,
             "max_tokens": 1000
         }
         
-        # Update to correct API endpoint
+        # Make API request
         response = requests.post(
-            "https://api.deepseek.com/chat/completions",
+            "https://api.deepseek.com/v1/chat/completions",
             json=payload,
             headers=headers
         )
-        response.raise_for_status()
         
+        # Handle HTTP errors
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            print(f"DeepSeek API Error: {e}")
+            print(f"Status Code: {response.status_code}")
+            print(f"Response Text: {response.text[:200]}")
+            return None
+            
+        # Parse JSON response
+        try:
+            response_data = response.json()
+        except json.JSONDecodeError:
+            print("Failed to parse JSON response. Raw response:")
+            print(response.text[:500])
+            return None
+            
         # Save response
-        response_data = response.json()
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         response_filename = f"deepseek_response_{timestamp}.json"
         
         with open(response_filename, 'w') as f:
             json.dump(response_data, f, indent=2)
             
-        # Also save text version
-        analysis_text = response_data.get('choices', [{}])[0].get('message', {}).get('content', 'No analysis content')
-        
-        BinanceClient().save_trade_to_csv(symbol, analysis_text)
+        # Extract analysis text
+        analysis_text = response_data.get('choices', [{}])[0].get('message', {}).get('content', '')
+        if analysis_text:
+            BinanceClient().save_trade_to_csv(symbol, analysis_text)
+        else:
+            print("Warning: Empty analysis content in response")
             
         return response_data
         
     except Exception as e:
-        print(f"DeepSeek API error: {str(e)[:200]}")  # Truncate long errors
+        print(f"DeepSeek API Error: {str(e)[:200]}")
         return None
 
 def get_trading_pair():
@@ -212,25 +282,22 @@ def get_trading_pair():
 
 if __name__ == "__main__":
     client = BinanceClient()
-    symbol = get_trading_pair()  # Get pair from file
+    symbol = get_trading_pair()
     intervals = {
-        '1d': 90,   # 3 months daily (covers quarterly institutional cycles)
-        '4h': 180,  # 30 days of 4h (720 hours - captures full market rotations)
-        '1h': 168   # 7 days of 1h (full week of intraday liquidity patterns)
+        '1d': 90,
+        '4h': 180,
+        '1h': 168
     }
-    multi_data = client.get_multi_timeframe_data(symbol, intervals)  # Use dynamic symbol
+    
+    multi_data, end_suffix = client.get_multi_timeframe_data(symbol, intervals)
+    
     if multi_data:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        print(f"\n=== DEBUG ===")
-        print(f"1. Using trading pair: '{symbol}'")
-        print(f"2. Type of symbol: {type(symbol)}")
-        print(f"3. Time intervals: {intervals}\n")
         for timeframe, data in multi_data.items():
-            filename = f"ohlc_{symbol}_{timeframe}_{timestamp}.json"
-            print(f"4. Generating filename: {filename}")
+            filename = f"ohlc_{symbol}_{timeframe}{end_suffix}_{timestamp}.json"
+            print(f"\nSaving {len(data)} {timeframe} candles to {filename}")
             with open(filename, 'w') as f:
                 json.dump(data, f, default=str, indent=2)
-            print(f"Saved {len(data)} {timeframe} candles to {filename}")
         
         response = send_to_deepseek(multi_data, symbol)
         if response:
