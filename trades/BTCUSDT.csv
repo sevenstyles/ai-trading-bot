@@ -1,2 +1,2 @@
-timestamp,symbol,status,entry,sl,tp,rr_ratio,confidence,analysis
-2025-01-27 11:22:18,BTCUSDT,TRADE,103260.0,104330.21,102313.12,1:3.8,3/5,"SHORT SETUP... [clean text]"
+timestamp,symbol,status,direction,entry,sl,tp,rr_ratio,confidence,analysis
+2025-01-27 12:00:00  ,BTCUSDT,NO TRADE,NO TRADE,,,,,2/5,HTF shows post-impulse retracement with daily consolidation (3 sessions <0.5% range). MTF 4H FVG at 105263.52 remains untested. LTF 1H confirmed bearish structure with BOS below 102620. Recent liquidity sweep to 101408 lacks immediate retest. Volume surge on 1H (2400+ contracts) shows selling climax but no absorption patterns. Price rejects 103260.0 equal lows without institutional footprint confirmation. Filtered out due to lack of MTF/HTF confluence and no second test of swept zone.

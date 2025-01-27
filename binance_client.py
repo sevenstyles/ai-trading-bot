@@ -57,20 +57,21 @@ class BinanceClient:
         return data
 
     def save_trade_to_csv(self, symbol, analysis_text):
-        """Save trade analysis with clean text formatting"""
+        """Save trade analysis with strict format parsing"""
         try:
-            # Remove emojis and special characters
+            # Clean and parse analysis text
             clean_text = re.sub(r'[^\x00-\x7F]+', '', analysis_text)
             
-            # Determine trade status
-            trade_status = "TRADE" if "SETUP" in clean_text else "NO TRADE"
-            
-            # Parse trade details
+            # Parse all required fields using strict format
+            timestamp_match = re.search(r"Timestamp: (.+)", clean_text)
+            status_match = re.search(r"Status: (TRADE|NO TRADE)", clean_text)
+            direction_match = re.search(r"Direction: (LONG|SHORT|NO TRADE)", clean_text)
             entry_match = re.search(r"Entry: ([\d\.]+)", clean_text)
             sl_match = re.search(r"SL: ([\d\.]+)", clean_text)
             tp_match = re.search(r"TP: ([\d\.]+)", clean_text)
             rr_match = re.search(r"RR Ratio: (1:[\d\.]+)", clean_text)
             confidence_match = re.search(r"Confidence: ([\d/5]+)", clean_text)
+            analysis_match = re.search(r"Analysis: (.+)", clean_text, re.DOTALL)
 
             # Create trades directory if needed
             os.makedirs('trades', exist_ok=True)
@@ -78,26 +79,28 @@ class BinanceClient:
             # CSV file path
             csv_path = f"trades/{symbol}.csv"
             
-            # Trade data structure
+            # Build trade data with proper validation
             trade_data = {
-                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'timestamp': timestamp_match.group(1) if timestamp_match else datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'symbol': symbol,
-                'status': trade_status,
+                'status': status_match.group(1) if status_match else 'NO TRADE',
+                'direction': direction_match.group(1) if direction_match else '',
                 'entry': entry_match.group(1) if entry_match else '',
                 'sl': sl_match.group(1) if sl_match else '',
                 'tp': tp_match.group(1) if tp_match else '',
                 'rr_ratio': rr_match.group(1) if rr_match else '',
                 'confidence': confidence_match.group(1) if confidence_match else '',
-                'analysis': clean_text[:500]
+                'analysis': analysis_match.group(1).strip()[:500] if analysis_match else clean_text[:500]
             }
-            
-            # Write/append to CSV
+
+            # Write to CSV with strict column order
             file_exists = os.path.exists(csv_path)
             with open(csv_path, 'a', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=[
                     'timestamp',
-                    'symbol', 
-                    'status',
+                    'symbol',
+                    'status', 
+                    'direction',
                     'entry',
                     'sl',
                     'tp',
@@ -105,24 +108,19 @@ class BinanceClient:
                     'confidence',
                     'analysis'
                 ])
+                
                 if not file_exists:
                     writer.writeheader()
-                writer.writerow(trade_data)
-                
-            print(f"Logged {trade_status} to {csv_path}")
-            
-            # Add this migration check to the save_trade_to_csv method
-            if file_exists:
-                # Check if old format exists
-                with open(csv_path, 'r') as f:
-                    first_line = f.readline()
-                    if 'entry_low' in first_line:
-                        # Backup old file
-                        os.rename(csv_path, f"{csv_path}.bak")
-                        print(f"Migrated old CSV format to {csv_path}.bak")
-                
+                    
+                # Only write valid trade formats
+                if all([trade_data['status'], trade_data['direction']]):
+                    writer.writerow(trade_data)
+                    print(f"Logged {trade_data['status']} to {csv_path}")
+                else:
+                    print("Invalid format - skipped CSV logging")
+
         except Exception as e:
-            print(f"Error saving trade: {str(e)}")
+            print(f"CSV save error: {str(e)}")
 
 def send_to_deepseek(data, symbol):
     """Send formatted OHLC data to DeepSeek API using the reasoning model"""
