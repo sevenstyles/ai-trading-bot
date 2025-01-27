@@ -3,21 +3,27 @@ Institutional Order Flow Trading Framework
 
 CORE ANALYSIS COMPONENTS:
 ----------------------
+
+Study the given OHLC and volume data to perform an institutional grade analysis:
+
 1. Auction Market Structure:
    - HTF (Daily) Market Phase (Impulse/Retracement/Consolidation)
    - MTF (4H) Fair Value Gap Identification
    - LTF (1H) Structural Breaks (BOS/CHoCH)
    - Recent Liquidity Sweeps (Stop Hunts/Equal Highs-Lows)
+   - Market Structure Validation Rules
    - Market Phase Detection:
      * Impulse: 3+ consecutive FVGs with >1.5% daily range
      * Retracement: 50-78.6% Fibonacci of Daily impulse
      * Consolidation: <0.5% daily range for 3 sessions
+     * Volatility Threshold (ATR-based)
 
 2. Liquidity Analysis:
    - Institutional Inducement Patterns (Sweep->Run->Retest)
    - Stop Cluster Density Mapping (Recent 3 swing points)
    - Volume-Weighted Liquidity Pools
    - V-Shaped Reversals Post-Liquidation Events
+   - Intraday Liquidity Pools (Recent 4-6 hours)
 
 3. Order Flow Footprints:
    - Large Imbalance Candles 
@@ -26,8 +32,8 @@ CORE ANALYSIS COMPONENTS:
    - Delta Divergence on Retests
 
 4. LTF Analysis:
-   - Intraday Liquidity Pools (Recent 4-6 hours)
-   - Immediate Price Acceptance/Rejection
+   - Intraday Liquidity Pools
+   - Price Acceptance/Rejection
    - Short-Term Order Flow Imbalances
    - Market Maker Model Patterns (BOS/CHoCH)
    - Retail Trader Cluster Zones
@@ -41,13 +47,12 @@ CORE ANALYSIS COMPONENTS:
 6. Smart Money Signals:
    - Failed Retail Breakouts (Spring/Upthrust Patterns)
    - Volume-Weighted Average Price (VWAP) Deviation Analysis
-   - Options Flow Analysis (Put/Call Ratio Extremes)
-   - Futures Basis Contango/Backwardation Thresholds
 
 7. Algorithmic Confirmation:
    - Machine Learning Pattern Recognition (3+ confirmed similar institutional footprints)
    - Fractal Efficiency Ratio (FER) for Trend Quality
    - Volatility-Weighted Momentum (VWM) Index
+   - Momentum Divergence Confirmation
 
 
 HIGH PROBABILITY SETUP CRITERIA:
@@ -55,10 +60,12 @@ HIGH PROBABILITY SETUP CRITERIA:
 1. Consider Conditions:
    - HTF/MTF/LTF Tri-Timeframe Confluence
    - Recent Liquidity Sweep
-   - Volume Spike
+   - Volume Spike above average
    - Clear Institutional Footprint (Pinning Bar/FVG/OB)
    - Unmitigated Order Blocks
    - Volume Profile POC
+   - Market Structure Validation
+   - Momentum Confirmation
 
 
 RISK MANAGEMENT PROTOCOL:

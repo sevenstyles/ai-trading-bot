@@ -1,4 +1,4 @@
 # This should be the END date of your data window
 # Format: YYYY-MM-DD
 # To get current data, comment out date
-# 2025-01-27
+# 2025-01-26

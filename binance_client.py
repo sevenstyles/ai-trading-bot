@@ -200,16 +200,17 @@ def send_to_deepseek(data, symbol):
         with open(prompt_path, 'r', encoding='utf-8') as f:
             system_prompt = f.read().strip()
             
-        # Format data payload
+        # Format data payload with abbreviated fields
         formatted = []
         for tf, candles in data.items():
             if not candles:
                 print(f"Warning: Empty candles for {tf} timeframe")
                 continue
                 
-            tf_data = "\n".join([f"{c['timestamp']} | O:{c['open']} H:{c['high']} L:{c['low']} C:{c['close']} V:{c['volume']}"
+            # Use abbreviated field names: t=timestamp, o=open, h=high, l=low, c=close, v=volume
+            tf_data = "\n".join([f"t:{c['timestamp']} o:{c['open']} h:{c['high']} l:{c['low']} c:{c['close']} v:{c['volume']}"
                                 for c in candles])
-            formatted.append(f"{tf} Timeframe:\n{tf_data}")
+            formatted.append(f"{tf}:\n{tf_data}")
 
         if not formatted:
             print("Error: No valid data to send to DeepSeek")
