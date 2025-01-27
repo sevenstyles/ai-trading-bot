@@ -4,7 +4,7 @@ Institutional Order Flow Trading Framework
 CORE ANALYSIS COMPONENTS:
 ----------------------
 
-Study the given OHLC and volume data to perform an institutional grade analysis:
+Study the given OHLC and volume data to perform an institutional grade analysis and trade setup:
 
 1. Auction Market Structure:
    - HTF (Daily) Market Phase (Impulse/Retracement/Consolidation)

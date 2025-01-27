@@ -1,0 +1,81 @@
+Request URL: https://api.deepseek.com/v1/chat/completions
+Status Code: 200
+Headers: {'Date': 'Mon, 27 Jan 2025 22:59:06 GMT', 'Content-Type': 'text/event-stream; charset=utf-8', 'Transfer-Encoding': 'chunked', 'Connection': 'keep-alive', 'Set-Cookie': 'HWWAFSESID=4c6f6d677b646b4a29; path=/, HWWAFSESTIME=1738018732060; path=/, __cf_bm=ZwSfUWxt2Tedo75eFI6wpjfIzSmH4RL2eTARZ.rOzR0-1738018746-1.0.1.1-2aTLhFhpveaF_y.PBmXbJIS72FSBNrF.86LD0M5ClbWJVRoKcyH3WH8dHLYGTOMF1nHKhiGl4s8Pv1qP4abyEA; path=/; expires=Mon, 27-Jan-25 23:29:06 GMT; domain=.deepseek.com; HttpOnly; Secure; SameSite=None', 'Cache-Control': 'no-cache', 'vary': 'origin, access-control-request-method, access-control-request-headers', 'access-control-allow-credentials': 'true', 'x-ds-trace-id': '3ede331f78ca2e14635104ac1adb4a87', 'strict-transport-security': 'max-age=31536000; includeSubDomains; preload', 'x-content-type-options': 'nosniff', 'CF-Cache-Status': 'DYNAMIC', 'Server': 'cloudflare', 'CF-RAY': '908c59a24b20f0c9-MEL'}
+
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+RAW CHUNK: b': keep-alive'
+DECODED: : keep-alive
+RAW CHUNK: b''
+
+FULL RESPONSE: 
