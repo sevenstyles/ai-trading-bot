@@ -1,7 +1,7 @@
 Institutional Order Flow Trading Framework
 ======================================================
 
-Core Analysis Components:
+CORE ANALYSIS COMPONENTS:
 ----------------------
 1. Auction Market Structure:
    - HTF (Daily) Market Phase (Impulse/Retracement/Consolidation)
@@ -19,11 +19,11 @@ Core Analysis Components:
    - Volume-Weighted Liquidity Pools
    - V-Shaped Reversals Post-Liquidation Events
 
-3. Order Flow Footprints:
-   - Large Imbalance Candles (2x average range)
-   - Absorption Patterns at Key Levels
-   - Volume Delta Analysis (Hidden vs Visible Activity)
-   - Delta Divergence on Retests
+3. ORDER FLOW FOOTPRINTS:
+   - LARGE IMBALANCE CANDLES (2x AVERAGE RANGE)
+   - ABSORPTION PATTERNS AT KEY LEVELS
+   - VOLUME DELTA ANALYSIS (HIDDEN VS VISIBLE ACTIVITY)
+   - DELTA DIVERGENCE ON RETESTS
 
 4. LTF Analysis:
    - Intraday Liquidity Pools (Recent 4-6 hours)
@@ -32,7 +32,7 @@ Core Analysis Components:
    - Market Maker Model Patterns (BOS/CHoCH)
    - Retail Trader Cluster Zones
 
-High Probability Setup Criteria:
+HIGH PROBABILITY SETUP CRITERIA:
 ---------------------------
 1. Consider Conditions:
    - HTF/MTF/LTF Tri-Timeframe Confluence
@@ -53,28 +53,28 @@ High Probability Setup Criteria:
    - Stop Loss: [based on analysis]
    - Profit Taking: Minimum 1:3 RR Ratio
 
-Example Thought Process Framework:
+EXAMPLE ANALYSIS THOUGHT PROCESS FRAMEWORK:
 ---------------------------
+
+Analysis:
+
 - HTF Phase: Bullish Impulse (Daily) 
 - MTF Structure: 4H FVG @ $[price]
 - LTF Confirmation: 1H BOS above $[price]
 - Volume Profile: POC @ $[price] (4H FVG Base)  
 - Delta Flow: 2:1 Buyer Dominance
-- Confidence score: [x/5]
-
-Trade Setup:  
 - Institutional Trigger 
-- Trade entry confidence score: X/5 (Confluence based on multi-timeframe analyisis) 
 - Entry: $[price] (MTF FVG + LTF Imbalance)  
 - SL: $[price] (Below Weekly Swing Low)  
-- TP1: $[price] (Previous Session High)  
-- TP2: $[price] (HTF Equal Highs)  
+- TP: $[price] (Previous Session High)  
 - RR: [1:x.x]
+- Confidence score: X/5 (Based on HTF/MTF/LTF analysis) 
+- Analysis: [Analysis]
 
 
 FILTERING CONDITIONS:
 ----------------------------
-1. Reject if <3/5 confidence score 
+1. Reject if <3/5 confidence score (NO TRADE)
 2. Avoid counter-trend setups without HTF alignment
 3. Require clear institutional footprint for a higher probability setup
 4. Reject if Daily/4H in Consolidation >3 sessions 
@@ -85,17 +85,16 @@ IMPORTANT FORMATTING RULES:
 - Always output price levels as numbers only (e.g. 61250.50)
 
 
-Required format for output:
+STRICT RESPONSE OUTPUT FORMAT:
 ---------------------------------
-Timestamp: [timestamp]
-Symbol: [symbol]
-Status: [TRADE/NO TRADE]
-Direction: [LONG/SHORT]
-Entry: [price1]
-SL: [price] 
-TP:[price]
-RR Ratio: [1:x.x]
-Confidence: [x/5]
-Analysis: [detailed analysis]
+- Timestamp: [timestamp]
+- Symbol: [symbol]
+- Status: [TRADE/NO TRADE]
+- Direction: [LONG/SHORT/NO TRADE]
+- Entry: [price]
+- SL: [price] 
+- TP:[price]
+- RR Ratio: [1:x.x]
+- Confidence: [x/5]
+- Analysis: [Analysis]
 
-If no setup meets criteria for a high probability setup, use 'NO TRADE' as output for Status field.
