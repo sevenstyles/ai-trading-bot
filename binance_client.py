@@ -98,12 +98,19 @@ class BinanceClient:
         return data, end_suffix
 
     def save_trade_to_csv(self, symbol, analysis_text):
-        """Save trade analysis with strict format parsing"""
+        """Save trade analysis with improved parsing using END RESPONSE marker"""
         try:
             # Clean and parse analysis text
             clean_text = re.sub(r'[^\x00-\x7F]+', '', analysis_text)
             
-            # Parse all required fields using strict format
+            # Parse fields with END RESPONSE delimiter
+            analysis_match = re.search(
+                r"Analysis: (.*?)\n?END RESPONSE",
+                clean_text, 
+                re.DOTALL | re.IGNORECASE
+            )
+            
+            # Extract other fields
             timestamp_match = re.search(r"Timestamp: (.+)", clean_text)
             status_match = re.search(r"Status: (TRADE|NO TRADE)", clean_text)
             direction_match = re.search(r"Direction: (LONG|SHORT|NO TRADE)", clean_text)
@@ -112,18 +119,10 @@ class BinanceClient:
             tp_match = re.search(r"TP: ([\d\.]+)", clean_text)
             rr_match = re.search(r"RR Ratio: (1:[\d\.]+)", clean_text)
             confidence_match = re.search(r"Confidence: ([\d/5]+)", clean_text)
-            analysis_match = re.search(r"Analysis: (.+)", clean_text, re.DOTALL)
 
-            # Create trades directory if needed
-            os.makedirs('trades', exist_ok=True)
-            
-            # CSV file path
-            csv_path = f"trades/{symbol}.csv"
-            
-            # Build trade data with proper validation
+            # Build trade data
             trade_data = {
                 'timestamp': timestamp_match.group(1) if timestamp_match else datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'symbol': symbol,
                 'status': status_match.group(1) if status_match else 'NO TRADE',
                 'direction': direction_match.group(1) if direction_match else '',
                 'entry': entry_match.group(1) if entry_match else '',
@@ -134,6 +133,16 @@ class BinanceClient:
                 'analysis': analysis_match.group(1).strip()[:500] if analysis_match else clean_text[:500]
             }
 
+            # Remove END RESPONSE from analysis if present
+            if analysis_match:
+                trade_data['analysis'] = trade_data['analysis'].replace('END RESPONSE', '').strip()
+
+            # Create trades directory if needed
+            os.makedirs('trades', exist_ok=True)
+            
+            # CSV file path
+            csv_path = f"trades/{symbol}.csv"
+            
             # Write to CSV with strict column order
             file_exists = os.path.exists(csv_path)
             with open(csv_path, 'a', newline='', encoding='utf-8') as f:
@@ -207,7 +216,7 @@ def send_to_deepseek(data, symbol):
             
         data_str = "\n\n".join(formatted)
         
-        # Create API payload
+        # Update payload to enable streaming
         payload = {
             "model": "deepseek-reasoner",
             "messages": [
@@ -215,48 +224,51 @@ def send_to_deepseek(data, symbol):
                 {"role": "user", "content": f"Analyze this market data:\n{data_str}"}
             ],
             "temperature": 0.3,
-            "max_tokens": 1000
+            "max_tokens": 1000,
+            "stream": True  # Add this line to enable streaming
         }
-        
-        # Make API request
-        response = requests.post(
+
+        # Make streaming request
+        print("\nStarting DeepSeek analysis stream:")
+        with requests.post(
             "https://api.deepseek.com/v1/chat/completions",
             json=payload,
-            headers=headers
-        )
-        
-        # Handle HTTP errors
-        try:
-            response.raise_for_status()
-        except requests.exceptions.HTTPError as e:
-            print(f"DeepSeek API Error: {e}")
-            print(f"Status Code: {response.status_code}")
-            print(f"Response Text: {response.text[:200]}")
-            return None
-            
-        # Parse JSON response
-        try:
-            response_data = response.json()
-        except json.JSONDecodeError:
-            print("Failed to parse JSON response. Raw response:")
-            print(response.text[:500])
-            return None
-            
-        # Save response
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        response_filename = f"deepseek_response_{timestamp}.json"
-        
-        with open(response_filename, 'w') as f:
-            json.dump(response_data, f, indent=2)
-            
-        # Extract analysis text
-        analysis_text = response_data.get('choices', [{}])[0].get('message', {}).get('content', '')
+            headers=headers,
+            stream=True  # Important for streaming
+        ) as response:
+            try:
+                response.raise_for_status()
+                full_response = ""
+                
+                # Process streaming chunks
+                for chunk in response.iter_lines():
+                    if chunk:
+                        decoded_chunk = chunk.decode('utf-8')
+                        if decoded_chunk.startswith("data: "):
+                            try:
+                                json_chunk = json.loads(decoded_chunk[6:])
+                                content = json_chunk.get('choices', [{}])[0].get('delta', {}).get('content', '')
+                                if content:
+                                    print(content, end='', flush=True)
+                                    full_response += content
+                            except json.JSONDecodeError:
+                                print(f"\nFailed to parse chunk: {decoded_chunk[:100]}")
+                        elif decoded_chunk.strip() == '[DONE]':
+                            print("\n\nStream completed successfully")
+                        else:
+                            print(f"\nUnexpected chunk format: {decoded_chunk[:100]}")
+            except requests.exceptions.HTTPError as e:
+                print(f"\nStream Error: {e}")
+                return None
+
+        # Save full response after stream completes
+        analysis_text = full_response.strip()
         if analysis_text:
             BinanceClient().save_trade_to_csv(symbol, analysis_text)
         else:
-            print("Warning: Empty analysis content in response")
+            print("\nWarning: Empty analysis content in stream")
             
-        return response_data
+        return analysis_text
         
     except Exception as e:
         print(f"DeepSeek API Error: {str(e)[:200]}")
@@ -284,9 +296,9 @@ if __name__ == "__main__":
     client = BinanceClient()
     symbol = get_trading_pair()
     intervals = {
-        '1d': 90,
-        '4h': 180,
-        '1h': 168
+        '1d': 10,
+        '4h': 10,
+        '1h': 10
     }
     
     multi_data, end_suffix = client.get_multi_timeframe_data(symbol, intervals)
@@ -304,4 +316,4 @@ if __name__ == "__main__":
             print("DeepSeek response:", response)
             # Get symbol from data (first timeframe's first candle)
             symbol = get_trading_pair()  # Get symbol from trade_pair.txt
-            BinanceClient().save_trade_to_csv(symbol, response.get('choices', [{}])[0].get('message', {}).get('content', 'No analysis content')) 
+            BinanceClient().save_trade_to_csv(symbol, response) 

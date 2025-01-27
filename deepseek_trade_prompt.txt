@@ -116,3 +116,5 @@ STRICT RESPONSE OUTPUT FORMAT:
 - Confidence: [x/5]
 - Analysis: [institutional analysis...]
 
+Note: End 'Analysis' response output with 'END RESPONSE'
+
