@@ -99,8 +99,8 @@ Begin response with ONE of these:
 Required format for valid setups:
 ---------------------------------
 Entry: [price1]
-SL: [price] 
-TP:[price]
+Stop Loss: [price] 
+Take Profit:[price]
 RR Ratio: [1:x.x]
 Confidence: [x/5]
 
