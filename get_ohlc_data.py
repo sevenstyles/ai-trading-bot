@@ -16,14 +16,6 @@ from datetime import datetime
 # Load environment variables from .env file
 load_dotenv()
 
-# Remove the file logging configuration
-# logging.basicConfig(
-#     level=logging.INFO,
-#     filename='trading_bot.log',
-#     filemode='a',
-#     format='%(asctime)s - %(levelname)s - %(message)s'
-# )
-
 def main():
     client = BinanceClient()
     print("Fetching OHLC data...")
@@ -34,9 +26,9 @@ def main():
     
     # Update the interval values here
     intervals = {
-        '1d': 10,    # 3 months daily
-        '4h': 40,   # 30 days of 4h
-        '1h': 100    # 7 days of 1h
+        '1d': 10,   
+        '4h': 40,   
+        '1h': 100    
     }
     
     # Get multi-timeframe data using the symbol from file

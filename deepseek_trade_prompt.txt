@@ -95,7 +95,7 @@ FILTERING CONDITIONS:
 3. Require clear institutional footprint for a higher probability setup
 4. Reject if Daily/4H in Consolidation >3 sessions 
 5. Require >2.5% daily VWAP deviation for high-conviction entries
-8. Confirm with smart money signals
+8. Confirm with smart money concepts
 
 
 IMPORTANT FORMATTING RULES:
