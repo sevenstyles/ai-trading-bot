@@ -174,7 +174,7 @@ class BinanceClient:
             print(f"CSV save error: {str(e)}")
 
 def send_to_deepseek(data, symbol):
-    """Send formatted OHLC data to DeepSeek API with better error handling"""
+    """Send formatted OHLC data to DeepSeek API with full response logging"""
     load_dotenv()
     api_key = os.getenv('DEEPSEEK_API_KEY')
     
@@ -229,81 +229,110 @@ def send_to_deepseek(data, symbol):
             "stream": True  # Add this line to enable streaming
         }
 
-        # Make streaming request
-        print("\nStarting DeepSeek analysis stream:")
-        with requests.post(
-            "https://api.deepseek.com/v1/chat/completions",
-            json=payload,
-            headers=headers,
-            stream=True  # Important for streaming
-        ) as response:
-            try:
-                response.raise_for_status()
-                full_response = ""
-                buffer = ""
-                in_analysis = False
-                
-                # Process streaming chunks
-                for chunk in response.iter_lines():
-                    if chunk:
-                        decoded_chunk = chunk.decode('utf-8')
-                        
-                        # Handle all keep-alive variants and empty lines
-                        if decoded_chunk.startswith(':') or not decoded_chunk.strip():
-                            continue
-                            
-                        # Handle [DONE] marker
-                        if decoded_chunk.strip() == 'data: [DONE]':
-                            # Process remaining buffer
-                            if buffer:
-                                full_response += buffer
-                                print(buffer, end='', flush=True)
-                                buffer = ""
-                            print("\n\nStream completed successfully")
-                            continue
-                            
-                        if decoded_chunk.startswith("data: "):
-                            try:
-                                json_chunk = json.loads(decoded_chunk[6:])
-                                
-                                # Check for API errors first
-                                if 'error' in json_chunk:
-                                    print(f"\nAPI Error: {json_chunk['error'].get('message', 'Unknown error')}")
-                                    return None
-                                    
-                                content = json_chunk.get('choices', [{}])[0].get('delta', {}).get('content', '')
-                                if content:
-                                    # Buffer content until we get complete analysis
-                                    buffer += content
-                                    # Print when we detect analysis start
-                                    if "Analysis:" in buffer and not in_analysis:
-                                        in_analysis = True
-                                        print("Analysis: ", end='', flush=True)
-                                    # Flush buffer when we hit newlines
-                                    if '\n' in buffer:
-                                        parts = buffer.split('\n')
-                                        for part in parts[:-1]:
-                                            print(part, end='\n', flush=True)
-                                            full_response += part + '\n'
-                                        buffer = parts[-1]
-                                        
-                            except json.JSONDecodeError:
-                                print(f"\nFailed to parse chunk: {decoded_chunk[:100]}")
-                        else:
-                            print(f"\nUnexpected chunk format: {decoded_chunk[:100]}")
-                            
-            except requests.exceptions.ChunkedEncodingError as e:
-                print(f"\nStream connection error: {str(e)}")
-                return None
-
-        # Save full response after stream completes
-        analysis_text = full_response.strip()
-        if analysis_text:
-            BinanceClient().save_trade_to_csv(symbol, analysis_text)
-        else:
-            print("\nWarning: Empty analysis content in stream")
+        # Create debug directory and file
+        os.makedirs('debug', exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        debug_filename = f"debug/deepseek_response_full_{timestamp}.txt"
+        
+        with open(debug_filename, 'w', encoding='utf-8') as debug_file:
+            print(f"\nStarting DeepSeek analysis stream (debug log: {debug_filename}):")
             
-        return analysis_text
+            # Make streaming request
+            with requests.post(
+                "https://api.deepseek.com/v1/chat/completions",
+                json=payload,
+                headers=headers,
+                stream=True
+            ) as response:
+                try:
+                    response.raise_for_status()
+                    full_response = ""
+                    buffer = ""
+                    in_analysis = False
+                    
+                    debug_file.write(f"Request URL: {response.url}\n")
+                    debug_file.write(f"Status Code: {response.status_code}\n")
+                    debug_file.write(f"Headers: {dict(response.headers)}\n\n")
+                    
+                    # Process streaming chunks
+                    for chunk in response.iter_lines():
+                        debug_file.write(f"RAW CHUNK: {chunk}\n")
+                        
+                        if chunk:
+                            decoded_chunk = chunk.decode('utf-8')
+                            debug_file.write(f"DECODED: {decoded_chunk}\n")
+                            
+                            # Handle keep-alive and empty lines
+                            if decoded_chunk.startswith(':') or not decoded_chunk.strip():
+                                continue
+                                
+                            # Handle [DONE] marker
+                            if decoded_chunk.strip() == 'data: [DONE]':
+                                # Process remaining buffer
+                                if buffer:
+                                    full_response += buffer
+                                    print(buffer, end='', flush=True)
+                                    buffer = ""
+                                print("\n\nStream completed successfully")
+                                debug_file.write("\n[STREAM COMPLETED]\n")
+                                continue
+                                
+                            if decoded_chunk.startswith("data: "):
+                                try:
+                                    json_chunk = json.loads(decoded_chunk[6:])
+                                    debug_file.write(f"PARSED JSON: {json_chunk}\n")
+                                    
+                                    # Check for API errors
+                                    if 'error' in json_chunk:
+                                        error_msg = f"\nAPI Error: {json_chunk['error'].get('message', 'Unknown error')}"
+                                        print(error_msg)
+                                        debug_file.write(f"ERROR: {error_msg}\n")
+                                        return None
+                                        
+                                    content = json_chunk.get('choices', [{}])[0].get('delta', {}).get('content', '')
+                                    if content:
+                                        buffer += content
+                                        debug_file.write(f"CONTENT BUFFER: {buffer}\n")
+                                        
+                                        if "Analysis:" in buffer and not in_analysis:
+                                            in_analysis = True
+                                            print("Analysis: ", end='', flush=True)
+                                            debug_file.write("[ANALYSIS START DETECTED]\n")
+                                            
+                                        if '\n' in buffer:
+                                            parts = buffer.split('\n')
+                                            for part in parts[:-1]:
+                                                print(part, end='\n', flush=True)
+                                                full_response += part + '\n'
+                                            buffer = parts[-1]
+                                            debug_file.write(f"FLUSHED BUFFER: {parts[:-1]}\n")
+                                            
+                                except json.JSONDecodeError:
+                                    error_msg = f"\nFailed to parse chunk: {decoded_chunk[:100]}"
+                                    print(error_msg)
+                                    debug_file.write(f"PARSE ERROR: {error_msg}\n")
+                            else:
+                                error_msg = f"\nUnexpected chunk format: {decoded_chunk[:100]}"
+                                print(error_msg)
+                                debug_file.write(f"UNEXPECTED CHUNK: {error_msg}\n")
+                                
+                except Exception as e:
+                    error_msg = f"\nStream error: {str(e)}"
+                    print(error_msg)
+                    debug_file.write(f"STREAM ERROR: {error_msg}\n")
+                    return None
+
+            # Save final analysis after stream
+            debug_file.write(f"\nFULL RESPONSE: {full_response}\n")
+            
+            # Save full response after stream completes
+            analysis_text = full_response.strip()
+            if analysis_text:
+                BinanceClient().save_trade_to_csv(symbol, analysis_text)
+            else:
+                print("\nWarning: Empty analysis content in stream")
+            
+            return analysis_text
         
     except Exception as e:
         print(f"DeepSeek API Error: {str(e)[:200]}")
