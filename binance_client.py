@@ -98,7 +98,7 @@ class BinanceClient:
         return data, end_suffix
 
     def save_trade_to_csv(self, symbol, analysis_text):
-        """Save trade analysis with improved parsing using END RESPONSE marker"""
+        """Save trade analysis without symbol column"""
         try:
             # Clean and parse analysis text
             clean_text = re.sub(r'[^\x00-\x7F]+', '', analysis_text)
@@ -120,7 +120,20 @@ class BinanceClient:
             rr_match = re.search(r"RR Ratio: (1:[\d\.]+)", clean_text)
             confidence_match = re.search(r"Confidence: ([\d/5]+)", clean_text)
 
-            # Build trade data
+            # Update CSV fieldnames and data
+            fieldnames = [
+                'timestamp',
+                'status', 
+                'direction',
+                'entry',
+                'sl',
+                'tp',
+                'rr_ratio',
+                'confidence',
+                'analysis'
+            ]
+
+            # Remove symbol from trade_data
             trade_data = {
                 'timestamp': timestamp_match.group(1) if timestamp_match else datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'status': status_match.group(1) if status_match else 'NO TRADE',
@@ -146,23 +159,11 @@ class BinanceClient:
             # Write to CSV with strict column order
             file_exists = os.path.exists(csv_path)
             with open(csv_path, 'a', newline='', encoding='utf-8') as f:
-                writer = csv.DictWriter(f, fieldnames=[
-                    'timestamp',
-                    'symbol',
-                    'status', 
-                    'direction',
-                    'entry',
-                    'sl',
-                    'tp',
-                    'rr_ratio',
-                    'confidence',
-                    'analysis'
-                ])
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
                 
                 if not file_exists:
                     writer.writeheader()
                     
-                # Only write valid trade formats
                 if all([trade_data['status'], trade_data['direction']]):
                     writer.writerow(trade_data)
                     print(f"Logged {trade_data['status']} to {csv_path}")
@@ -244,21 +245,35 @@ def send_to_deepseek(data, symbol):
                 for chunk in response.iter_lines():
                     if chunk:
                         decoded_chunk = chunk.decode('utf-8')
+                        
+                        # Handle keep-alive comments and empty lines
+                        if decoded_chunk.startswith(': ') or not decoded_chunk.strip():
+                            continue
+                            
+                        # Handle the [DONE] marker
+                        if decoded_chunk.strip() == 'data: [DONE]':
+                            print("\n\nStream completed successfully")
+                            continue
+                            
                         if decoded_chunk.startswith("data: "):
                             try:
                                 json_chunk = json.loads(decoded_chunk[6:])
+                                
+                                # Check for API errors first
+                                if 'error' in json_chunk:
+                                    print(f"\nAPI Error: {json_chunk['error'].get('message', 'Unknown error')}")
+                                    return None
+                                    
                                 content = json_chunk.get('choices', [{}])[0].get('delta', {}).get('content', '')
                                 if content:
                                     print(content, end='', flush=True)
                                     full_response += content
                             except json.JSONDecodeError:
                                 print(f"\nFailed to parse chunk: {decoded_chunk[:100]}")
-                        elif decoded_chunk.strip() == '[DONE]':
-                            print("\n\nStream completed successfully")
                         else:
                             print(f"\nUnexpected chunk format: {decoded_chunk[:100]}")
-            except requests.exceptions.HTTPError as e:
-                print(f"\nStream Error: {e}")
+            except requests.exceptions.ChunkedEncodingError as e:
+                print(f"\nStream connection error: {str(e)}")
                 return None
 
         # Save full response after stream completes
@@ -305,8 +320,11 @@ if __name__ == "__main__":
     
     if multi_data:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # Create ohlc-data directory
+        os.makedirs('ohlc-data', exist_ok=True)
+        
         for timeframe, data in multi_data.items():
-            filename = f"ohlc_{symbol}_{timeframe}{end_suffix}_{timestamp}.json"
+            filename = os.path.join('ohlc-data', f"ohlc_{symbol}_{timeframe}{end_suffix}_{timestamp}.json")
             print(f"\nSaving {len(data)} {timeframe} candles to {filename}")
             with open(filename, 'w') as f:
                 json.dump(data, f, default=str, indent=2)

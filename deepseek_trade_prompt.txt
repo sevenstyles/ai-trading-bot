@@ -106,7 +106,6 @@ IMPORTANT FORMATTING RULES:
 STRICT RESPONSE OUTPUT FORMAT:
 ---------------------------------
 - Timestamp: [timestamp]
-- Symbol: [symbol]
 - Status: [TRADE/NO TRADE]
 - Direction: [LONG/SHORT/NO TRADE]
 - Entry: [price]

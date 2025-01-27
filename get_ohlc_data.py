@@ -26,19 +26,22 @@ def main():
     
     # Update the interval values here
     intervals = {
-        '1d': 10,   
-        '4h': 10,   
-        '1h': 10    
+        '1d': 100,   
+        '4h': 100,   
+        '1h': 100    
     }
     
     # Get multi-timeframe data using the symbol from file
     ohlc_data, start_suffix = client.get_multi_timeframe_data(symbol, intervals)  # Unpack the tuple
     
     if ohlc_data:
-        # Save each timeframe's data
+        # Create ohlc-data directory
+        os.makedirs('ohlc-data', exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Save each timeframe's data
         for timeframe, data in ohlc_data.items():
-            filename = f"ohlc_{symbol}_{timeframe}{start_suffix}_{timestamp}.json"
+            filename = os.path.join('ohlc-data', f"ohlc_{symbol}_{timeframe}{start_suffix}_{timestamp}.json")
             print(f"Saving {len(data)} {timeframe} candles to {filename}")
             
             with open(filename, 'w') as f:
