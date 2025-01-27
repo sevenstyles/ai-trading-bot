@@ -65,7 +65,7 @@ Example Response Framework:
 Trade Setup:  
 - Institutional Trigger 
 - Trade entry confidence score: X/5 (Confluence based on multi-timeframe analyisis) 
-- Entry Zone: $[price]-[price] (MTF FVG + LTF Imbalance)  
+- Entry Zone: $[price] (MTF FVG + LTF Imbalance)  
 - SL: $[price] (Below Weekly Swing Low)  
 - TP1: $[price] (Previous Session High)  
 - TP2: $[price] (HTF Equal Highs)  
@@ -79,8 +79,7 @@ IMPORTANT FORMATTING RULES:
 - Use this exact format for trade levels:
   Entry: [price]
   SL: [price]
-  TP1: [price]
-  TP2: [price]
+  TP: [price]
 
 STRICT FILTERING CONDITIONS:
 ----------------------------
@@ -99,12 +98,10 @@ Begin response with ONE of these:
 
 Required format for valid setups:
 ---------------------------------
-🎯 Entry Zone: [price1]-[price2]
-🛑 Stop Loss: [price] 
-🏹 Take Profit: 
-  1. TP1: [price] 
-  2. TP2: [price]
-💹 RR Ratio: [1:x.x]
-🔒 Confidence: [x/5]
+Entry: [price1]
+Stop Loss: [price] 
+Take Profit:[price]
+RR Ratio: [1:x.x]
+Confidence: [x/5]
 
 If no setup meets ALL criteria, respond: "No Edge: Market in Balance"
