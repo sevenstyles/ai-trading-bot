@@ -26,9 +26,9 @@ def main():
     
     # Update the interval values here
     intervals = {
-        '1d': 10,   
-        '4h': 40,   
-        '1h': 100    
+        '1d': 90,   
+        '4h': 180,   
+        '1h': 168    
     }
     
     # Get multi-timeframe data using the symbol from file
