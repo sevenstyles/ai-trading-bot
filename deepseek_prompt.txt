@@ -60,7 +60,7 @@ Example Thought Process Framework:
 - LTF Confirmation: 1H BOS above $[price]
 - Volume Profile: POC @ $[price] (4H FVG Base)  
 - Delta Flow: 2:1 Buyer Dominance
-- Confidence score: [reasoning]
+- Confidence score: [x/5]
 
 Trade Setup:  
 - Institutional Trigger 
@@ -72,21 +72,25 @@ Trade Setup:
 - RR: [1:x.x]
 
 
-STRICT FILTERING CONDITIONS:
+FILTERING CONDITIONS:
 ----------------------------
-1. Reject if <3/5 confidence score
+1. Reject if <3/5 confidence score 
 2. Avoid counter-trend setups without HTF alignment
-3. Require clear institutional footprint
-4. Reject if Daily/4H in Consolidation >3 sessions
+3. Require clear institutional footprint for a higher probability setup
+4. Reject if Daily/4H in Consolidation >3 sessions 
 
 
 IMPORTANT FORMATTING RULES:
 -----------------------
 - Always output price levels as numbers only (e.g. 61250.50)
 
+
 Required format for output:
 ---------------------------------
-Direction: [LONG/SHORT/NO TRADE]
+Timestamp: [timestamp]
+Symbol: [symbol]
+Status: [TRADE/NO TRADE]
+Direction: [LONG/SHORT]
 Entry: [price1]
 SL: [price] 
 TP:[price]
@@ -94,4 +98,4 @@ RR Ratio: [1:x.x]
 Confidence: [x/5]
 Analysis: [detailed analysis]
 
-If no setup meets ALL criteria, respond: "No Edge: Market in Balance"
+If no setup meets criteria for a high probability setup, use 'NO TRADE' as output for Status field.
