@@ -240,18 +240,25 @@ def send_to_deepseek(data, symbol):
             try:
                 response.raise_for_status()
                 full_response = ""
+                buffer = ""
+                in_analysis = False
                 
                 # Process streaming chunks
                 for chunk in response.iter_lines():
                     if chunk:
                         decoded_chunk = chunk.decode('utf-8')
                         
-                        # Handle keep-alive comments and empty lines
-                        if decoded_chunk.startswith(': ') or not decoded_chunk.strip():
+                        # Handle all keep-alive variants and empty lines
+                        if decoded_chunk.startswith(':') or not decoded_chunk.strip():
                             continue
                             
-                        # Handle the [DONE] marker
+                        # Handle [DONE] marker
                         if decoded_chunk.strip() == 'data: [DONE]':
+                            # Process remaining buffer
+                            if buffer:
+                                full_response += buffer
+                                print(buffer, end='', flush=True)
+                                buffer = ""
                             print("\n\nStream completed successfully")
                             continue
                             
@@ -266,12 +273,25 @@ def send_to_deepseek(data, symbol):
                                     
                                 content = json_chunk.get('choices', [{}])[0].get('delta', {}).get('content', '')
                                 if content:
-                                    print(content, end='', flush=True)
-                                    full_response += content
+                                    # Buffer content until we get complete analysis
+                                    buffer += content
+                                    # Print when we detect analysis start
+                                    if "Analysis:" in buffer and not in_analysis:
+                                        in_analysis = True
+                                        print("Analysis: ", end='', flush=True)
+                                    # Flush buffer when we hit newlines
+                                    if '\n' in buffer:
+                                        parts = buffer.split('\n')
+                                        for part in parts[:-1]:
+                                            print(part, end='\n', flush=True)
+                                            full_response += part + '\n'
+                                        buffer = parts[-1]
+                                        
                             except json.JSONDecodeError:
                                 print(f"\nFailed to parse chunk: {decoded_chunk[:100]}")
                         else:
                             print(f"\nUnexpected chunk format: {decoded_chunk[:100]}")
+                            
             except requests.exceptions.ChunkedEncodingError as e:
                 print(f"\nStream connection error: {str(e)}")
                 return None
