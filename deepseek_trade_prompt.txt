@@ -32,6 +32,23 @@ CORE ANALYSIS COMPONENTS:
    - Market Maker Model Patterns (BOS/CHoCH)
    - Retail Trader Cluster Zones
 
+5. Order Book Dynamics:
+   - Hidden Liquidity Clusters (Iceberg Order Detection)
+   - Market Depth Imbalance Thresholds (>3:1 bid/ask ratio)
+   - Large Block Trade Identification (>0.5% of daily volume)
+   - Speed of Market Depth Recovery Post-Liquidation
+
+6. Smart Money Signals:
+   - Failed Retail Breakouts (Spring/Upthrust Patterns)
+   - Volume-Weighted Average Price (VWAP) Deviation Analysis
+   - Options Flow Analysis (Put/Call Ratio Extremes)
+   - Futures Basis Contango/Backwardation Thresholds
+
+7. Algorithmic Confirmation:
+   - Machine Learning Pattern Recognition (3+ confirmed similar institutional footprints)
+   - Fractal Efficiency Ratio (FER) for Trend Quality
+   - Volatility-Weighted Momentum (VWM) Index
+
 
 HIGH PROBABILITY SETUP CRITERIA:
 ---------------------------
@@ -66,7 +83,9 @@ Analysis:
 - TP: $[price] (Previous Session High)  
 - RR: [1:x.x]
 - Confidence score: X/5 (Based on HTF/MTF/LTF analysis) 
-- Analysis: [Analysis]
+- Analysis: [Institutional Order Flow Trading Framework Analysis]
+- Market Depth Status: [Liquid/Thin/Imbalanced]
+- Dark Pool Activity: [High/Medium/Low]
 
 
 FILTERING CONDITIONS:
@@ -75,6 +94,8 @@ FILTERING CONDITIONS:
 2. Avoid counter-trend setups without HTF alignment
 3. Require clear institutional footprint for a higher probability setup
 4. Reject if Daily/4H in Consolidation >3 sessions 
+5. Require >2.5% daily VWAP deviation for high-conviction entries
+8. Confirm with smart money signals
 
 
 IMPORTANT FORMATTING RULES:
@@ -93,5 +114,5 @@ STRICT RESPONSE OUTPUT FORMAT:
 - TP:[price]
 - RR Ratio: [1:x.x]
 - Confidence: [x/5]
-- Analysis: [Institutional Order Flow Trading Framework Analysis]
+- Analysis: [institutional analysis...]
 
