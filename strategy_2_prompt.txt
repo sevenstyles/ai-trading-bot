@@ -68,7 +68,6 @@ RISK MANAGEMENT:
 ----------------------
 - Stop Loss: 
    * Beyond liquidity sweep extreme + 0.3×ATR
-   * Maximum 1.5% account risk
    
 - Take Profit:
    * Full: Opposing liquidity zone
