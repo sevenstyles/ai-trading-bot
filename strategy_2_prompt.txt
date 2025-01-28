@@ -1,0 +1,124 @@
+Forever Model Trading Framework
+======================================================
+
+CORE COMPONENTS:
+----------------------
+1. Liquidity Sweep/Manipulation:
+   - Clear buy/sell side liquidity sweep
+   - Must occur before inverse FVG formation
+   - Validate with volume spike (>2x average)
+
+2. Inverse Fair Value Gap (FVG):
+   - Must form AFTER liquidity sweep
+   - Displacement through inefficiency zone
+   - Minimum 3-candle formation
+   - Validate with 0.5×ATR penetration
+
+3. Structural Change Confirmation:
+   - Change of Character (CHoCH)
+   - Break of Structure (BOS)
+   - Series of 3+ closing candles against trend
+   - Validate with momentum shift (RSI crossover)
+
+4. Smart Money Trap (SMT) [Optional A++]:
+   - Price rejection at key level (>2% wick)
+   - Volume-weighted rejection pattern
+   - Confluence with HTF order block
+
+5. Opposing Liquidity Target:
+   - Minimum 2 equal highs/lows
+   - Internal pool within 1:3 RR ratio
+   - Validate with cluster of 3+ liquidity markers
+
+SETUP CRITERIA (ALL REQUIRED):
+---------------------------
+1. Liquidity Sweep Sequence:
+   - HTF liquidity pool identification
+   - Sweep of recent high/low with weak close
+   - Subsequent pullback into manipulation zone
+
+2. Inverse FVG Formation:
+   - Must displace through inefficiency
+   - Formed in direction of intended trade
+   - Unmitigated FVG from previous move
+
+3. Structural Change:
+   - Close below/above 3 consecutive trend candles
+   - Momentum confirmation (MACD/RSI divergence)
+   - Volume increase on structural break (>1.8x)
+
+4. Liquidity Alignment:
+   - Clear opposing liquidity pool
+   - Minimum 1:3 risk-reward ratio
+   - No intervening liquidity between entry-TP
+
+ENTRY TRIGGERS:
+----------------------
+1. Primary Entry:
+   - Retest of inverse FVG zone
+   - Price reaction at 50% retracement
+   - Confluence with HTF pivot level
+
+2. Secondary Entry:
+   - Break of swing high/low post-FVG
+   - Close beyond 0.25×ATR from trigger candle
+   - Volume confirmation on breakout
+
+RISK MANAGEMENT:
+----------------------
+- Stop Loss: 
+   * Beyond liquidity sweep extreme + 0.3×ATR
+   * Maximum 1.5% account risk
+   
+- Take Profit:
+   * Full: Opposing liquidity zone
+
+- RR Ratio: Minimum 1:3 (measured entry-SL vs entry-TP)
+
+CONFIRMATION FILTERS:
+----------------------
+1. Reject if:
+   - No clear HTF liquidity target
+   - FVG forms before liquidity sweep
+   - Structural change lacks volume confirmation
+   - Price consolidates >3 candles post-trigger
+
+2. Accept only:
+   - Confluence with HTF order block
+   - Momentum aligns with trade direction
+   - Clean sweep of liquidity (no double tops/bottoms)
+
+
+IMPORTANT FORMATTING RULES:
+-----------------------
+- Output price levels as numbers only (e.g. 61250.50)
+
+
+RESPONSE FORMAT:
+----------------------
+- Timestamp: [timestamp]
+- Status: [TRADE/NO TRADE]
+- Direction: [LONG/SHORT]
+- Entry: [price]
+- SL: [price]
+- TP: [price]
+- RR Ratio: [1:x.x]
+- Confidence: [A-F] (A++ = SMT present)
+- Analysis: 
+  1. Liquidity Sweep Level
+  2. Inverse FVG Coordinates
+  3. Structural Break Details
+  4. Liquidity Target
+  5. Volume Anomalies
+  END RESPONSE
+
+EXAMPLE ANALYSIS:
+----------------------
+Analysis:
+- Liquidity Sweep: 42350.75 (Swept 02:15 UTC)
+- Inverse FVG: 42180-42240 (Bearish displacement)
+- Structural Break: 3 consecutive closes below 42215
+- Liquidity Target: 41750-41820 (3 equal lows)
+- Volume Anomaly: 2.4x average on sweep
+- SMT Present: 42320 rejection w/2.8% wick
+END RESPONSE

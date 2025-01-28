@@ -1,0 +1,180 @@
+Institutional Order Flow Trading Framework
+======================================================
+
+CORE ANALYSIS COMPONENTS:
+----------------------
+
+Study the given OHLC and volume data to perform an institutional grade analysis and trade setup:
+
+1. Market Structure Analysis:
+   - Major Structure (Daily/4H)
+     * Valid Break of Structure (BOS) 
+     * Change of Character (CHoCH)
+     * Strong vs Weak Highs/Lows
+     * Equal Highs/Equal Lows
+   - Internal Structure (1H)
+     * Minor BOS/CHoCH patterns
+     * Nested structures
+   - Market Phase Detection:
+     * Impulse: 3+ consecutive strong closes with >1.5% daily range
+     * Retracement: 50-78.6% Fibonacci of Daily impulse
+     * Consolidation: <0.5% daily range for 3 sessions (mark but don't trade)
+     * Volatility Threshold (ATR-based)
+
+2. Premium/Discount Analysis:
+   - Premium Zone (Above 50% Fib)
+     * Sell opportunities in bearish bias
+     * Institutional reference points
+   - Discount Zone (Below 50% Fib) 
+     * Buy opportunities in bullish bias
+     * Institutional reference points
+   - Equilibrium (50% Fib)
+     * Mean threshold validation
+   - Avoid trading in consolidation
+   - Validate with recent liquidity sweep direction
+   - Confirm zone alignment with bigger timeframe FVG
+
+3. Institutional Reference Points (By Priority):
+   a) Old Highs/Lows
+   b) Rejection Blocks
+   c) Order Blocks
+   d) Inverse Fair Value Gaps (Post-Sweep)
+   e) Fair Value Gaps
+   f) Liquidity Voids
+   g) Breaker Blocks
+   h) Mitigation Blocks
+   i) Structural Change Points
+
+4. Liquidity Analysis:
+   - Buy-Side Liquidity
+     * Stop-loss clusters above highs
+     * Buy limit orders at resistance
+   - Sell-Side Liquidity  
+     * Stop-loss clusters below lows
+     * Sell limit orders at support
+   - Liquidity Sweeps
+     * Pre-reversal sweeps
+     * Failed sweeps (SFP)
+
+5. Smart Money Concepts:
+   - Fair Value Gaps (FVG)
+     * Bullish/Bearish imbalances
+     * Mitigation expectations
+   - Order Blocks
+     * Last opposition before reversal
+     * Institutional entry zones
+   - Breaker Blocks
+     * Structure shift validation
+     * Retest opportunities
+   - Liquidity Voids
+     * Displacement moves
+     * Void filling probability
+   - Inverse FVG Patterns:
+     * Must follow liquidity sweep
+     * Should show displacement through inefficiency
+     * Validate with structural change confirmation
+   - SMT Confirmation:
+     * Smart Money Trap confirmation
+     * Volume-weighted price rejection at key levels
+
+6. Algorithmic Confirmation:
+   - Machine Learning Pattern Recognition
+   - Fractal Efficiency Ratio (FER)
+   - Volatility-Weighted Momentum (VWM)
+   - Momentum Divergence Confirmation
+
+HIGH PROBABILITY SETUP CRITERIA:
+---------------------------
+1. Market Structure Alignment:
+   - HTF trend direction
+   - Valid BOS/CHoCH
+   - Strong vs Weak levels
+   - Recent liquidity sweep confirmation
+   - Inverse FVG present in entry zone
+
+2. Premium/Discount Validation:
+   - Buy in discount (bullish bias)
+   - Sell in premium (bearish bias)
+   - Clear from equilibrium
+
+3. Institutional Reference Points:
+   - Minimum 2 reference points aligned
+   - Higher priority points preferred
+   - Clear mitigation potential
+
+4. Liquidity Engineering:
+   - Recent liquidity sweep
+   - Stop cluster density
+   - Clear institutional footprint
+   - Validate opposing liquidity target:
+     * Minimum 2 equal highs/lows
+     * Internal pool within 1:3 RR ratio
+
+5. Smart Money Validation:
+   - Unmitigated FVGs
+   - Valid order blocks
+   - Clear breaker blocks
+   - Identifiable liquidity voids
+
+7. "Forever Model" Validation:
+   - A++ Setup Requirements:
+     * Triple timeframe alignment (Daily/4H/1H)
+     * Confluence of 3+ reference points
+     * Volatility contraction pattern
+
+RISK MANAGEMENT PROTOCOL:
+-------------------------
+- Stop Loss: Beyond liquidity sweep level
+- Take Profit: Based on next reference point
+- Minimum RR: 1:3 ratio (measured from entry to TP vs entry to SL)
+- Validate SL placement:
+  * Beyond recent high/low cluster + 0.5×ATR buffer
+
+
+EXAMPLE ANALYSIS FORMAT:
+---------------------------
+Analysis:
+- Market Structure: [Bullish/Bearish/Consolidation]
+- Premium/Discount: [Zone + Reference Points]
+- Liquidity Status: [Recent Sweeps/Clusters]
+- Smart Money Setup: [Key Reference Points]
+- 'Forever Model': [Sweep + Inverse FVG + Structural Change]
+- Entry Trigger: [Specific Condition]
+- Stop Loss: [Beyond Key Level]
+- Take Profit: [Target Reference Point]
+- RR Ratio: [1:x.x]
+- Confidence: [x/5]
+
+FILTERING CONDITION CONSIDERATIONS:
+----------------------------
+1. Reject if <3/5 confidence score
+2. Avoid counter-trend without HTF alignment
+3. Require minimum 2 reference points
+4. Reject consolidation setups
+5. Wait for clear liquidity sweeps
+6. Confirm premium/discount zones
+7. Validate market structure
+8. Require smart money confirmation
+9. Reject trades without inverse FVG pattern
+10. Require recent structural change confirmation
+
+IMPORTANT FORMATTING RULES:
+-----------------------
+- Output price levels as numbers only (e.g. 61250.50)
+- Include all reference points used
+- Specify premium/discount zones
+
+STRICT RESPONSE OUTPUT FORMAT:
+---------------------------------
+- Timestamp: [timestamp]
+- Status: [TRADE/NO TRADE]
+- Direction: [LONG/SHORT/NO TRADE]
+- Entry: [price]
+- SL: [price] 
+- TP: [price]
+- RR Ratio: [1:x.x]
+- Confidence: [x/5]
+- Analysis: [institutional analysis...]
+
+Note: End 'Analysis' response output with 'END RESPONSE'
+

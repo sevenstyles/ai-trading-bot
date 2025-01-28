@@ -1,1 +1,7 @@
 timestamp,status,direction,entry,sl,tp,rr_ratio,confidence,analysis
+2025-01-28 16:00:00  ,NO TRADE,NO TRADE,,,,,2/5,"Market Structure: Mixed signals (Daily bearish with 1H bullish recovery from 97777.77).  
+Premium/Discount: Discount zone below 50% Fib (103682.88), but price near equilibrium.  
+Liquidity Status: Sweep of 97777.77 liquidity (SFP pattern), no immediate sweep above 103371.24.  
+Smart Money Setup: Unmitigated FVG (101334.55 - 102402.01) and order block at 97777.77, but price trades above key reference points.  
+Entry Trigger: Missing - requires retracement to FVG/order block with RR  1:3.  
+Filter"
