@@ -1,6 +1,6 @@
 Request URL: https://api.deepseek.com/v1/chat/completions
 Status Code: 200
-Headers: {'Server': 'nginx', 'Date': 'Mon, 27 Jan 2025 22:31:33 GMT', 'Content-Type': 'text/event-stream; charset=utf-8', 'Transfer-Encoding': 'chunked', 'Connection': 'keep-alive', 'Set-Cookie': 'HWWAFSESID=0fd21bbaeb76ecf98b; path=/, HWWAFSESTIME=1738017091422; path=/', 'cache-control': 'no-cache', 'vary': 'origin, access-control-request-method, access-control-request-headers', 'access-control-allow-credentials': 'true', 'x-ds-trace-id': 'bdd20f88961bd4fd44f00b379adb59ed', 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload', 'X-Content-Type-Options': 'nosniff'}
+Headers: {'Server': 'nginx', 'Date': 'Tue, 28 Jan 2025 00:50:01 GMT', 'Content-Type': 'text/event-stream; charset=utf-8', 'Transfer-Encoding': 'chunked', 'Connection': 'keep-alive', 'Set-Cookie': 'HWWAFSESTIME=1738025397054; path=/, HWWAFSESID=842eaee0413a095bcb; path=/', 'cache-control': 'no-cache', 'vary': 'origin, access-control-request-method, access-control-request-headers', 'access-control-allow-credentials': 'true', 'x-ds-trace-id': 'bad36334f8d15387222bfd388bdbf296', 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload', 'X-Content-Type-Options': 'nosniff'}
 
 RAW CHUNK: b': keep-alive'
 DECODED: : keep-alive
