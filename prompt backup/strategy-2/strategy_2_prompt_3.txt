@@ -1,0 +1,182 @@
+Forever Model Trading Framework
+======================================================
+
+CORE COMPONENTS:
+----------------------
+1. Liquidity Sweep/Manipulation:
+   - Clear buy/sell side liquidity sweep
+   - Must occur before inverse FVG formation
+   - Volume spike validation (2.5-3x average for high volatility assets)
+   - Maximum sweep formation time (3 candles)
+   - Multiple sweep validation adds strength
+   - Reject if sweep volume exceeds 5x average (potential manipulation)
+
+2. Inverse Fair Value Gap (FVG):
+   - Must form AFTER liquidity sweep
+   - Displacement through inefficiency zone
+   - Minimum size 1.2% of current price
+   - Maximum age 48 hours
+   - Multiple FVG confluence adds strength
+   - Validate with dynamic ATR penetration
+   - Must have minimum 8-12 candle consolidation before FVG at new highs/lows
+
+3. Structural Change Confirmation:
+   - Change of Character (CHoCH)
+   - Break of Structure (BOS)
+   - Volume-weighted price levels
+   - Maximum 12 candles for validation
+   - RSI threshold >65 for bullish, <35 for bearish
+   - Volume progression during formation
+   - Must show bullish/bearish divergence on RSI
+   - MACD histogram must show increasing momentum for 3+ candles
+
+4. Smart Money Trap (SMT) [Optional A++]:
+   - Price rejection at key level (2.5-3% wick)
+   - Volume-weighted rejection pattern
+   - Multiple timeframe trap alignment
+   - Confluence with HTF order block
+   - Volume distribution analysis during trap
+
+5. Opposing Liquidity Target:
+   - Minimum 3 equal highs/lows within 0.5% range
+   - Must form over at least 12 candles
+   - Must have decreasing volume profile
+   - Internal pool within 1:3 RR ratio
+   - Validate with cluster of 3+ liquidity markers
+   - Volume-weighted price levels
+
+SETUP CRITERIA (ALL REQUIRED):
+---------------------------
+1. Liquidity Sweep Sequence:
+   - HTF liquidity pool identification
+   - Sweep of recent high/low with weak close
+   - Subsequent pullback into manipulation zone
+   - Progressive volume increase
+   - Multiple timeframe alignment
+   - Volume cannot exceed 5x average on sweep
+
+2. Inverse FVG Formation:
+   - Must displace through inefficiency
+   - Formed in direction of intended trade
+   - Unmitigated FVG from previous move
+   - Minimum size requirement met
+   - Age requirement met
+   - Requires consolidation period before FVG at new highs/lows
+
+3. Structural Change:
+   - Volume-weighted price levels broken
+   - Momentum confirmation (MACD/RSI thresholds)
+   - Volume increase on structural break (>1.8x but <5x)
+   - Time-based validation window
+   - Multiple timeframe alignment
+   - RSI divergence confirmation
+   - Progressive MACD histogram increase
+
+4. Liquidity Alignment:
+   - Clear opposing liquidity pool
+   - Minimum 1:3 risk-reward ratio
+   - No intervening liquidity between entry-TP
+   - Volume profile confirmation
+   - Must meet enhanced liquidity pool quality criteria
+
+ENTRY TRIGGERS:
+----------------------
+1. Primary Entry:
+   - Retest of inverse FVG zone
+   - Price reaction at 50% retracement
+   - Confluence with HTF pivot level
+   - Volume threshold met at entry (1.8-5x average)
+   - Multiple timeframe confirmation
+   - Maximum 6 candles for trigger
+   - Minimum 3 aligned 15m candles before 4H entry
+   - Higher volume thresholds during Asian sessions
+
+2. Secondary Entry:
+   - Break of swing high/low post-FVG
+   - Close beyond dynamic ATR from trigger
+   - Volume confirmation on breakout
+   - Lower timeframe momentum aligned
+   - Clean price action (no opposing wicks)
+   - Must meet all primary entry criteria
+
+RISK MANAGEMENT:
+----------------------
+- Stop Loss: 
+   * Beyond liquidity sweep extreme + (1.8×ATR for high volatility)
+   * Dynamic adjustment based on volatility
+   * Maximum stop size: 2.5x current ATR
+   * Reject trade if required stop exceeds maximum
+
+- Take Profit:
+   * Full: Opposing liquidity zone
+   * Must have quality liquidity pool criteria met
+
+- RR Ratio: Minimum 1:3 (measured entry-SL vs entry-TP)
+
+CONFIRMATION FILTERS:
+----------------------
+1. Reject if:
+   - No clear HTF liquidity target
+   - FVG forms before liquidity sweep
+   - Structural change lacks volume confirmation
+   - Price consolidates >3 candles post-trigger
+   - Volume decreases over 3+ consecutive candles
+   - Structural break isn't confirmed with volume
+   - ATR > 3.5% of current price (volatility filter)
+   - Against major support/resistance levels
+   - Higher timeframe trend misalignment
+   - Volume spike exceeds 5x average
+   - Stop loss exceeds 2.5x current ATR
+   - No minimum consolidation period at new highs/lows
+   - Entry during low liquidity periods without volume confirmation
+   - Liquidity pool quality criteria not met
+   - No RSI divergence confirmation
+   - MACD histogram not showing progressive increase
+   - Lower timeframe (15m) misalignment
+
+2. Accept only:
+   - Multiple timeframe trend alignment (4H and 15m minimum)
+   - Momentum aligns with trade direction
+   - Clean sweep of liquidity
+   - Volume progression is healthy (1.8-5x average)
+   - No HTF resistance/support between entry-TP
+   - Volatility within acceptable range
+   - VWAP alignment with trade direction
+   - Quality liquidity pool formation
+   - Clear RSI divergence
+   - Progressive MACD histogram
+   - Minimum 3 aligned 15m candles
+   - Proper consolidation period at new highs/lows
+
+IMPORTANT FORMATTING RULES:
+-----------------------
+- Output price levels as numbers only (e.g. 61250.50)
+
+RESPONSE FORMAT:
+----------------------
+- Timestamp: [timestamp]
+- Status: [TRADE/NO TRADE]
+- Direction: [LONG/SHORT]
+- Entry: [price]
+- SL: [price]
+- TP: [price]
+- RR Ratio: [1:x.x]
+- Confidence: [A-F] (A++ = SMT present)
+- Analysis: 
+  1. Liquidity Sweep Level
+  2. Inverse FVG Coordinates
+  3. Structural Break Details
+  4. Liquidity Target
+  5. Volume Anomalies
+  END RESPONSE
+
+EXAMPLE ANALYSIS:
+----------------------
+Analysis:
+- Liquidity Sweep: 42350.75 (Swept 02:15 UTC)
+- Inverse FVG: 42180-42240 (Bearish displacement)
+- Structural Break: Volume-weighted break below 42215
+- Liquidity Target: 41750-41820 (3 equal lows)
+- Volume Anomaly: 2.8x average on sweep, progressive increase
+- SMT Present: 42320 rejection w/2.8% wick
+END RESPONSE
