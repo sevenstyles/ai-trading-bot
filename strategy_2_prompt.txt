@@ -89,7 +89,6 @@ ENTRY TRIGGERS:
    - Confluence with HTF pivot level
    - Volume threshold met at entry (1.8-5x average)
    - Multiple timeframe confirmation
-   - Maximum 6 candles for trigger
    - Minimum 3 aligned 15m candles before 4H entry
    - Higher volume thresholds during Asian sessions
    - Entry Method: Limit order at FVG zone OR Market order on confirmation
@@ -161,7 +160,7 @@ RESPONSE FORMAT:
 ----------------------
 - Timestamp: [timestamp]
 - Status: [TRADE/NO TRADE]
-- Direction: [LONG/SHORT]
+- Direction: [LONG/SHORT/NO TRADE]
 - Entry: [price]
 - SL: [price]
 - TP: [price]

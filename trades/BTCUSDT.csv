@@ -11,3 +11,42 @@ Premium/Discount: Premium Zone (current price above 50% Fib @101,054.50, aligned
 Liquidity Status: Recent sweep of 100,272.68 lows (SFP) with consolidation retracement into premium zone.  
 Smart Money Setup: Inverse FVG formed after liquidity sweep (100,272.68  102,082.83), unmitigated 4H bearish order block at 105,865.22.  
 Entry Trigger: Price rejection at 102,319.69 (re"
+2025-01-29 15:00:00  ,NO TRADE,NO TRADE,,,,,3/5,"**Market Structure**: Bullish on HTF (daily) but showing signs of consolidation (narrow 1.5% daily range on 2025-01-29). Recent CHoCH confirmed at 101331.57 (2025-01-20) with recovery, but price now tests equilibrium near 50% Fib (104459.50).  
+**Premium/Discount**: Price at 102598.01 sits in *discount zone* relative to the 109588.0 high, but near structural equilibrium.  
+**Liquidity Status**: Sweep of 109588.0 (2025-01-20) followed by pullback; clusters near 100272.68 (2025-01-28 low) act as s"
+2025-01-29 15:00:00  ,TRADE,SHORT,102535.93,103300.00,99422.34,1:3.2,4/5,"Market Structure: Bullish HTF trend showing pullback signs with 4H CHoCH below 102853.53.  
+Premium/Discount: Premium Zone (above 99422.34 Fib 50%) aligned with bearish rejection.  
+Liquidity Status: Recent sweep of 109588 liquidity, stop clusters above 102853.53.  
+Smart Money Setup: Unmitigated FVG (102800-103800), rejection block at 102853.53, breaker block retest.  
+Entry Trigger: Price rejection at 102853.53 with bearish 15m close below 102535.  
+Stop Loss: Beyond liquidity cluster + ATR bu"
+2025-01-29 19:45:00  ,NO TRADE,SHORT,,,,,,"1. **Liquidity Sweep Level**: Recent swing high at 103000.0 (2025-01-29 19:00 4H) with moderate volume (1.6x 4H average)  
+  2. **Inverse FVG Coordinates**: No valid FVG formed post-sweep (last displacement lacks clear inefficiency zone)  
+  3. **Structural Break Details**: Failed BOS confirmation - price rejected at 103000.0 without volume surge (<1.5x average)  
+  4. **Liquidity Target**: Opposing pool at 104500-105000 (3 tests 2025-01-25 to 2025-01-27) but exceeds 1:3 RR from current levels"
+2025-01-29 19:00:00  ,NO TRADE,NO TRADE,,,,,,"1. **Liquidity Sweep Level**: Previous HTF sweep at 109588.0 (2025-01-20) with 5.7x average volume (manipulation flagged)  
+  2. **Inverse FVG Coordinates**: No valid FVG formed within 48 hours of potential sweep  
+  3. **Structural Break Details**: No recent BOS/CHoCH; RSI neutral (49.8), MACD histogram flat  
+  4. **Liquidity Target**: No qualifying opposing pool (insufficient equal highs/lows)  
+  5. **Volume Anomalies**: Sweep volume exceeded 5x average (rejection criteria)  
+  6. **SMT Deta"
+2025-01-29 19:00:00  ,NO TRADE,NO TRADE,,,,,,"1. **Liquidity Sweep Level**: Suspected sweep at 109588.0 (Jan 20) but volume spike (89,529) exceeded 5x average (~10k-20k), triggering rejection.  
+  2. **Inverse FVG Coordinates**: No valid FVG identified post-sweep due to manipulation criteria breach.  
+  3. **Structural Break Details**: Post-sweep price decline lacked volume confirmation (latest daily volume: 4,113 vs. required >1.8x).  
+  4. **Liquidity Target**: No opposing liquidity pool with 3 equal highs/lows within 0.5% range.  
+  5. *"
+2025-01-30 09:15:00  ,NO TRADE,NO TRADE,,,,,,"1. **Liquidity Sweep Level**: 99550.00 (Swept 2025-01-20)  
+  2. **Inverse FVG Coordinates**: FVG formed post-sweep (102260-109588) but exceeds 48-hour age limit  
+  3. **Structural Break Details**: Volume-confirmed break but FVG invalid due to age  
+  4. **Liquidity Target**: 107000.00 zone (prior HTF high)  
+  5. **Volume Anomalies**: Sweep volume 3.2x average (acceptable)  
+  6. **SMT Details**: None identified  
+  7. **Entry Method Reasoning**: FVG retest invalidated by age  
+  8. **Timefram"
+2025-01-30 09:00:00  ,NO TRADE,NO TRADE,,,,,,"1. Liquidity Sweep Level: 109588.0 (20-Jan sweep, 3.2x avg volume)  
+2. Inverse FVG Coordinates: No valid recent FVG (last FVG >48hrs old)  
+3. Structural Break Details: No volume-confirmed break - consolidation pattern post-sweep  
+4. Liquidity Target: 101820-102000 zone lacks equal lows criteria  
+5. Volume Anomalies: Sweep volume acceptable (3.2x), but post-FVG volume decay present  
+6. SMT Details: None confirmed (largest wick 1.8% at 24-Jan high)  
+7. Entry Method Reasoning: FVG age invalid"

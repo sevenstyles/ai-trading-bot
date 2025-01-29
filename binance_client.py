@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import json
 import csv
 import re
+import time
 
 class BinanceClient:
     def __init__(self):
@@ -47,8 +48,6 @@ class BinanceClient:
         end_time = self._read_end_date()
         if end_time:
             params['endTime'] = end_time
-            human_time = datetime.fromtimestamp(end_time/1000).strftime('%Y-%m-%d %H:%M:%S')
-            print(f"\nDEBUG: Fetching {limit} candles ending at {human_time} (UTC)")
 
         return self._send_request(endpoint, params)
     
@@ -118,7 +117,7 @@ class BinanceClient:
             sl_match = re.search(r"SL: ([\d\.]+)", clean_text)
             tp_match = re.search(r"TP: ([\d\.]+)", clean_text)
             rr_match = re.search(r"RR Ratio: (1:[\d\.]+)", clean_text)
-            confidence_match = re.search(r"Confidence: ([\d/5]+)", clean_text)
+            confidence_match = re.search(r"Confidence: ([A-F]+\+*)", clean_text)
 
             # Update CSV fieldnames and data
             fieldnames = [
@@ -174,170 +173,120 @@ class BinanceClient:
             print(f"CSV save error: {str(e)}")
 
 def send_to_deepseek(data, symbol):
-    """Send formatted OHLC data to DeepSeek API with full response logging"""
+    """Send formatted OHLC data to DeepSeek API"""
     load_dotenv()
     api_key = os.getenv('DEEPSEEK_API_KEY')
     
     if not api_key:
-        print("Error: Missing DEEPSEEK_API_KEY in environment variables")
-        return None
+        raise Exception("Missing DEEPSEEK_API_KEY in environment variables")
 
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key}"
     }
     
-    try:
-        # Validate data before sending
-        if not data or not any(data.values()):
-            print("Error: Empty or invalid OHLC data provided to DeepSeek")
-            return None
+    max_retries = 3
+    retry_delay = 15
+    retries = 0
 
-        # Read prompt template
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        prompt_path = os.path.join(current_dir, 'strategy_2_prompt.txt')
-        
-        with open(prompt_path, 'r', encoding='utf-8') as f:
-            system_prompt = f.read().strip()
-            
-        # Format data payload with abbreviated fields
-        formatted = []
-        for tf, candles in data.items():
-            if not candles:
-                print(f"Warning: Empty candles for {tf} timeframe")
-                continue
-                
-            # Use abbreviated field names: t=timestamp, o=open, h=high, l=low, c=close, v=volume
-            tf_data = "\n".join([f"t:{c['timestamp']} o:{c['open']} h:{c['high']} l:{c['low']} c:{c['close']} v:{c['volume']}"
-                                for c in candles])
-            formatted.append(f"{tf}:\n{tf_data}")
+    while retries < max_retries:
+        try:
+            if not data or not any(data.values()):
+                raise Exception("Empty or invalid OHLC data provided to DeepSeek")
 
-        if not formatted:
-            print("Error: No valid data to send to DeepSeek")
-            return None
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            prompt_path = os.path.join(current_dir, 'strategy_2_prompt.txt')
             
-        data_str = "\n\n".join(formatted)
-        
-        # Update payload to enable streaming
-        payload = {
-            "model": "deepseek-reasoner",
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Analyze this market data:\n{data_str}"}
-            ],
-            "temperature": 0.3,
-            "max_tokens": 1000,
-            "stream": True  # Add this line to enable streaming
-        }
+            with open(prompt_path, 'r', encoding='utf-8') as f:
+                system_prompt = f.read().strip()
+            
+            formatted = []
+            for tf, candles in data.items():
+                if not candles:
+                    continue
+                    
+                tf_data = "\n".join([f"t:{c['timestamp']} o:{c['open']} h:{c['high']} l:{c['low']} c:{c['close']} v:{c['volume']}"
+                                    for c in candles])
+                formatted.append(f"{tf}:\n{tf_data}")
 
-        # Create debug directory and file
-        os.makedirs('debug', exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        debug_filename = f"debug/deepseek_response_full_{timestamp}.txt"
-        
-        with open(debug_filename, 'w', encoding='utf-8') as debug_file:
-            print(f"\nStarting DeepSeek analysis stream (debug log: {debug_filename}):")
+            if not formatted:
+                raise Exception("No valid data to send to DeepSeek")
             
-            # Make streaming request
+            data_str = "\n\n".join(formatted)
+            
+            payload = {
+                "model": "deepseek-reasoner",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Analyze this market data:\n{data_str}"}
+                ],
+                "temperature": 0.3,
+                "max_tokens": 1000,
+                "stream": True
+            }
+
             with requests.post(
                 "https://api.deepseek.com/v1/chat/completions",
                 json=payload,
                 headers=headers,
                 stream=True
             ) as response:
-                try:
-                    response.raise_for_status()
-                    full_response = ""
-                    buffer = ""
-                    in_analysis = False
-                    
-                    debug_file.write(f"Request URL: {response.url}\n")
-                    debug_file.write(f"Status Code: {response.status_code}\n")
-                    debug_file.write(f"Headers: {dict(response.headers)}\n\n")
-                    
-                    # Process streaming chunks
-                    for chunk in response.iter_lines():
-                        debug_file.write(f"RAW CHUNK: {chunk}\n")
+                response.raise_for_status()
+                full_response = ""
+                buffer = ""
+                in_analysis = False
+                
+                for chunk in response.iter_lines():
+                    if chunk:
+                        decoded_chunk = chunk.decode('utf-8')
                         
-                        if chunk:
-                            decoded_chunk = chunk.decode('utf-8')
-                            debug_file.write(f"DECODED: {decoded_chunk}\n")
+                        if decoded_chunk.startswith(':') or not decoded_chunk.strip():
+                            continue
                             
-                            # Handle keep-alive and empty lines
-                            if decoded_chunk.startswith(':') or not decoded_chunk.strip():
-                                continue
-                                
-                            # Handle [DONE] marker
-                            if decoded_chunk.strip() == 'data: [DONE]':
-                                # Process remaining buffer
-                                if buffer:
-                                    full_response += buffer
-                                    print(buffer, end='', flush=True)
-                                    buffer = ""
-                                print("\n\nStream completed successfully")
-                                debug_file.write("\n[STREAM COMPLETED]\n")
-                                continue
-                                
-                            if decoded_chunk.startswith("data: "):
-                                try:
-                                    json_chunk = json.loads(decoded_chunk[6:])
-                                    debug_file.write(f"PARSED JSON: {json_chunk}\n")
+                        if decoded_chunk.strip() == 'data: [DONE]':
+                            if buffer:
+                                full_response += buffer
+                                print(buffer, end='', flush=True)
+                                buffer = ""
+                            continue
+                            
+                        if decoded_chunk.startswith("data: "):
+                            try:
+                                json_chunk = json.loads(decoded_chunk[6:])
+                                content = json_chunk.get('choices', [{}])[0].get('delta', {}).get('content', '')
+                                if content:
+                                    buffer += content
                                     
-                                    # Check for API errors
-                                    if 'error' in json_chunk:
-                                        error_msg = f"\nAPI Error: {json_chunk['error'].get('message', 'Unknown error')}"
-                                        print(error_msg)
-                                        debug_file.write(f"ERROR: {error_msg}\n")
-                                        return None
+                                    if "Analysis:" in buffer and not in_analysis:
+                                        in_analysis = True
+                                        print("Analysis: ", end='', flush=True)
                                         
-                                    content = json_chunk.get('choices', [{}])[0].get('delta', {}).get('content', '')
-                                    if content:
-                                        buffer += content
-                                        debug_file.write(f"CONTENT BUFFER: {buffer}\n")
+                                    if '\n' in buffer:
+                                        parts = buffer.split('\n')
+                                        for part in parts[:-1]:
+                                            print(part, end='\n', flush=True)
+                                            full_response += part + '\n'
+                                        buffer = parts[-1]
                                         
-                                        if "Analysis:" in buffer and not in_analysis:
-                                            in_analysis = True
-                                            print("Analysis: ", end='', flush=True)
-                                            debug_file.write("[ANALYSIS START DETECTED]\n")
-                                            
-                                        if '\n' in buffer:
-                                            parts = buffer.split('\n')
-                                            for part in parts[:-1]:
-                                                print(part, end='\n', flush=True)
-                                                full_response += part + '\n'
-                                            buffer = parts[-1]
-                                            debug_file.write(f"FLUSHED BUFFER: {parts[:-1]}\n")
-                                            
-                                except json.JSONDecodeError:
-                                    error_msg = f"\nFailed to parse chunk: {decoded_chunk[:100]}"
-                                    print(error_msg)
-                                    debug_file.write(f"PARSE ERROR: {error_msg}\n")
-                            else:
-                                error_msg = f"\nUnexpected chunk format: {decoded_chunk[:100]}"
-                                print(error_msg)
-                                debug_file.write(f"UNEXPECTED CHUNK: {error_msg}\n")
-                                
-                except Exception as e:
-                    error_msg = f"\nStream error: {str(e)}"
-                    print(error_msg)
-                    debug_file.write(f"STREAM ERROR: {error_msg}\n")
-                    return None
+                            except json.JSONDecodeError:
+                                raise Exception(f"Failed to parse chunk: {decoded_chunk[:100]}")
 
-            # Save final analysis after stream
-            debug_file.write(f"\nFULL RESPONSE: {full_response}\n")
-            
-            # Save full response after stream completes
-            analysis_text = full_response.strip()
-            if analysis_text:
-                BinanceClient().save_trade_to_csv(symbol, analysis_text)
+                analysis_text = full_response.strip()
+                if analysis_text:
+                    BinanceClient().save_trade_to_csv(symbol, analysis_text)
+                else:
+                    print("Empty analysis content")
+                
+                return analysis_text
+
+        except Exception as e:
+            print(f"Attempt {retries + 1} failed: {str(e)[:200]}")
+            retries += 1
+            if retries < max_retries:
+                time.sleep(retry_delay)
             else:
-                print("\nWarning: Empty analysis content in stream")
-            
-            return analysis_text
-        
-    except Exception as e:
-        print(f"DeepSeek API Error: {str(e)[:200]}")
-        return None
+                print("Max retries exceeded")
+                return None
 
 def get_trading_pair():
     """Read trading pair from text file"""
