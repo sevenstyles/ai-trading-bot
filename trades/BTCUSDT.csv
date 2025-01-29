@@ -5,3 +5,9 @@ Liquidity Status: Sweep of 97777.77 liquidity (SFP pattern), no immediate sweep 
 Smart Money Setup: Unmitigated FVG (101334.55 - 102402.01) and order block at 97777.77, but price trades above key reference points.  
 Entry Trigger: Missing - requires retracement to FVG/order block with RR  1:3.  
 Filter"
+2025-01-29 15:45:00  ,NO TRADE,NO TRADE,,,,,2/5,"Market Structure: Bearish (HTF lower highs at 109588 > 107240 > 105286, weak recovery into Discount Zone). Premium/Discount: Price in Discount Zone (101996.15 < 103682.88 Fib 50%), but lacks bullish structural confirmation. Liquidity Status: Recent sweep of 97777.77 (SFP) but no clear buy-side liquidity cluster above. Smart Money Setup: Inverse FVG post-sweep exists, but unmitigated 4H FVG resistance (102000-103000) and bearish order blocks at 105000-107120. Entry Trigger: No valid BOS/CHoCH on"
+2025-01-29 15:45:00  ,TRADE,SHORT,102319.69,103000.00,97335.13,1:3.3,4/5,"Market Structure: Bearish (Daily/4H BOS with lower highs, confirmed by 4H breakdown below 100k).  
+Premium/Discount: Premium Zone (current price above 50% Fib @101,054.50, aligned with HTF bearish bias).  
+Liquidity Status: Recent sweep of 100,272.68 lows (SFP) with consolidation retracement into premium zone.  
+Smart Money Setup: Inverse FVG formed after liquidity sweep (100,272.68  102,082.83), unmitigated 4H bearish order block at 105,865.22.  
+Entry Trigger: Price rejection at 102,319.69 (re"
