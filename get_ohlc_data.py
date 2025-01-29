@@ -20,9 +20,9 @@ def main():
     client = BinanceClient()
     print("Fetching OHLC data...")
     
-    # Read trading pair from file
+    # Read trading pairs from file
     with open('trade_pair.txt', 'r') as f:
-        symbol = f.read().strip().upper()  # Read and sanitize the symbol
+        symbols = [line.strip().upper() for line in f.readlines()]  # Read all symbols into a list
     
     # Update the interval values here
     intervals = {
@@ -31,28 +31,31 @@ def main():
         '15m': 100    
     }
     
-    # Get multi-timeframe data using the symbol from file
-    ohlc_data, start_suffix = client.get_multi_timeframe_data(symbol, intervals)  # Unpack the tuple
-    
-    if ohlc_data:
-        # Create ohlc-data directory
-        os.makedirs('ohlc-data', exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Process each symbol
+    for symbol in symbols:
+        print(f"\nProcessing {symbol}...")
+        # Get multi-timeframe data using the symbol from file
+        ohlc_data, start_suffix = client.get_multi_timeframe_data(symbol, intervals)  # Unpack the tuple
         
-        # Save each timeframe's data
-        for timeframe, data in ohlc_data.items():
-            filename = os.path.join('ohlc-data', f"ohlc_{symbol}_{timeframe}{start_suffix}_{timestamp}.json")
-            print(f"Saving {len(data)} {timeframe} candles to {filename}")
+        if ohlc_data:
+            # Create ohlc-data directory
+            os.makedirs('ohlc-data', exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             
-            with open(filename, 'w') as f:
-                json.dump(data, f, indent=2)
-        
-        # Send to DeepSeek
-        deepseek_response = send_to_deepseek(ohlc_data, symbol)
-        if deepseek_response:
-            print("Received DeepSeek analysis")
-    else:
-        print("Failed to retrieve data")
+            # Save each timeframe's data
+            for timeframe, data in ohlc_data.items():
+                filename = os.path.join('ohlc-data', f"ohlc_{symbol}_{timeframe}{start_suffix}_{timestamp}.json")
+                print(f"Saving {len(data)} {timeframe} candles to {filename}")
+                
+                with open(filename, 'w') as f:
+                    json.dump(data, f, indent=2)
+            
+            # Send to DeepSeek
+            deepseek_response = send_to_deepseek(ohlc_data, symbol)
+            if deepseek_response:
+                print("Received DeepSeek analysis")
+        else:
+            print(f"Failed to retrieve data for {symbol}")
 
 if __name__ == "__main__":
     main()

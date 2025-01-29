@@ -1,8 +1,0 @@
-timestamp,status,direction,entry,sl,tp,rr_ratio,confidence,analysis
-2025-01-30 09:30:00,NO TRADE,NO TRADE,,,,,D,"1. Liquidity Sweep Level: 0.7411 (Swept 2025-01-29 07:00 UTC)
-  2. Inverse FVG Coordinates: No valid FVG formed post-sweep
-  3. Structural Break Details: Price rejected at 0.7411 but lacks volume-confirmed BOS
-  4. Liquidity Target: No quality opposing pool meeting 3 equal highs/lows criteria
-  5. Volume Anomalies: Sweep volume 9.19M (4H) exceeds 5x average (4H avg ~1.8M)
-  6. SMT Details: Present at 0.7411 (3.9% wick) but invalidated by excessive volume
-  7. Entry Method Reasoning: Rejected due"

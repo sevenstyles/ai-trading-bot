@@ -1,9 +1,0 @@
-timestamp,status,direction,entry,sl,tp,rr_ratio,confidence,analysis
-2025-01-30 09:30:00  ,NO TRADE,NO TRADE,,,,,D,"1. Liquidity Sweep Level: 0.9018 (Swept 2025-01-30 06:30 UTC)  
-  2. Inverse FVG Coordinates: N/A (Rejected setup)  
-  3. Structural Break Details: Failed validation - volume spike exceeded 5x average on sweep  
-  4. Liquidity Target: 0.9018-0.9079 cluster  
-  5. Volume Anomalies: 12.06M volume at sweep (6x 15m average)  
-  6. SMT Details: 2.9% wick at 0.9018 but invalidated by excessive volume  
-  7. Entry Method Reasoning: Rejected due to volume-based disqualification  
-  8. Timeframe Alignmen"

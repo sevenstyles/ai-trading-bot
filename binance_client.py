@@ -189,6 +189,18 @@ def send_to_deepseek(data, symbol):
     retry_delay = 15
     retries = 0
 
+    # Add timeframe label mapping
+    timeframe_labels = {
+        '1m': '1 minute',
+        '5m': '5 minute', 
+        '15m': '15 minute',
+        '30m': '30 minute',
+        '1h': '1 hour',
+        '4h': '4 hour',
+        '1d': '1 day',
+        '1w': '1 week'
+    }
+
     while retries < max_retries:
         try:
             if not data or not any(data.values()):
@@ -205,9 +217,12 @@ def send_to_deepseek(data, symbol):
                 if not candles:
                     continue
                     
+                # Get human-readable timeframe label
+                label = timeframe_labels.get(tf, tf)  # Default to raw value if not found
+                
                 tf_data = "\n".join([f"t:{c['timestamp']} o:{c['open']} h:{c['high']} l:{c['low']} c:{c['close']} v:{c['volume']}"
                                     for c in candles])
-                formatted.append(f"{tf}:\n{tf_data}")
+                formatted.append(f"{label}:\n{tf_data}")  # Add label before data
 
             if not formatted:
                 raise Exception("No valid data to send to DeepSeek")
@@ -289,48 +304,55 @@ def send_to_deepseek(data, symbol):
                 return None
 
 def get_trading_pair():
-    """Read trading pair from text file"""
+    """Read trading pairs from text file"""
     try:
         file_path = os.path.join(os.path.dirname(__file__), 'trade_pair.txt')
-        with open(file_path, 'r') as f:
+        valid_pairs = []
+        with open(file_path, 'r', encoding='utf-8-sig') as f:
+            # Read lines while preserving order and handling empty lines
             for line in f:
-                clean_line = line.split('#')[0].strip()  # Handle inline comments
+                # Remove BOM if present and clean the line
+                clean_line = line.lstrip('\ufeff').split('#')[0].strip()
                 if clean_line:
-                    if not clean_line.isalpha():
-                        print(f"Error: Invalid characters in pair '{clean_line}'")
-                        exit(1)
-                    return clean_line.upper()
-            print("Error: Empty trade_pair.txt")
+                    # Validate symbol format
+                    if re.fullmatch(r'^[A-Z0-9]{5,20}$', clean_line):
+                        valid_pairs.append(clean_line)
+                    else:
+                        print(f"Invalid symbol format: {clean_line}")
+
+        if not valid_pairs:
+            print("Error: No valid pairs in trade_pair.txt")
             exit(1)
+            
+        return valid_pairs
     except FileNotFoundError:
         print("Error: Missing binance_data/trade_pair.txt")
         exit(1)
 
 if __name__ == "__main__":
     client = BinanceClient()
-    symbol = get_trading_pair()
+    symbols = get_trading_pair()  # Now returns a list
     intervals = {
         '1d': 10,
         '4h': 10,
         '1h': 10
     }
     
-    multi_data, end_suffix = client.get_multi_timeframe_data(symbol, intervals)
-    
-    if multi_data:
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        # Create ohlc-data directory
-        os.makedirs('ohlc-data', exist_ok=True)
+    for symbol in symbols:
+        print(f"\n{'='*40}\nProcessing {symbol}\n{'='*40}")
+        multi_data, end_suffix = client.get_multi_timeframe_data(symbol, intervals)
         
-        for timeframe, data in multi_data.items():
-            filename = os.path.join('ohlc-data', f"ohlc_{symbol}_{timeframe}{end_suffix}_{timestamp}.json")
-            print(f"\nSaving {len(data)} {timeframe} candles to {filename}")
-            with open(filename, 'w') as f:
-                json.dump(data, f, default=str, indent=2)
-        
-        response = send_to_deepseek(multi_data, symbol)
-        if response:
-            print("DeepSeek response:", response)
-            # Get symbol from data (first timeframe's first candle)
-            symbol = get_trading_pair()  # Get symbol from trade_pair.txt
-            BinanceClient().save_trade_to_csv(symbol, response) 
+        if multi_data:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            os.makedirs('ohlc-data', exist_ok=True)
+            
+            for timeframe, data in multi_data.items():
+                filename = os.path.join('ohlc-data', f"ohlc_{symbol}_{timeframe}{end_suffix}_{timestamp}.json")
+                print(f"\nSaving {len(data)} {timeframe} candles to {filename}")
+                with open(filename, 'w') as f:
+                    json.dump(data, f, default=str, indent=2)
+            
+            response = send_to_deepseek(multi_data, symbol)
+            if response:
+                print("DeepSeek response:", response)
+                BinanceClient().save_trade_to_csv(symbol, response) 
