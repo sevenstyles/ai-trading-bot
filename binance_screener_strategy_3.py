@@ -85,7 +85,7 @@ class SupplyDemandScanner:
     def is_retracing(self, df):
         """Check if price is retracing after a strong move"""
         try:
-            # Modified to allow extreme retracements near swing points
+            # Modified to allow shallower retracements
             recent_data = df.tail(10)
             current_price = df['close'].iloc[-1]
             
@@ -93,10 +93,10 @@ class SupplyDemandScanner:
             swing_high = recent_data['high'].max()
             swing_low = recent_data['low'].min()
             
-            # Allow retracements up to 90% from swing point
+            # Allow retracements up to 15% from swing point
             valid_retracement = (
-                current_price <= swing_high * 0.9 or  # 10% below swing high
-                current_price >= swing_low * 1.1      # 10% above swing low
+                current_price <= swing_high * 0.85 or  # 15% retracement
+                current_price >= swing_low * 1.15      # 15% retracement
             )
             
             return valid_retracement
@@ -166,84 +166,112 @@ class SupplyDemandScanner:
         print(f"First candle time: {df.index[0]} | Last candle time: {df.index[-1]}")
         return df
 
+    def calculate_atr(self, df, period=14):
+        """Calculate Average True Range with pandas compatibility"""
+        try:
+            high_low = df['high'].values - df['low'].values
+            high_close = np.abs(df['high'].values - df['close'].shift().values)
+            low_close = np.abs(df['low'].values - df['close'].shift().values)
+            
+            true_range = pd.Series(np.maximum.reduce([high_low, high_close, low_close]))
+            return true_range.rolling(period).mean()
+        except Exception as e:
+            print(f"ATR calculation error: {str(e)}")
+            return pd.Series(np.zeros(len(df)))
+
     def detect_zones(self, df):
-        """Detect supply and demand zones with accuracy rules"""
-        # Add recency filter to only look at last 100 candles
-        df = df.iloc[-100:] if len(df) > 100 else df
-        original_index = df.index
-        df = df.reset_index()
-        
-        # Calculate candle characteristics
-        df['body_size'] = abs(df['close'] - df['open'])
-        df['upper_wick'] = df['high'] - df[['open', 'close']].max(axis=1)
-        df['lower_wick'] = df[['open', 'close']].min(axis=1) - df['low']
-        
-        supply_zones = []
-        demand_zones = []
-        
-        for i in range(1, len(df)-1):
-            # Remove dynamic lookback and volume confirmation
-            is_strong_push = df['body_size'].iloc[i] > df['body_size'].iloc[i-5:i].mean() * 0.9
+        """Final sensitivity adjustments"""
+        try:
+            # Store original timestamps as a separate series
+            original_index = df.index
+            df = df.reset_index(drop=True)
+            df['original_timestamp'] = original_index
             
-            # Modified condition (remove volume_above_avg check)
-            if is_strong_push:  # Simplified condition
-                # Supply zone (bearish push down)
-                if df['close'].iloc[i] < df['low'].iloc[i-1]:
-                    # Accuracy zone check
-                    if df['low'].iloc[i] < df['low'].iloc[i+1]:
-                        zone = {
-                            'high': df['high'].iloc[i],
-                            'low': df['close'].iloc[i],
-                            'type': 'accuracy',
-                            'index': i
-                        }
-                    else:
-                        zone = {
-                            'high': df['high'].iloc[i],
-                            'low': df['low'].iloc[i],
-                            'type': 'normal',
-                            'index': i
-                        }
-                    # Moved wick validation inside zone creation block
-                    candle_body = abs(df['close'].iloc[i] - df['open'].iloc[i])
-                    wick_size = df['high'].iloc[i] - df['low'].iloc[i] - candle_body
-                    if zone['type'] == 'accuracy' and wick_size < candle_body * 0.5:
-                        continue  # Skip this zone if wick criteria not met
-                    zone['tapped'] = self.is_zone_tapped(df, zone)
-                    zone['strength'] = self.calculate_zone_strength(df, zone)
-                    supply_zones.append(zone)
+            # Existing calculations and filters...
+            df['body_size'] = abs(df['close'] - df['open'])
+            df['upper_wick'] = df['high'] - df[['open', 'close']].max(axis=1)
+            df['lower_wick'] = df[['open', 'close']].min(axis=1) - df['low']
+            
+            # Reset index after each filter operation
+            print(f"Initial candles: {len(df)}")
+            df = df[df['volume'] > df['volume'].rolling(20).mean() * 0.8].reset_index(drop=True)
+            print(f"After volume filter: {len(df)}")
+            atr = self.calculate_atr(df, 14)
+            df = df[df['body_size'] > atr * 0.5].reset_index(drop=True)
+            print(f"After ATR filter: {len(df)}")
+
+            zones = []
+            # Add bounds check for loop range
+            for i in range(2, min(len(df)-3, 1000)):  # Dynamic range calculation
+                current = df.iloc[i]
+                prev1 = df.iloc[i-1]
+                next1 = df.iloc[i+1]
                 
-                # Demand zone (bullish push up)
-                elif df['close'].iloc[i] > df['high'].iloc[i-1]:
-                    # Accuracy zone check
-                    if df['high'].iloc[i] > df['high'].iloc[i+1]:
-                        zone = {
-                            'high': df['open'].iloc[i],
-                            'low': df['low'].iloc[i],
-                            'type': 'accuracy',
-                            'index': i
-                        }
-                    else:
-                        zone = {
-                            'high': df['high'].iloc[i],
-                            'low': df['low'].iloc[i],
-                            'type': 'normal',
-                            'index': i
-                        }
-                    # Moved wick validation inside zone creation block
-                    candle_body = abs(df['close'].iloc[i] - df['open'].iloc[i])
-                    wick_size = df['high'].iloc[i] - df['low'].iloc[i] - candle_body
-                    if zone['type'] == 'accuracy' and wick_size < candle_body * 0.5:
-                        continue  # Skip this zone if wick criteria not met
-                    zone['tapped'] = self.is_zone_tapped(df, zone)
-                    zone['strength'] = self.calculate_zone_strength(df, zone)
-                    demand_zones.append(zone)
+                # Loosen rejection candle criteria
+                is_bearish_rejection = (current['close'] < current['open'] and 
+                                       current['upper_wick'] > current['body_size'] * 1.2)  # Changed from 1.5
+                is_bullish_rejection = (current['close'] > current['open'] and 
+                                       current['lower_wick'] > current['body_size'] * 1.2)  # Changed from 1.5
+                
+                if not (is_bearish_rejection or is_bullish_rejection):
+                    continue
+                    
+                # Loosen volume confirmation
+                if current['volume'] < prev1['volume'] * 1.1:  # Changed from 1.2
+                    print(f"Rejected zone at {i} - insufficient volume")
+                    continue
+                    
+                # Add price buffer for subsequent validation
+                if is_bearish_rejection:
+                    if next1['high'] > current['high'] * 1.002 or next1['close'] > current['close'] * 1.002:
+                        print(f"Rejected supply zone at {i} - failed bearish confirmation")
+                        continue
+                    zone = {
+                        'high': float(current['high']),
+                        'low': float(current['low']),
+                        'type': 'supply',
+                        'timestamp': df['original_timestamp'].iloc[i],
+                        'volume': float(current['volume']),
+                        'original_index': i  # Track original position in filtered DF
+                    }
+                else:
+                    if next1['low'] < current['low'] * 0.998 or next1['close'] < current['close'] * 0.998:
+                        print(f"Rejected demand zone at {i} - failed bullish confirmation")
+                        continue
+                    zone = {
+                        'high': float(current['high']),
+                        'low': float(current['low']),
+                        'type': 'demand',
+                        'timestamp': df['original_timestamp'].iloc[i],
+                        'volume': float(current['volume']),
+                        'original_index': i  # Track original position in filtered DF
+                    }
+                
+                zones.append(zone)
             
-            # FIXED: Use original datetime index for age calculation
-            zone_age = (original_index[-1] - original_index[i]).total_seconds()/3600
-            print(f"Potential zone at index {i} ({zone_age:.1f}h old) - Type: {'Supply' if df['close'].iloc[i] < df['open'].iloc[i] else 'Demand'}")
-        
-        return supply_zones, demand_zones
+            # Loosen zone validation criteria
+            valid_zones = []
+            for zone in zones:
+                post_zone = df.iloc[zone['original_index']+1:]
+                
+                # Allow up to 5% of candles to revisit zone
+                if zone['type'] == 'supply':
+                    revisit_count = (post_zone['high'] > zone['low']).sum()
+                    if revisit_count > len(post_zone)*0.05:
+                        continue
+                else:
+                    revisit_count = (post_zone['low'] < zone['high']).sum()
+                    if revisit_count > len(post_zone)*0.05:
+                        continue
+                
+                valid_zones.append(zone)
+            
+            print(f"Found {len(valid_zones)} valid zones after sensitivity adjustments")
+            return valid_zones
+            
+        except Exception as e:
+            print(f"Zone detection error: {str(e)}")
+            return []
 
     def calculate_zone_strength(self, df, zone):
         """Calculate zone strength score based on strategy rules"""
@@ -261,13 +289,27 @@ class SupplyDemandScanner:
         else:
             strength += 1 if zone['low'] <= swing_low * 1.05 else 0
         
+        # New confluence checks
+        if zone['type'] == 'supply':
+            # Check for overhead resistance
+            resistance = df['high'].rolling(50).max()
+            strength += 2 if zone['high'] >= resistance.iloc[-1] * 0.98 else 0
+        else:
+            # Check for underlying support
+            support = df['low'].rolling(50).min()
+            strength += 2 if zone['low'] <= support.iloc[-1] * 1.02 else 0
+
+        # Add volume profile confluence
+        vp = df['volume'].rolling(20).mean()
+        strength += 1 if zone['volume'] > vp.iloc[-1] else 0
+        
         return strength
 
     def validate_zone(self, df, zone):
         """Updated validation with proper tap checking"""
         try:
             # Changed to allow wick taps but reject closes inside
-            post_zone_data = df.iloc[zone['index']+1:]
+            post_zone_data = df.iloc[zone['original_index']+1:]
             
             # Check for candle CLOSURES inside zone
             closes_inside = post_zone_data[
@@ -323,7 +365,7 @@ class SupplyDemandScanner:
     def validate_entry_sequence(self, df, zone, zone_type, symbol):
         """Updated entry validation for long setups"""
         try:
-            post_zone_data = df.iloc[zone['index']+1:]
+            post_zone_data = df.iloc[zone['original_index']+1:]
             
             for i in range(len(post_zone_data)-1):  # Need at least 2 candles
                 current = post_zone_data.iloc[i]
@@ -331,11 +373,10 @@ class SupplyDemandScanner:
                 
                 # For DEMAND (LONG) zones
                 if zone_type == 'DEMAND':
-                    # 1. Check if current candle wick tapped zone (bearish candle)
-                    tapped = current['low'] < zone['high'] and current['close'] < current['open']
-                    
-                    # 2. Check next candle closes bullish
-                    if tapped and next_candle['close'] > next_candle['open']:
+                    # Allow any bullish rejection pattern
+                    tapped = current['low'] <= zone['high'] * 1.005  # 0.5% buffer
+                    confirmed = next_candle['close'] > next_candle['open'] * 0.995  # Allow slight wicks
+                    if tapped and confirmed:
                         return True, {
                             'entry_price': float(next_candle['close']),
                             'stop_price': zone['low']
@@ -343,10 +384,9 @@ class SupplyDemandScanner:
                 
                 # For SUPPLY (SHORT) zones
                 else:
-                    # Reverse logic for shorts
-                    tapped = current['high'] > zone['low'] and current['close'] > current['open']
-                    
-                    if tapped and next_candle['close'] < next_candle['open']:
+                    tapped = current['high'] >= zone['low'] * 0.995  # 0.5% buffer
+                    confirmed = next_candle['close'] < next_candle['open'] * 1.005
+                    if tapped and confirmed:
                         return True, {
                             'entry_price': float(next_candle['close']),
                             'stop_price': zone['high']
@@ -437,92 +477,58 @@ class SupplyDemandScanner:
     def find_setup_sequence(self, df, symbol):
         """Find valid supply and demand setups with updated rules"""
         print(f"\n=== 5m Zone Detection for {symbol} ===")
-        df_1h = self.get_klines(symbol, '1h', 100)  # HTF 1h
-        trend = self.check_trend_alignment(df_1h)
-        
-        # Increased sensitivity for 5m zones
-        supply_zones, demand_zones = self.detect_zones(df)
-        print(f"Found {len(supply_zones)} supply zones, {len(demand_zones)} demand zones on 5m")
-        
-        for zone in supply_zones:
-            print(f"Supply Zone: {zone} | Age: {(df.index[-1] - df.index[zone['index']]).total_seconds()/3600:.1f}h")
-            valid = self.validate_zone(df, zone)
-            print(f"Zone validation: {valid}")
-        
-        # Similar debug for demand zones...
-        valid_setups = []
-        
-        # Check supply zones
-        for zone in supply_zones:
-            # Only consider supply zones in downtrend or no clear trend
-            if trend == 'up':
-                continue
+        try:
+            df_1h = self.get_klines(symbol, '1h', 100)  # HTF 1h
+            trend = self.check_trend_alignment(df_1h)
             
-            # Validate sequence
-            valid_entry, entry_setup = self.validate_entry_sequence(df, zone, 'SUPPLY', symbol)
-            if not valid_entry or entry_setup is None:
-                continue
+            zones = self.detect_zones(df)
+            print(f"Found {len(zones)} zones")
             
-            # Remove liquidity formation check
-            stop_price = entry_setup['stop_price']
-            entry_price = entry_setup['entry_price']
+            valid_setups = []
             
-            # Calculate targets directly
-            risk = abs(entry_price - stop_price)
-            tp1 = entry_price + (risk * 3) if zone['type'] == 'DEMAND' else entry_price - (risk * 3)
-            tp2 = entry_price + (risk * 10) if zone['type'] == 'DEMAND' else entry_price - (risk * 10)
+            # Process each zone individually
+            for zone in zones:
+                try:
+                    # Add index bounds check
+                    if zone['original_index'] >= len(df) - 2:
+                        continue
+                        
+                    # Validate entry sequence for this zone
+                    valid_entry, entry_setup = self.validate_entry_sequence(
+                        df, 
+                        zone, 
+                        'SUPPLY' if zone['type'] == 'supply' else 'DEMAND', 
+                        symbol
+                    )
+                    
+                    if valid_entry and entry_setup:
+                        # Calculate targets
+                        risk = abs(entry_setup['entry_price'] - entry_setup['stop_price'])
+                        tp1 = entry_setup['entry_price'] + (risk * 3) if zone['type'] == 'demand' else entry_setup['entry_price'] - (risk * 3)
+                        tp2 = entry_setup['entry_price'] + (risk * 10) if zone['type'] == 'demand' else entry_setup['entry_price'] - (risk * 10)
+                        
+                        setup = {
+                            'symbol': symbol,
+                            'direction': 'LONG' if zone['type'] == 'demand' else 'SHORT',
+                            'zone_type': zone['type'],
+                            'entry_price': float(entry_setup['entry_price']),
+                            'stop_price': float(entry_setup['stop_price']),
+                            'tp1': float(tp1),
+                            'tp2': float(tp2),
+                            'rr_ratio': abs(tp1 - entry_setup['entry_price']) / risk
+                        }
+                        valid_setups.append(setup)
+                        print(f"Valid {setup['direction']} setup found for {symbol}")
+                        
+                except Exception as e:
+                    print(f"Error processing zone: {str(e)}")
+                    continue
             
-            # Create setup without liquidity check
-            setup = {
-                'symbol': symbol,
-                'direction': 'LONG' if zone['type'] == 'DEMAND' else 'SHORT',
-                'zone_type': zone['type'],
-                'zone_accuracy': zone['type'],
-                'entry_price': entry_price,
-                'stop_price': stop_price,
-                'tp1': tp1,
-                'tp2': tp2,
-                'rr_ratio': abs(tp1 - entry_price) / risk
-            }
-            valid_setups.append(setup)
-            print(f"Found valid {zone['type']} setup for {symbol}")
-        
-        # Similar logic for demand zones
-        for zone in demand_zones:
-            # Only consider demand zones in uptrend or no clear trend
-            if trend == 'down':
-                continue
+            return valid_setups
             
-            # Validate sequence
-            valid_entry, entry_setup = self.validate_entry_sequence(df, zone, 'DEMAND', symbol)
-            if not valid_entry or entry_setup is None:
-                continue
-            
-            # Remove liquidity formation check
-            stop_price = entry_setup['stop_price']
-            entry_price = entry_setup['entry_price']
-            
-            # Calculate targets directly
-            risk = abs(entry_price - stop_price)
-            tp1 = entry_price + (risk * 3) if zone['type'] == 'DEMAND' else entry_price - (risk * 3)
-            tp2 = entry_price + (risk * 10) if zone['type'] == 'DEMAND' else entry_price - (risk * 10)
-            
-            # Create setup without liquidity check
-            setup = {
-                'symbol': symbol,
-                'direction': 'LONG' if zone['type'] == 'DEMAND' else 'SHORT',
-                'zone_type': zone['type'],
-                'zone_accuracy': zone['type'],
-                'entry_price': entry_price,
-                'stop_price': stop_price,
-                'tp1': tp1,
-                'tp2': tp2,
-                'rr_ratio': abs(tp1 - entry_price) / risk
-            }
-            valid_setups.append(setup)
-            print(f"Found valid {zone['type']} setup for {symbol}")
-        
-        return valid_setups
+        except Exception as e:
+            print(f"Error in find_setup_sequence: {str(e)}")
+            return []
 
     def scan_for_setups(self):
         """Scan for setups matching the strategy"""
@@ -585,7 +591,7 @@ class SupplyDemandScanner:
 
     def is_zone_tapped(self, df, zone):
         """Check if price has entered zone since creation - FIXED"""
-        post_zone_data = df.iloc[zone['index']+1:]
+        post_zone_data = df.iloc[zone['original_index']+1:]
         
         # Changed to check wicks rather than closes for taps
         if zone['type'] == 'supply':
@@ -622,6 +628,37 @@ class SupplyDemandScanner:
         # Plot with actual price data
         self.plot_setup(df, test_setup, "test_visualization.png")
         print("Test visualization saved to test_visualization.png")
+
+    def plot_zones(self, df, zones, symbol):
+        """Plot zones on price chart"""
+        plt.figure(figsize=(12,6))
+        plt.plot(df['close'], label='Price')
+        
+        for zone in zones:
+            color = 'red' if zone['type'] == 'SUPPLY' else 'green'
+            plt.axhspan(zone['low'], zone['high'], alpha=0.2, color=color)
+        
+        plt.title(f"{symbol} Zones")
+        plt.legend()
+        plt.show()
+
+    def merge_zones(self, zones):
+        """Merge overlapping zones"""
+        merged = []
+        for zone in sorted(zones, key=lambda x: x['high'], reverse=True):
+            if not merged:
+                merged.append(zone)
+            else:
+                last = merged[-1]
+                if zone['high'] > last['low']:  # Overlapping
+                    merged[-1] = {
+                        'high': max(zone['high'], last['high']),
+                        'low': min(zone['low'], last['low']),
+                        'type': 'merged'
+                    }
+                else:
+                    merged.append(zone)
+        return merged
 
 def main():
     try:

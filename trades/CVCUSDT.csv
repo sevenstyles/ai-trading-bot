@@ -1,0 +1,4 @@
+timestamp,status,direction,entry,sl,tp,rr_ratio,confidence,analysis
+2025-01-30 19:00:00  ,NO TRADE,NO TRADE,,,,,C,"1. **Zone Formation Details**: Recent price action shows liquidity sweep to 0.133 (2025-01-30) but no valid untapped demand/supply zone formed under framework rules. Previous HTF supply zone at 0.1743-0.1754 (2025-01-01 drop) remains inactive.  
+2. **Liquidity Analysis**: Liquidity below 0.133 was tapped, but subsequent price action lacks clear retracement or structural break to confirm new liquidity formation.  
+3. **Entry Method Used**: No valid candle close entry observed. Current consolidati"
