@@ -207,7 +207,7 @@ def send_to_deepseek(data, symbol):
                 raise Exception("Empty or invalid OHLC data provided to DeepSeek")
 
             current_dir = os.path.dirname(os.path.abspath(__file__))
-            prompt_path = os.path.join(current_dir, 'strategy_2_prompt.txt')
+            prompt_path = os.path.join(current_dir, 'strategy_3_prompt.txt')
             
             with open(prompt_path, 'r', encoding='utf-8') as f:
                 system_prompt = f.read().strip()

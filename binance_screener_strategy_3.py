@@ -142,11 +142,11 @@ class SupplyDemandScanner:
             price_change = abs(df['close'].iloc[-1] - df['close'].iloc[-2])
             price_change_pct = price_change / df['close'].iloc[-2] * 100
             
-            # More lenient retracement criteria
+            # Tighten retracement criteria
             valid_retracement = (
-                (0.1 <= up_retracement <= 0.9) or    # Allow 10-90% retracement
-                (0.1 <= down_retracement <= 0.9) or   # Allow 10-90% retracement
-                (price_change_pct >= 0.5)             # Allow 0.5% price change
+                (0.3 <= up_retracement <= 0.7) or    # Changed from 10-90% to 30-70%
+                (0.3 <= down_retracement <= 0.7) or  
+                (price_change_pct >= 1.0)            # Increased from 0.5% 
             )
             
             print(f"Retracement analysis:")
@@ -226,10 +226,12 @@ class SupplyDemandScanner:
         # Set timestamp as index
         df.set_index('timestamp', inplace=True)
         
+        print(f"First candle time: {df.index[0]} | Last candle time: {df.index[-1]}")
         return df
 
     def detect_zones(self, df):
         """Detect supply and demand zones with accuracy rules"""
+        original_index = df.index
         df = df.reset_index()
         
         # Calculate candle characteristics
@@ -241,10 +243,15 @@ class SupplyDemandScanner:
         demand_zones = []
         
         for i in range(1, len(df)-1):
-            # Strong move detection - look for pushes
-            is_strong_push = df['body_size'].iloc[i] > df['body_size'].iloc[i-10:i].mean() * 1.2
+            # Modified strong move detection
+            lookback = max(5, int(len(df)*0.1))  # Dynamic lookback
+            avg_body_size = df['body_size'].iloc[i-lookback:i].mean()
+            is_strong_push = df['body_size'].iloc[i] > avg_body_size * 0.9
             
-            if is_strong_push:
+            # Add volume confirmation
+            volume_above_avg = df['volume'].iloc[i] > df['volume'].iloc[i-lookback:i].mean()
+            
+            if is_strong_push and volume_above_avg:  # Added volume filter
                 # Supply zone (bearish push down)
                 if df['close'].iloc[i] < df['open'].iloc[i]:
                     # Check for push down
@@ -264,6 +271,11 @@ class SupplyDemandScanner:
                                 'type': 'normal',
                                 'index': i
                             }
+                        # Moved wick validation inside zone creation block
+                        candle_body = abs(df['close'].iloc[i] - df['open'].iloc[i])
+                        wick_size = df['high'].iloc[i] - df['low'].iloc[i] - candle_body
+                        if zone['type'] == 'accuracy' and wick_size < candle_body * 0.5:
+                            continue  # Skip this zone if wick criteria not met
                         supply_zones.append(zone)
                 
                 # Demand zone (bullish push up)
@@ -285,65 +297,51 @@ class SupplyDemandScanner:
                                 'type': 'normal',
                                 'index': i
                             }
+                        # Moved wick validation inside zone creation block
+                        candle_body = abs(df['close'].iloc[i] - df['open'].iloc[i])
+                        wick_size = df['high'].iloc[i] - df['low'].iloc[i] - candle_body
+                        if zone['type'] == 'accuracy' and wick_size < candle_body * 0.5:
+                            continue  # Skip this zone if wick criteria not met
                         demand_zones.append(zone)
+            
+            # FIXED: Use original datetime index for age calculation
+            zone_age = (original_index[-1] - original_index[i]).total_seconds()/3600
+            print(f"Potential zone at index {i} ({zone_age:.1f}h old) - Type: {'Supply' if df['close'].iloc[i] < df['open'].iloc[i] else 'Demand'}")
         
         return supply_zones, demand_zones
 
     def detect_liquidity_formation(self, df, symbol, zone):
         """Detect liquidity formation near zones"""
-        # Get recent price action
-        recent_candles = df.tail(10)  # Look at last 10 candles
+        # Look for multiple liquidity sweeps
+        recent_lows = df['low'].tail(20)
+        recent_highs = df['high'].tail(20)
         
         if 'high' in zone:  # Supply zone
-            # Find the swing low that created liquidity
-            swing_low = None
-            for i in range(1, len(recent_candles)-1):
-                if (recent_candles['low'].iloc[i] < recent_candles['low'].iloc[i-1] and 
-                    recent_candles['low'].iloc[i] < recent_candles['low'].iloc[i+1]):
-                    swing_low = recent_candles['low'].iloc[i]
-                    break
-            
-            if swing_low is None:
-                return False
-            
-            # Check if we've broken that low
-            current_low = recent_candles['low'].iloc[-1]
-            return current_low < swing_low
-        
+            swing_lows = recent_lows[recent_lows < zone['low']]
+            valid = len(swing_lows) >= 2
+            # Check volume on last tap
+            return valid and df['volume'].iloc[-1] > df['volume'].mean() * 1.2
         else:  # Demand zone
-            # Find the swing high that created liquidity
-            swing_high = None
-            for i in range(1, len(recent_candles)-1):
-                if (recent_candles['high'].iloc[i] > recent_candles['high'].iloc[i-1] and 
-                    recent_candles['high'].iloc[i] > recent_candles['high'].iloc[i+1]):
-                    swing_high = recent_candles['high'].iloc[i]
-                    break
-            
-            if swing_high is None:
-                return False
-            
-            # Check if we've broken that high
-            current_high = recent_candles['high'].iloc[-1]
-            return current_high > swing_high
+            swing_highs = recent_highs[recent_highs > zone['high']]
+            valid = len(swing_highs) >= 2
+            return valid and df['volume'].iloc[-1] > df['volume'].mean() * 1.2
 
     def validate_zone(self, df, zone):
         """Validate zone based on criteria"""
-        # Check for candle closures inside zone
-        price_in_zone = ((df['close'] >= zone['low']) & (df['close'] <= zone['high']))
-        if price_in_zone.tail(12).any():  # Only check last 12 candles instead of all
+        # Fix zone age calculation
+        zone_time = df.iloc[zone['index']].name
+        current_time = df.index[-1]
+        zone_age = (current_time - zone_time).total_seconds() / 3600
+        if zone_age > 48:
+            print(f"Rejecting zone: Age {zone_age:.1f}h > 48h")
             return False
-            
-        # Check trend alignment using higher timeframe
-        df['ema50'] = ta.trend.EMAIndicator(df['close'], window=50).ema_indicator()
-        current_trend = 'up' if df['close'].iloc[-1] > df['ema50'].iloc[-1] else 'down'
         
-        # Make trend alignment optional
-        if 'high' in zone and current_trend == 'up':
-            return True  # Allow supply zones in uptrend
-        if 'low' in zone and current_trend == 'down':
-            return True  # Allow demand zones in downtrend
-            
-        return True
+        # Keep existing price validation
+        current_price = df['close'].iloc[-1]
+        if 'high' in zone:
+            return current_price < zone['high'] * 1.05
+        else:
+            return current_price > zone['low'] * 0.95
 
     def calculate_risk_reward(self, entry_price, stop_price, target_price):
         """Calculate risk-reward ratio"""
@@ -377,63 +375,36 @@ class SupplyDemandScanner:
 
     def validate_entry_sequence(self, df, zone, zone_type):
         """Validate exact entry sequence"""
+        # Require confirmation candle
+        if zone_type == 'SUPPLY':
+            if df['close'].iloc[-1] > df['open'].iloc[-1]:  # Reject if bullish close
+                return False, None
+        else:
+            if df['close'].iloc[-1] < df['open'].iloc[-1]:  # Reject if bearish close
+                return False, None
+        
         last_candles = df.tail(5)
         
         if zone_type == 'SUPPLY':
-            # Find candle that tapped the zone
-            tap_mask = last_candles['high'] >= zone['low']  # Changed from zone['high']
-            if not tap_mask.any():
-                return False, None
+            # Expanded entry conditions
+            bearish_close = last_candles['close'].iloc[-1] < last_candles['open'].iloc[-1]
+            break_entry = last_candles['low'].iloc[-1] < min(last_candles['low'].iloc[-2], zone['low'])  # More lenient
+            flip_entry = (last_candles['high'].iloc[-1] > last_candles['high'].iloc[-2] and 
+                         last_candles['close'].iloc[-1] < last_candles['close'].iloc[-2])  # More flexible
             
-            tap_idx = tap_mask.idxmax()
-            
-            # Check for bearish close or break of candle
-            last_candle = last_candles.iloc[-1]
-            prev_candle = last_candles.iloc[-2]
-            
-            # Primary entry - bearish close
-            bearish_close = last_candle['close'] < last_candle['open']
-            
-            # Secondary entry - break of candle
-            break_entry = last_candle['low'] < prev_candle['low']
-            
-            # Flip entry
-            flip_entry = (last_candle['high'] > prev_candle['high'] and
-                         last_candle['close'] < last_candle['open'])
-            
-            if bearish_close or break_entry or flip_entry:
-                entry_price = last_candle['close']
+            if any([bearish_close, break_entry, flip_entry]):
+                entry_price = last_candles['close'].iloc[-1]
                 return True, entry_price
         else:  # DEMAND
-            # Find the candle that tapped the zone
-            tap_mask = last_candles['low'] <= zone['low']
-            if not tap_mask.any():
-                return False, None
+            # Expanded entry conditions
+            normal_entry = last_candles['close'].iloc[-1] > last_candles['open'].iloc[-1]
+            break_entry = (last_candles['high'].iloc[-1] > last_candles['high'].iloc[-2] and 
+                          last_candles['close'].iloc[-1] > last_candles['high'].iloc[-2])
+            flip_entry = (last_candles['low'].iloc[-1] < last_candles['low'].iloc[-2] and 
+                          last_candles['close'].iloc[-1] > last_candles['low'].iloc[-2])
             
-            tap_idx = tap_mask.idxmax()
-            tap_candle = last_candles.loc[tap_idx]
-            
-            # Check candles after tap
-            post_tap_candles = last_candles.loc[tap_idx:]
-            
-            # No closes inside zone
-            if ((post_tap_candles['close'] >= zone['low']) & 
-                (post_tap_candles['close'] <= zone['high'])).any():
-                return False, None
-            
-            # Look for entry confirmation
-            last_candle = last_candles.iloc[-1]
-            prev_candle = last_candles.iloc[-2]
-            
-            # Normal entry - bullish close
-            normal_entry = last_candle['close'] > last_candle['open']
-            
-            # Break of candle entry
-            break_entry = (last_candle['high'] > prev_candle['high'] and 
-                          last_candle['close'] > prev_candle['high'])
-            
-            if normal_entry or break_entry:
-                entry_price = last_candle['close']
+            if any([normal_entry, break_entry, flip_entry]):
+                entry_price = last_candles['close'].iloc[-1]
                 return True, entry_price
         
         return False, None
@@ -480,10 +451,17 @@ class SupplyDemandScanner:
 
     def find_setup_sequence(self, df, symbol):
         """Find valid supply and demand setups with updated rules"""
-        valid_setups = []
-        
-        # Detect zones
+        print(f"\n=== Zone Detection Debug for {symbol} ===")
         supply_zones, demand_zones = self.detect_zones(df)
+        print(f"Found {len(supply_zones)} supply zones, {len(demand_zones)} demand zones")
+        
+        for zone in supply_zones:
+            print(f"Supply Zone: {zone} | Age: {(df.index[-1] - df.index[zone['index']]).total_seconds()/3600:.1f}h")
+            valid = self.validate_zone(df, zone)
+            print(f"Zone validation: {valid}")
+        
+        # Similar debug for demand zones...
+        valid_setups = []
         
         # Get trend
         trend = self.check_trend_alignment(df)
@@ -659,12 +637,13 @@ class SupplyDemandScanner:
                 price = recent_candles['close'].iloc[-1]
                 ema = recent_candles['ema20'].iloc[-1]
                 
-                # Allow price to be near EMA (within 1%)
+                # Modified EMA check (3% threshold)
                 ema_distance = abs(price - ema) / ema
-                valid_ema = ema_distance <= 0.01 or price > ema
+                valid_ema = ema_distance <= 0.03  # Increased from 1% to 3%
                 
-                # Check for clean price action (not too choppy)
+                # Relaxed price action check
                 clean_price = True
+                overlapping_count = 0
                 for i in range(1, len(recent_candles)):
                     curr_candle = recent_candles.iloc[i]
                     prev_candle = recent_candles.iloc[i-1]
@@ -672,8 +651,9 @@ class SupplyDemandScanner:
                     # Avoid overlapping candles
                     if (curr_candle['high'] > prev_candle['high'] and 
                         curr_candle['low'] < prev_candle['low']):
-                        clean_price = False
-                        break
+                        overlapping_count += 1
+                # Allow up to 20% overlapping candles        
+                clean_price = overlapping_count/len(recent_candles) < 0.2
                 
                 print(f"1H Validation - Valid EMA: {valid_ema}, Clean price: {clean_price}")
                 return valid_ema and clean_price
@@ -683,12 +663,13 @@ class SupplyDemandScanner:
                 price = recent_candles['close'].iloc[-1]
                 ema = recent_candles['ema20'].iloc[-1]
                 
-                # Allow price to be near EMA (within 1%)
+                # Modified EMA check (3% threshold)
                 ema_distance = abs(price - ema) / ema
-                valid_ema = ema_distance <= 0.01 or price < ema
+                valid_ema = ema_distance <= 0.03  # Increased from 1% to 3%
                 
-                # Check for clean price action (not too choppy)
+                # Relaxed price action check
                 clean_price = True
+                overlapping_count = 0
                 for i in range(1, len(recent_candles)):
                     curr_candle = recent_candles.iloc[i]
                     prev_candle = recent_candles.iloc[i-1]
@@ -696,8 +677,9 @@ class SupplyDemandScanner:
                     # Avoid overlapping candles
                     if (curr_candle['high'] > prev_candle['high'] and 
                         curr_candle['low'] < prev_candle['low']):
-                        clean_price = False
-                        break
+                        overlapping_count += 1
+                # Allow up to 20% overlapping candles        
+                clean_price = overlapping_count/len(recent_candles) < 0.2
                 
                 print(f"1H Validation - Valid EMA: {valid_ema}, Clean price: {clean_price}")
                 return valid_ema and clean_price
@@ -705,6 +687,13 @@ class SupplyDemandScanner:
         except Exception as e:
             print(f"Error in validate_setup_with_lower_timeframe: {str(e)}")
             print(traceback.format_exc())
+            return False
+
+    def detect_liquidity_formation(self, df, symbol, zone):
+        # Add minimum volume requirement
+        min_volume = df['volume'].quantile(0.7)  # Top 30% volume
+        if df['volume'].iloc[-1] < min_volume:
+            print(f"Liquidity tap volume too low: {df['volume'].iloc[-1]:.2f} < {min_volume:.2f}")
             return False
 
 def main():
