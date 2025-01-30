@@ -128,7 +128,7 @@ class SupplyDemandScanner:
     def is_retracing(self, df):
         """Check if price is retracing after a strong move"""
         try:
-            df = df.copy()  # Create a copy to avoid warnings
+            df = df.copy()
             recent_data = df.tail(10)
             recent_high = recent_data['high'].max()
             recent_low = recent_data['low'].min()
@@ -142,11 +142,11 @@ class SupplyDemandScanner:
             price_change = abs(df['close'].iloc[-1] - df['close'].iloc[-2])
             price_change_pct = price_change / df['close'].iloc[-2] * 100
             
-            # Check for small retracement that hasn't tapped zone
+            # More lenient retracement criteria
             valid_retracement = (
-                (0.2 <= up_retracement <= 0.8) or  # Standard retracement
-                (0.2 <= down_retracement <= 0.8) or  # Standard retracement
-                (price_change_pct >= 1.0)  # Strong momentum
+                (0.1 <= up_retracement <= 0.9) or    # Allow 10-90% retracement
+                (0.1 <= down_retracement <= 0.9) or   # Allow 10-90% retracement
+                (price_change_pct >= 0.5)             # Allow 0.5% price change
             )
             
             print(f"Retracement analysis:")
@@ -330,18 +330,18 @@ class SupplyDemandScanner:
         """Validate zone based on criteria"""
         # Check for candle closures inside zone
         price_in_zone = ((df['close'] >= zone['low']) & (df['close'] <= zone['high']))
-        if price_in_zone.any():
+        if price_in_zone.tail(12).any():  # Only check last 12 candles instead of all
             return False
             
         # Check trend alignment using higher timeframe
         df['ema50'] = ta.trend.EMAIndicator(df['close'], window=50).ema_indicator()
         current_trend = 'up' if df['close'].iloc[-1] > df['ema50'].iloc[-1] else 'down'
         
-        # Zone should align with trend
-        if 'high' in zone and current_trend == 'up':  # Supply zone should be in downtrend
-            return False
-        if 'low' in zone and current_trend == 'down':  # Demand zone should be in uptrend
-            return False
+        # Make trend alignment optional
+        if 'high' in zone and current_trend == 'up':
+            return True  # Allow supply zones in uptrend
+        if 'low' in zone and current_trend == 'down':
+            return True  # Allow demand zones in downtrend
             
         return True
 
@@ -649,42 +649,62 @@ class SupplyDemandScanner:
         """Validate setup using 1h timeframe"""
         try:
             # Get recent 1h candles
-            recent_candles = df_1h.tail(12).copy()  # Use .copy() to avoid SettingWithCopyWarning
+            recent_candles = df_1h.tail(12).copy()  # Last 12 hours
             
-            # Calculate basic momentum indicators
+            # Calculate EMAs for trend context
             recent_candles['ema20'] = ta.trend.EMAIndicator(recent_candles['close'], window=20).ema_indicator()
-            recent_candles['rsi'] = ta.momentum.RSIIndicator(recent_candles['close'], window=14).rsi()
             
-            if setup['direction'] == 'LONG':
-                # For longs, check for:
-                # 1. Higher lows in recent price action
-                lows = recent_candles['low'].values
-                higher_lows = all(lows[i] >= lows[i-1] for i in range(1, len(lows)))
+            if setup['direction'] == 'LONG':  # For demand zones
+                # Check if we're in an uptrend or consolidation on 1h
+                price = recent_candles['close'].iloc[-1]
+                ema = recent_candles['ema20'].iloc[-1]
                 
-                # 2. Price above EMA20
-                above_ema = recent_candles['close'].iloc[-1] > recent_candles['ema20'].iloc[-1]
+                # Allow price to be near EMA (within 1%)
+                ema_distance = abs(price - ema) / ema
+                valid_ema = ema_distance <= 0.01 or price > ema
                 
-                # 3. RSI not overbought
-                rsi_ok = recent_candles['rsi'].iloc[-1] < 70
+                # Check for clean price action (not too choppy)
+                clean_price = True
+                for i in range(1, len(recent_candles)):
+                    curr_candle = recent_candles.iloc[i]
+                    prev_candle = recent_candles.iloc[i-1]
+                    
+                    # Avoid overlapping candles
+                    if (curr_candle['high'] > prev_candle['high'] and 
+                        curr_candle['low'] < prev_candle['low']):
+                        clean_price = False
+                        break
                 
-                return higher_lows and above_ema and rsi_ok
+                print(f"1H Validation - Valid EMA: {valid_ema}, Clean price: {clean_price}")
+                return valid_ema and clean_price
                 
-            else:  # SHORT
-                # For shorts, check for:
-                # 1. Lower highs in recent price action
-                highs = recent_candles['high'].values
-                lower_highs = all(highs[i] <= highs[i-1] for i in range(1, len(highs)))
+            else:  # For supply zones (SHORT)
+                # Check if we're in a downtrend or consolidation on 1h
+                price = recent_candles['close'].iloc[-1]
+                ema = recent_candles['ema20'].iloc[-1]
                 
-                # 2. Price below EMA20
-                below_ema = recent_candles['close'].iloc[-1] < recent_candles['ema20'].iloc[-1]
+                # Allow price to be near EMA (within 1%)
+                ema_distance = abs(price - ema) / ema
+                valid_ema = ema_distance <= 0.01 or price < ema
                 
-                # 3. RSI not oversold
-                rsi_ok = recent_candles['rsi'].iloc[-1] > 30
+                # Check for clean price action (not too choppy)
+                clean_price = True
+                for i in range(1, len(recent_candles)):
+                    curr_candle = recent_candles.iloc[i]
+                    prev_candle = recent_candles.iloc[i-1]
+                    
+                    # Avoid overlapping candles
+                    if (curr_candle['high'] > prev_candle['high'] and 
+                        curr_candle['low'] < prev_candle['low']):
+                        clean_price = False
+                        break
                 
-                return lower_highs and below_ema and rsi_ok
+                print(f"1H Validation - Valid EMA: {valid_ema}, Clean price: {clean_price}")
+                return valid_ema and clean_price
                 
         except Exception as e:
             print(f"Error in validate_setup_with_lower_timeframe: {str(e)}")
+            print(traceback.format_exc())
             return False
 
 def main():

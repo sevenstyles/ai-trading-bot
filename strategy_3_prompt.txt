@@ -29,7 +29,6 @@ Primary Entry Methods:
 1. Candle Close Entry:
    - First candle close in intended direction after zone tap
    - Valid if tapping candle closes in direction
-   - Must show clear momentum/rejection
 
 2. Break of Candle Entry (Secondary):
    - Only on strong momentum moves
