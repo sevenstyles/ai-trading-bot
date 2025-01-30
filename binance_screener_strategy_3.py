@@ -8,6 +8,7 @@ import os
 import json
 import mplfinance as mpf
 import matplotlib.pyplot as plt
+import argparse
 
 # Load environment variables
 load_dotenv()
@@ -291,24 +292,23 @@ class SupplyDemandScanner:
             return False
 
     def validate_zone(self, df, zone):
-        """Validate zone with strategy rules"""
+        """Updated validation with proper tap checking"""
         try:
-            # Check if zone is untapped
-            if zone['tapped']:
-                print("Zone already tapped - rejecting")
-                return False
-            
-            # Check for candle closures inside zone
+            # Changed to allow wick taps but reject closes inside
             post_zone_data = df.iloc[zone['index']+1:]
-            in_zone_closes = post_zone_data[(post_zone_data['close'] > zone['low']) & 
-                                          (post_zone_data['close'] < zone['high'])]
-            if not in_zone_closes.empty:
-                print("Candle closed inside zone - rejecting")
+            
+            # Check for candle CLOSURES inside zone
+            closes_inside = post_zone_data[
+                (post_zone_data['close'] > zone['low']) & 
+                (post_zone_data['close'] < zone['high'])
+            ]
+            if not closes_inside.empty:
+                print(f"Rejecting zone - {len(closes_inside)} closes inside")
                 return False
             
             return True
         except Exception as e:
-            print(f"Error in validate_zone: {str(e)}")
+            print(f"Validation error: {str(e)}")
             return False
 
     def calculate_risk_reward(self, entry_price, stop_price, target_price):
@@ -343,14 +343,15 @@ class SupplyDemandScanner:
 
     def validate_entry_sequence(self, df, zone, zone_type):
         """Validate exact entry sequence"""
-        # Look for first close in direction after zone tap
         post_zone_data = df.iloc[zone['index']+1:]
         
         for i in range(len(post_zone_data)):
             if zone_type == 'SUPPLY':
+                # SHORT entry - first bearish close after zone touch
                 if post_zone_data['close'].iloc[i] < post_zone_data['open'].iloc[i]:
                     return True, post_zone_data['close'].iloc[i]
             else:
+                # LONG entry - first bullish close after zone touch
                 if post_zone_data['close'].iloc[i] > post_zone_data['open'].iloc[i]:
                     return True, post_zone_data['close'].iloc[i]
         
@@ -609,17 +610,44 @@ class SupplyDemandScanner:
             return False
 
     def is_zone_tapped(self, df, zone):
-        """Check if price has entered zone since creation"""
+        """Check if price has entered zone since creation - FIXED"""
         post_zone_data = df.iloc[zone['index']+1:]
         
+        # Changed to check wicks rather than closes for taps
         if zone['type'] == 'supply':
-            # Only consider closes above zone low as taps
-            taps = post_zone_data['close'] > zone['low']
+            # Considered tapped if price WICK enters the zone
+            taps = (post_zone_data['high'] > zone['low'])
         else:
-            # Only consider closes below zone high as taps
-            taps = post_zone_data['close'] < zone['high']
+            taps = (post_zone_data['low'] < zone['high'])
         
-        return taps.any()  # True if any closes in zone
+        return taps.any()
+
+    def test_visualization(self, symbol="BTCUSDT", interval="4h"):
+        """Generate test visualization with sample data"""
+        print(f"\nGenerating test visualization for {symbol}...")
+        
+        # Get historical data
+        df = self.get_klines(symbol, interval, 100)
+        if df is None:
+            print("Failed to get test data")
+            return
+
+        # Create manual test setup
+        test_setup = {
+            'symbol': symbol,
+            'direction': 'LONG' if np.random.rand() > 0.5 else 'SHORT',
+            'zone_type': 'DEMAND',
+            'zone_accuracy': 'accuracy',
+            'entry_price': df['close'].iloc[-1],
+            'stop_price': df['low'].iloc[-5],
+            'tp1_price': df['close'].iloc[-1] * 1.03,
+            'tp2_price': df['close'].iloc[-1] * 1.10,
+            'rr_ratio': 3.5
+        }
+        
+        # Plot with actual price data
+        self.plot_setup(df, test_setup, "test_visualization.png")
+        print("Test visualization saved to test_visualization.png")
 
 def main():
     try:
@@ -677,5 +705,17 @@ def main():
         print("Full traceback:")
         print(traceback.format_exc())
 
+def test():
+    scanner = SupplyDemandScanner()
+    scanner.test_visualization()  # Test BTC
+    # scanner.test_visualization("ETHUSDT")  # Uncomment to test ETH
+
 if __name__ == "__main__":
-    main() 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--test', action='store_true', help='Run visualization test')
+    args = parser.parse_args()
+    
+    if args.test:
+        test()
+    else:
+        main() 
