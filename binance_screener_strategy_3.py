@@ -536,37 +536,33 @@ class SupplyDemandScanner:
         valid_pairs = self.get_valid_pairs()
         potential_setups = []
         
+        # Create visualization directory
+        os.makedirs('strategy_visualizations', exist_ok=True)
+        
         for symbol in valid_pairs:
             try:
-                # Get data for updated timeframes
-                df_1h = self.get_klines(symbol, '1h', 200)  # HTF remains 1h
-                df_5m = self.get_klines(symbol, '5m', 720)  # LTF changed to 5m (720 candles = 2.5 days)
+                # Get data
+                df_1h = self.get_klines(symbol, '1h', 200)
+                df_5m = self.get_klines(symbol, '5m', 720)
                 
                 if df_1h is None or df_5m is None:
-                    print("Failed to get kline data")
                     continue
                 
-                # Trend analysis on 1h timeframe
-                trend = self.check_trend_alignment(df_1h)
-                print(f"1H Trend alignment: {trend}")
-                
-                # Zone analysis on 5m timeframe
+                # Find and validate setups
                 setups = self.find_setup_sequence(df_5m, symbol)
-                print(f"Number of potential setups found: {len(setups)}")
-                
                 for setup in setups:
-                    # Validate setup with 1h timeframe
                     if self.validate_setup_with_lower_timeframe(df_1h, setup):
                         potential_setups.append(setup)
-                        print(f"Valid {setup['direction']} setup found!")
-                        print(f"Entry: {setup['entry_price']:.8f}")
-                        print(f"Stop: {setup['stop_price']:.8f}")
-                        print(f"TP1: {setup['tp1']:.8f}")
-                        print(f"TP2: {setup['tp2']:.8f}")
-                        print(f"RR Ratio: {setup['rr_ratio']:.2f}")
-                    else:
-                        print("Setup failed 1h timeframe validation")
-                    
+                        
+                        # Generate visualization
+                        try:
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+                            filename = f"strategy_visualizations/{symbol}_{setup['direction']}_{timestamp}.png"
+                            self.plot_setup(df_5m, setup, filename)
+                            print(f"Saved visualization: {filename}")
+                        except Exception as e:
+                            print(f"Failed to save visualization: {str(e)}")
+            
             except Exception as e:
                 print(f"Error analyzing {symbol}: {str(e)}")
                 import traceback
