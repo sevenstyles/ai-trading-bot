@@ -6,7 +6,6 @@ CORE COMPONENTS:
 1. Zone Formation:
    - Supply: Push down creating supply zone
    - Demand: Push up creating demand zone
-   - Maximum zone age: 48 hours
    - Zone drawing rules:
      a) Normal: Full candle if wick doesn't exceed next candle
      b) Accuracy: Body + top/bottom wick only if wick exceeds next candle
@@ -30,16 +29,6 @@ Primary Entry Methods:
    - First candle close in intended direction after zone tap
    - Valid if tapping candle closes in direction
 
-2. Break of Candle Entry (Secondary):
-   - Only on strong momentum moves
-   - Before bullish/bearish close
-   - When trying not to miss entry
-   - Use with caution, only 10% of setups
-
-3. Flip Entry (Rare):
-   - When candle flips direction in final minutes
-   - Must show strong momentum flip
-   - Only valid if initial tap respected zone
 
 RISK MANAGEMENT:
 ----------------------
@@ -94,7 +83,6 @@ Reject Trade If:
    - Candle closes inside zone
    - Zone already tapped
    - Against major HTF levels
-   - Middle zone without strong momentum
 
 2. Technical Related:
    - Stop loss exceeds maximum size
