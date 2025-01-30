@@ -66,7 +66,7 @@ Break Even Rules:
 TREND ALIGNMENT:
 ----------------------
 1. Higher Timeframe:
-   - Check 4H/1H for trend direction
+   - Check HTF/LTF for trend direction
    - Identify major support/resistance
    - Look for retracement completion zones
 

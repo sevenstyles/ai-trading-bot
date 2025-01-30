@@ -347,7 +347,7 @@ class SupplyDemandScanner:
         
         for i in range(len(post_zone_data)):
             if zone_type == 'SUPPLY':
-                # SHORT entry - first bearish close after zone touch
+                # Checks 4H candle closes
                 if post_zone_data['close'].iloc[i] < post_zone_data['open'].iloc[i]:
                     return True, post_zone_data['close'].iloc[i]
             else:
@@ -544,9 +544,9 @@ class SupplyDemandScanner:
                 
                 # Get data for both timeframes
                 df_4h = self.get_klines(symbol, '4h', 300)
-                df_1h = self.get_klines(symbol, '1h', 300)
+                df_30m = self.get_klines(symbol, '30m', 300)
                 
-                if df_4h is None or df_1h is None:
+                if df_4h is None or df_30m is None:
                     print("Failed to get kline data")
                     continue
                 
@@ -576,8 +576,8 @@ class SupplyDemandScanner:
                 print(f"Number of potential setups found: {len(setups)}")
                 
                 for setup in setups:
-                    # Validate setup with 1h timeframe
-                    if self.validate_setup_with_lower_timeframe(df_1h, setup):
+                    # Validate setup with 30m timeframe
+                    if self.validate_setup_with_lower_timeframe(df_30m, setup):
                         potential_setups.append(setup)
                         print(f"Valid {setup['direction']} setup found!")
                         print(f"Entry: {setup['entry_price']:.8f}")
@@ -585,7 +585,7 @@ class SupplyDemandScanner:
                         print(f"TP1: {setup['tp1_price']:.8f}")
                         print(f"RR Ratio: {setup['rr_ratio']:.2f}")
                     else:
-                        print("Setup failed 1h timeframe validation")
+                        print("Setup failed 30m timeframe validation")
                     
             except Exception as e:
                 print(f"Error analyzing {symbol}: {str(e)}")
@@ -596,11 +596,11 @@ class SupplyDemandScanner:
         print(f"\nAnalysis complete. Found {len(potential_setups)} total setups")
         return pd.DataFrame(potential_setups) if potential_setups else pd.DataFrame()
 
-    def validate_setup_with_lower_timeframe(self, df_1h, setup):
-        """Validate setup using 1h timeframe"""
+    def validate_setup_with_lower_timeframe(self, df_30m, setup):
+        """Validate setup using 30m timeframe"""
         try:
             # Simply confirm direction matches
-            recent_candles = df_1h.tail(12)
+            recent_candles = df_30m.tail(12)
             if setup['direction'] == 'LONG':
                 return recent_candles['close'].iloc[-1] > recent_candles['close'].iloc[0]
             else:
