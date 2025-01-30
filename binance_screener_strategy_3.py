@@ -195,61 +195,90 @@ class SupplyDemandScanner:
         demand_zones = []
         
         for i in range(1, len(df)-1):
-            # Strong move detection (1.3x average)
-            is_strong = df['body_size'].iloc[i] > df['body_size'].iloc[i-10:i].mean() * 1.3
+            # Strong move detection - look for pushes
+            is_strong_push = df['body_size'].iloc[i] > df['body_size'].iloc[i-10:i].mean() * 1.2
             
-            if is_strong:
-                # Supply zone (bearish candle)
+            if is_strong_push:
+                # Supply zone (bearish push down)
                 if df['close'].iloc[i] < df['open'].iloc[i]:
-                    # Accuracy zone: If wick extends below next candle, use body + upper wick only
-                    if df['low'].iloc[i] < df['low'].iloc[i+1]:
-                        zone = {
-                            'high': df['high'].iloc[i],
-                            'low': df['close'].iloc[i],  # Use close for accuracy zone
-                            'type': 'accuracy',
-                            'index': i
-                        }
-                    else:
-                        # Normal zone: use full candle
-                        zone = {
-                            'high': df['high'].iloc[i],
-                            'low': df['low'].iloc[i],
-                            'type': 'normal',
-                            'index': i
-                        }
-                    supply_zones.append(zone)
+                    # Check for push down
+                    if df['close'].iloc[i] < df['low'].iloc[i-1]:
+                        # Accuracy zone check
+                        if df['low'].iloc[i] < df['low'].iloc[i+1]:
+                            zone = {
+                                'high': df['high'].iloc[i],
+                                'low': df['close'].iloc[i],
+                                'type': 'accuracy',
+                                'index': i
+                            }
+                        else:
+                            zone = {
+                                'high': df['high'].iloc[i],
+                                'low': df['low'].iloc[i],
+                                'type': 'normal',
+                                'index': i
+                            }
+                        supply_zones.append(zone)
                 
-                # Demand zone (bullish candle)
+                # Demand zone (bullish push up)
                 elif df['close'].iloc[i] > df['open'].iloc[i]:
-                    zone = {
-                        'high': df['open'].iloc[i],  # Use open for more accurate zone
-                        'low': df['low'].iloc[i],
-                        'type': 'accuracy' if df['high'].iloc[i] > df['high'].iloc[i+1] else 'normal',
-                        'index': i
-                    }
-                    demand_zones.append(zone)
+                    # Check for push up
+                    if df['close'].iloc[i] > df['high'].iloc[i-1]:
+                        # Accuracy zone check
+                        if df['high'].iloc[i] > df['high'].iloc[i+1]:
+                            zone = {
+                                'high': df['open'].iloc[i],
+                                'low': df['low'].iloc[i],
+                                'type': 'accuracy',
+                                'index': i
+                            }
+                        else:
+                            zone = {
+                                'high': df['high'].iloc[i],
+                                'low': df['low'].iloc[i],
+                                'type': 'normal',
+                                'index': i
+                            }
+                        demand_zones.append(zone)
         
         return supply_zones, demand_zones
 
     def detect_liquidity_formation(self, df, symbol, zone):
         """Detect liquidity formation near zones"""
-        # Check for liquidity formation (small retracement not tapping zone)
-        recent_candles = df.tail(5)  # Look at last 5 candles
+        # Get recent price action
+        recent_candles = df.tail(10)  # Look at last 10 candles
         
         if 'high' in zone:  # Supply zone
-            # Check if we've broken the low that created liquidity
-            liquidity_low = recent_candles['low'].min()
-            previous_low = df['low'].iloc[-6:-1].min()  # Low before recent candles
-            liquidity_valid = liquidity_low < previous_low
+            # Find the swing low that created liquidity
+            swing_low = None
+            for i in range(1, len(recent_candles)-1):
+                if (recent_candles['low'].iloc[i] < recent_candles['low'].iloc[i-1] and 
+                    recent_candles['low'].iloc[i] < recent_candles['low'].iloc[i+1]):
+                    swing_low = recent_candles['low'].iloc[i]
+                    break
             
-            return liquidity_valid
+            if swing_low is None:
+                return False
+            
+            # Check if we've broken that low
+            current_low = recent_candles['low'].iloc[-1]
+            return current_low < swing_low
+        
         else:  # Demand zone
-            # Check if we've broken the high that created liquidity
-            liquidity_high = recent_candles['high'].max()
-            previous_high = df['high'].iloc[-6:-1].max()  # High before recent candles
-            liquidity_valid = liquidity_high > previous_high
+            # Find the swing high that created liquidity
+            swing_high = None
+            for i in range(1, len(recent_candles)-1):
+                if (recent_candles['high'].iloc[i] > recent_candles['high'].iloc[i-1] and 
+                    recent_candles['high'].iloc[i] > recent_candles['high'].iloc[i+1]):
+                    swing_high = recent_candles['high'].iloc[i]
+                    break
             
-            return liquidity_valid
+            if swing_high is None:
+                return False
+            
+            # Check if we've broken that high
+            current_high = recent_candles['high'].iloc[-1]
+            return current_high > swing_high
 
     def validate_zone(self, df, zone):
         """Validate zone based on criteria"""
@@ -306,22 +335,13 @@ class SupplyDemandScanner:
         
         if zone_type == 'SUPPLY':
             # Find candle that tapped the zone
-            tap_mask = last_candles['high'] >= zone['high']
+            tap_mask = last_candles['high'] >= zone['low']  # Changed from zone['high']
             if not tap_mask.any():
                 return False, None
             
             tap_idx = tap_mask.idxmax()
-            tap_candle = last_candles.loc[tap_idx]
             
-            # Check for first bearish close after tap
-            post_tap_candles = last_candles.loc[tap_idx:]
-            
-            # No closes inside zone
-            if ((post_tap_candles['close'] >= zone['low']) & 
-                (post_tap_candles['close'] <= zone['high'])).any():
-                return False, None
-            
-            # Look for entry confirmation
+            # Check for bearish close or break of candle
             last_candle = last_candles.iloc[-1]
             prev_candle = last_candles.iloc[-2]
             
@@ -329,12 +349,11 @@ class SupplyDemandScanner:
             bearish_close = last_candle['close'] < last_candle['open']
             
             # Secondary entry - break of candle
-            break_entry = (last_candle['low'] < prev_candle['low'] and 
-                          last_candle['close'] < prev_candle['low'])
+            break_entry = last_candle['low'] < prev_candle['low']
             
-            # Flip entry (rare) - momentum flip in final minutes
+            # Flip entry
             flip_entry = (last_candle['high'] > prev_candle['high'] and
-                         last_candle['close'] < prev_candle['low'])
+                         last_candle['close'] < last_candle['open'])
             
             if bearish_close or break_entry or flip_entry:
                 entry_price = last_candle['close']
