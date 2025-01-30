@@ -6,8 +6,6 @@ import ta
 from dotenv import load_dotenv
 import os
 import json
-import mplfinance as mpf
-import matplotlib.pyplot as plt
 import argparse
 
 # Load environment variables
@@ -397,75 +395,6 @@ class SupplyDemandScanner:
             print(f"Entry validation error: {str(e)}")
             return False, None
 
-    def plot_setup(self, df, setup, filename=None):
-        """Enhanced visualization of strategy setup"""
-        # Create plot with annotations
-        apds = [
-            mpf.make_addplot(df['close'], panel=0, color='dodgerblue', ylabel='Price'),
-        ]
-        
-        # Create figure
-        fig, axes = mpf.plot(df, 
-                           type='candle',
-                           style='yahoo',
-                           addplot=apds,
-                           volume=True,
-                           figsize=(20, 12),
-                           returnfig=True)
-        
-        ax = axes[0]
-        
-        # Draw supply/demand zone
-        if setup['zone_type'] == 'SUPPLY':
-            zone_color = 'red'
-            ax.axhspan(setup['stop_price'], setup['entry_price'], 
-                     facecolor='red', alpha=0.1, label='Supply Zone')
-        else:
-            zone_color = 'green'
-            ax.axhspan(setup['entry_price'], setup['stop_price'],
-                     facecolor='green', alpha=0.1, label='Demand Zone')
-        
-        # Plot entry point
-        entry_time = df.index[-1]  # Simplified for example
-        ax.plot(entry_time, setup['entry_price'], 
-              marker='^' if setup['direction'] == 'LONG' else 'v', 
-              markersize=15, color='lime', label='Entry')
-        
-        # Plot liquidity levels
-        ax.axhline(y=setup['stop_price'], color=zone_color, 
-                 linestyle='--', linewidth=2, label='Liquidity Level')
-        
-        # Plot targets and stops
-        ax.axhline(setup['tp1_price'], color='blue', linestyle=':', 
-                 label='TP1 (1:3 RR)')
-        ax.axhline(setup['tp2_price'], color='navy', linestyle='--', 
-                 label='TP2 (1:10 RR)')
-        ax.axhline(setup['stop_price'], color='red', 
-                 linestyle='-', label='Stop Loss')
-        
-        # Add strategy info box
-        info_text = (
-            f"Strategy 3 Setup\n"
-            f"Direction: {setup['direction']}\n"
-            f"RR Ratio: 1:{setup['rr_ratio']:.1f}\n"
-            f"Zone Type: {setup['zone_accuracy'].title()}\n"
-            f"Confidence: {self.calculate_confidence(setup)}/10"
-        )
-        ax.text(0.05, 0.95, info_text, 
-              transform=ax.transAxes, 
-              bbox=dict(facecolor='white', alpha=0.8))
-        
-        # Add legend and labels
-        ax.set_title(f"{setup['symbol']} - Supply & Demand Strategy Visualization", fontsize=16)
-        ax.legend(loc='upper left')
-        
-        # Save or show
-        if filename:
-            plt.savefig(filename, bbox_inches='tight')
-            plt.close()
-        else:
-            plt.show()
-
     def calculate_confidence(self, setup):
         """Simple confidence scoring for visualization"""
         score = 0
@@ -515,8 +444,28 @@ class SupplyDemandScanner:
                             'stop_price': float(entry_setup['stop_price']),
                             'tp1': float(tp1),
                             'tp2': float(tp2),
-                            'rr_ratio': abs(tp1 - entry_setup['entry_price']) / risk
+                            'rr_ratio': abs(tp1 - entry_setup['entry_price']) / risk,
+                            'entry_triggered': False,  # Boolean flag
+                            'trigger_time': None,      # Datetime of confirmation candle
+                            'actual_entry': None      # Price of confirmation candle close
                         }
+                        
+                        # Add this check before appending to potential_setups:
+                        df_check = self.get_klines(symbol, '5m', 2)  # Get last 2 candles
+                        if setup['direction'] == 'LONG':
+                            triggered = (df_check.iloc[-2]['low'] <= setup['entry_price']) and \
+                                        (df_check.iloc[-1]['close'] > setup['entry_price'])
+                        else:
+                            triggered = (df_check.iloc[-2]['high'] >= setup['entry_price']) and \
+                                        (df_check.iloc[-1]['close'] < setup['entry_price'])
+
+                        if triggered:
+                            setup.update({
+                                'entry_triggered': True,
+                                'trigger_time': df_check.index[-1].strftime('%Y-%m-%d %H:%M'),
+                                'actual_entry': df_check.iloc[-1]['close']
+                            })
+                        
                         valid_setups.append(setup)
                         print(f"Valid {setup['direction']} setup found for {symbol}")
                         
@@ -536,9 +485,6 @@ class SupplyDemandScanner:
         valid_pairs = self.get_valid_pairs()
         potential_setups = []
         
-        # Create visualization directory
-        os.makedirs('strategy_visualizations', exist_ok=True)
-        
         for symbol in valid_pairs:
             try:
                 # Get data
@@ -553,15 +499,6 @@ class SupplyDemandScanner:
                 for setup in setups:
                     if self.validate_setup_with_lower_timeframe(df_1h, setup):
                         potential_setups.append(setup)
-                        
-                        # Generate visualization
-                        try:
-                            timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-                            filename = f"strategy_visualizations/{symbol}_{setup['direction']}_{timestamp}.png"
-                            self.plot_setup(df_5m, setup, filename)
-                            print(f"Saved visualization: {filename}")
-                        except Exception as e:
-                            print(f"Failed to save visualization: {str(e)}")
             
             except Exception as e:
                 print(f"Error analyzing {symbol}: {str(e)}")
