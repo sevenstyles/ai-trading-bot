@@ -13,7 +13,6 @@ CORE COMPONENTS:
 2. Liquidity Formation:
    - Small retracement not tapping zone
    - Must break previous high/low that created liquidity
-   - Multiple liquidity sweeps add confluence
 
 3. Zone Validation:
    - Must be untapped zones only

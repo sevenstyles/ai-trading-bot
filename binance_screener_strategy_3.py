@@ -268,25 +268,13 @@ class SupplyDemandScanner:
         return strength
 
     def detect_liquidity_formation(self, df, symbol, zone):
-        """Detect liquidity formation per strategy rules"""
+        """Simplified liquidity check without sweep counting"""
         try:
-            # Check for break of previous high/low
+            # Check for break of previous high/low only
             if zone['type'] == 'supply':
-                liquidity_break = df['high'].iloc[-1] > df['high'].iloc[-2]
+                return df['high'].iloc[-1] > df['high'].iloc[-2]
             else:
-                liquidity_break = df['low'].iloc[-1] < df['low'].iloc[-2]
-            
-            # Check for multiple sweeps
-            swings = 0
-            for i in range(-5, 0):
-                if zone['type'] == 'supply':
-                    if df['high'].iloc[i] > df['high'].iloc[i-1]:
-                        swings += 1
-                else:
-                    if df['low'].iloc[i] < df['low'].iloc[i-1]:
-                        swings += 1
-            
-            return liquidity_break and swings >= 2
+                return df['low'].iloc[-1] < df['low'].iloc[-2]
         except Exception as e:
             print(f"Error in detect_liquidity_formation: {str(e)}")
             return False
@@ -342,12 +330,12 @@ class SupplyDemandScanner:
         return tp1, tp2
 
     def validate_entry_sequence(self, df, zone, zone_type):
-        """Validate exact entry sequence"""
-        post_zone_data = df.iloc[zone['index']+1:]
+        """Now using 30m candles for entry validation"""
+        post_zone_data = df.iloc[zone['index']+1:]  # 30m data
         
+        # Existing entry logic remains but operates on 30m timeframe
         for i in range(len(post_zone_data)):
             if zone_type == 'SUPPLY':
-                # Checks 4H candle closes
                 if post_zone_data['close'].iloc[i] < post_zone_data['open'].iloc[i]:
                     return True, post_zone_data['close'].iloc[i]
             else:
@@ -437,6 +425,11 @@ class SupplyDemandScanner:
     def find_setup_sequence(self, df, symbol):
         """Find valid supply and demand setups with updated rules"""
         print(f"\n=== Zone Detection Debug for {symbol} ===")
+        # Get 4H trend separately
+        df_4h = self.get_klines(symbol, '4h', 50)  # Shorter lookback
+        trend = self.check_trend_alignment(df_4h)
+        
+        # Existing zone analysis continues but on 30m df
         supply_zones, demand_zones = self.detect_zones(df)
         print(f"Found {len(supply_zones)} supply zones, {len(demand_zones)} demand zones")
         
@@ -447,10 +440,6 @@ class SupplyDemandScanner:
         
         # Similar debug for demand zones...
         valid_setups = []
-        
-        # Get trend
-        trend = self.check_trend_alignment(df)
-        print(f"Current trend: {trend}")
         
         # Check supply zones
         for zone in supply_zones:
@@ -543,8 +532,8 @@ class SupplyDemandScanner:
                 print(f"\n=== Analyzing {symbol} ===")
                 
                 # Get data for both timeframes
-                df_4h = self.get_klines(symbol, '4h', 300)
-                df_30m = self.get_klines(symbol, '30m', 300)
+                df_4h = self.get_klines(symbol, '4h', 300)  # For trend only
+                df_30m = self.get_klines(symbol, '30m', 300)  # For zone analysis
                 
                 if df_4h is None or df_30m is None:
                     print("Failed to get kline data")
@@ -556,7 +545,7 @@ class SupplyDemandScanner:
                 
                 # Continue analysis even if no clear trend
                 # Check for strong move
-                strong_move = self.is_strong_move(df_4h)
+                strong_move = self.is_strong_move(df_30m)
                 print(f"Strong move detected: {strong_move}")
                 
                 if not strong_move:
@@ -564,20 +553,20 @@ class SupplyDemandScanner:
                     continue
                     
                 # Check for retracement
-                retracing = self.is_retracing(df_4h)
+                retracing = self.is_retracing(df_30m)
                 print(f"Price retracing: {retracing}")
                 
                 if not retracing:
                     print("No valid retracement, skipping pair")
                     continue
                 
-                # Find setups on 4h timeframe
-                setups = self.find_setup_sequence(df_4h, symbol)
+                # Find setups on 30m data with 4h trend
+                setups = self.find_setup_sequence(df_30m, symbol)
                 print(f"Number of potential setups found: {len(setups)}")
                 
                 for setup in setups:
-                    # Validate setup with 30m timeframe
-                    if self.validate_setup_with_lower_timeframe(df_30m, setup):
+                    # Validate setup with 4h timeframe
+                    if self.validate_setup_with_lower_timeframe(df_4h, setup):
                         potential_setups.append(setup)
                         print(f"Valid {setup['direction']} setup found!")
                         print(f"Entry: {setup['entry_price']:.8f}")
@@ -585,7 +574,7 @@ class SupplyDemandScanner:
                         print(f"TP1: {setup['tp1_price']:.8f}")
                         print(f"RR Ratio: {setup['rr_ratio']:.2f}")
                     else:
-                        print("Setup failed 30m timeframe validation")
+                        print("Setup failed 4h timeframe validation")
                     
             except Exception as e:
                 print(f"Error analyzing {symbol}: {str(e)}")
@@ -596,11 +585,11 @@ class SupplyDemandScanner:
         print(f"\nAnalysis complete. Found {len(potential_setups)} total setups")
         return pd.DataFrame(potential_setups) if potential_setups else pd.DataFrame()
 
-    def validate_setup_with_lower_timeframe(self, df_30m, setup):
-        """Validate setup using 30m timeframe"""
+    def validate_setup_with_lower_timeframe(self, df_4h, setup):
+        """Validate setup using 4h timeframe"""
         try:
             # Simply confirm direction matches
-            recent_candles = df_30m.tail(12)
+            recent_candles = df_4h.tail(12)
             if setup['direction'] == 'LONG':
                 return recent_candles['close'].iloc[-1] > recent_candles['close'].iloc[0]
             else:
