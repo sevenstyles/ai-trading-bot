@@ -78,28 +78,57 @@ class SupplyDemandScanner:
     def is_strong_move(self, df):
         """Check if there's been a strong recent move"""
         try:
-            # Calculate average candle size
+            # Calculate average candle size and percentage moves
+            df = df.copy()  # Create a copy to avoid SettingWithCopyWarning
             df['candle_size'] = abs(df['close'] - df['open'])
+            df['body_size_pct'] = df['candle_size'] / df['open'] * 100  # Size as percentage
+            
+            # Get recent data
+            recent_candles = df.tail(5)
             avg_size = df['candle_size'].rolling(20).mean()
+            recent_avgs = avg_size.tail(5)
             
-            # Look for candles significantly larger than average
-            recent_candles = df.tail(5).reset_index(drop=True)
-            recent_avgs = avg_size.tail(5).reset_index(drop=True)
+            # Consider a move strong if:
+            # 1. Single candle > 1.2x average
+            strong_single = (recent_candles['candle_size'] > (recent_avgs * 1.2)).any()
             
-            # More lenient strong move detection (1.3x instead of 1.5x)
-            strong_moves = recent_candles['candle_size'] > (recent_avgs * 1.3)
+            # 2. Three consecutive candles showing momentum
+            consecutive_momentum = False
+            for i in range(len(recent_candles)-2):
+                three_candles = recent_candles.iloc[i:i+3]
+                if all(three_candles['close'] > three_candles['open']) or \
+                   all(three_candles['close'] < three_candles['open']):
+                    consecutive_momentum = True
+                    break
             
-            result = strong_moves.any()
-            print(f"Strong move check - Recent sizes: {recent_candles['candle_size'].values}, Averages: {recent_avgs.values}, Result: {result}")
+            # 3. Check for strong volume
+            df['vol_sma'] = df['volume'].rolling(20).mean()
+            recent_vol = df['volume'].tail(5)
+            vol_sma = df['vol_sma'].tail(5)
+            strong_volume = (recent_vol > vol_sma * 1.2).any()
+            
+            result = strong_single or consecutive_momentum or strong_volume
+            
+            print(f"Strong move check:")
+            print(f"Recent candle sizes: {recent_candles['candle_size'].values}")
+            print(f"Average sizes: {recent_avgs.values}")
+            print(f"Strong single candle: {strong_single}")
+            print(f"Consecutive momentum: {consecutive_momentum}")
+            print(f"Strong volume: {strong_volume}")
+            
             return result
             
         except Exception as e:
             print(f"Error in is_strong_move: {str(e)}")
+            print("Full error:")
+            import traceback
+            print(traceback.format_exc())
             return False
 
     def is_retracing(self, df):
         """Check if price is retracing after a strong move"""
         try:
+            df = df.copy()  # Create a copy to avoid warnings
             recent_data = df.tail(10)
             recent_high = recent_data['high'].max()
             recent_low = recent_data['low'].min()
@@ -109,16 +138,33 @@ class SupplyDemandScanner:
             up_retracement = (recent_high - current_price) / (recent_high - recent_low)
             down_retracement = (current_price - recent_low) / (recent_high - recent_low)
             
-            # More lenient retracement range (20-80%)
-            result = 0.2 <= up_retracement <= 0.8 or 0.2 <= down_retracement <= 0.8
+            # Calculate momentum
+            price_change = abs(df['close'].iloc[-1] - df['close'].iloc[-2])
+            price_change_pct = price_change / df['close'].iloc[-2] * 100
             
-            print(f"Retracement check - High: {recent_high}, Low: {recent_low}, Current: {current_price}")
-            print(f"Up retracement: {up_retracement:.2%}, Down retracement: {down_retracement:.2%}")
+            # Check for small retracement that hasn't tapped zone
+            valid_retracement = (
+                (0.2 <= up_retracement <= 0.8) or  # Standard retracement
+                (0.2 <= down_retracement <= 0.8) or  # Standard retracement
+                (price_change_pct >= 1.0)  # Strong momentum
+            )
             
-            return result
+            print(f"Retracement analysis:")
+            print(f"Recent high: {recent_high:.8f}")
+            print(f"Recent low: {recent_low:.8f}")
+            print(f"Current price: {current_price:.8f}")
+            print(f"Up retracement: {up_retracement:.2%}")
+            print(f"Down retracement: {down_retracement:.2%}")
+            print(f"Price change %: {price_change_pct:.2f}%")
+            print(f"Valid retracement: {valid_retracement}")
+            
+            return valid_retracement
             
         except Exception as e:
             print(f"Error in is_retracing: {str(e)}")
+            print("Full error:")
+            import traceback
+            print(traceback.format_exc())
             return False
 
     def get_valid_pairs(self):
@@ -600,42 +646,46 @@ class SupplyDemandScanner:
         return pd.DataFrame(potential_setups) if potential_setups else pd.DataFrame()
 
     def validate_setup_with_lower_timeframe(self, df_1h, setup):
-        """
-        Validate setup using 1h timeframe
-        - Check for clean price action
-        - Verify trend alignment
-        """
-        # Get recent candles
-        recent_candles = df_1h.tail(12)  # Last 12 1h candles
-        
-        # Calculate average body size
-        recent_candles['body_size'] = abs(recent_candles['close'] - recent_candles['open'])
-        avg_body_size = recent_candles['body_size'].mean()
-        
-        # Check for clean price action (no excessive wicks)
-        for _, candle in recent_candles.iterrows():
-            upper_wick = candle['high'] - max(candle['open'], candle['close'])
-            lower_wick = min(candle['open'], candle['close']) - candle['low']
+        """Validate setup using 1h timeframe"""
+        try:
+            # Get recent 1h candles
+            recent_candles = df_1h.tail(12).copy()  # Use .copy() to avoid SettingWithCopyWarning
             
-            # Wicks should not be more than 80% of body size
-            if upper_wick > (avg_body_size * 0.8) or lower_wick > (avg_body_size * 0.8):
-                return False
-        
-        # Check trend alignment
-        if setup['direction'] == 'LONG':
-            # For longs, we want to see higher lows
-            lows = recent_candles['low'].values
-            higher_lows = all(lows[i] >= lows[i-1] for i in range(1, len(lows)))
-            if not higher_lows:
-                return False
-        else:  # SHORT
-            # For shorts, we want to see lower highs
-            highs = recent_candles['high'].values
-            lower_highs = all(highs[i] <= highs[i-1] for i in range(1, len(highs)))
-            if not lower_highs:
-                return False
-        
-        return True
+            # Calculate basic momentum indicators
+            recent_candles['ema20'] = ta.trend.EMAIndicator(recent_candles['close'], window=20).ema_indicator()
+            recent_candles['rsi'] = ta.momentum.RSIIndicator(recent_candles['close'], window=14).rsi()
+            
+            if setup['direction'] == 'LONG':
+                # For longs, check for:
+                # 1. Higher lows in recent price action
+                lows = recent_candles['low'].values
+                higher_lows = all(lows[i] >= lows[i-1] for i in range(1, len(lows)))
+                
+                # 2. Price above EMA20
+                above_ema = recent_candles['close'].iloc[-1] > recent_candles['ema20'].iloc[-1]
+                
+                # 3. RSI not overbought
+                rsi_ok = recent_candles['rsi'].iloc[-1] < 70
+                
+                return higher_lows and above_ema and rsi_ok
+                
+            else:  # SHORT
+                # For shorts, check for:
+                # 1. Lower highs in recent price action
+                highs = recent_candles['high'].values
+                lower_highs = all(highs[i] <= highs[i-1] for i in range(1, len(highs)))
+                
+                # 2. Price below EMA20
+                below_ema = recent_candles['close'].iloc[-1] < recent_candles['ema20'].iloc[-1]
+                
+                # 3. RSI not oversold
+                rsi_ok = recent_candles['rsi'].iloc[-1] > 30
+                
+                return lower_highs and below_ema and rsi_ok
+                
+        except Exception as e:
+            print(f"Error in validate_setup_with_lower_timeframe: {str(e)}")
+            return False
 
 def main():
     try:
