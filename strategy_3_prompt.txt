@@ -84,9 +84,9 @@ Reject Trade If:
    - Against major HTF levels
 
 2. Technical Related:
-   - Stop loss exceeds maximum size
+   - Stop loss exceeds 1% (majors) or 2% (altcoins)
    - Against clear HTF trend
-   - During major market events/news
+   - During high impact news/events
 
 3. Time Related:
    - During major protocol upgrades

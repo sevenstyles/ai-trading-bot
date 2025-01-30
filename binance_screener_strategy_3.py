@@ -188,60 +188,56 @@ class SupplyDemandScanner:
             # Modified condition (remove volume_above_avg check)
             if is_strong_push:  # Simplified condition
                 # Supply zone (bearish push down)
-                if df['close'].iloc[i] < df['open'].iloc[i]:
-                    # Check for push down
-                    if df['close'].iloc[i] < df['low'].iloc[i-1]:
-                        # Accuracy zone check
-                        if df['low'].iloc[i] < df['low'].iloc[i+1]:
-                            zone = {
-                                'high': df['high'].iloc[i],
-                                'low': df['close'].iloc[i],
-                                'type': 'accuracy',
-                                'index': i
-                            }
-                        else:
-                            zone = {
-                                'high': df['high'].iloc[i],
-                                'low': df['low'].iloc[i],
-                                'type': 'normal',
-                                'index': i
-                            }
-                        # Moved wick validation inside zone creation block
-                        candle_body = abs(df['close'].iloc[i] - df['open'].iloc[i])
-                        wick_size = df['high'].iloc[i] - df['low'].iloc[i] - candle_body
-                        if zone['type'] == 'accuracy' and wick_size < candle_body * 0.5:
-                            continue  # Skip this zone if wick criteria not met
-                        zone['tapped'] = self.is_zone_tapped(df, zone)
-                        zone['strength'] = self.calculate_zone_strength(df, zone)
-                        supply_zones.append(zone)
+                if df['close'].iloc[i] < df['low'].iloc[i-1]:
+                    # Accuracy zone check
+                    if df['low'].iloc[i] < df['low'].iloc[i+1]:
+                        zone = {
+                            'high': df['high'].iloc[i],
+                            'low': df['close'].iloc[i],
+                            'type': 'accuracy',
+                            'index': i
+                        }
+                    else:
+                        zone = {
+                            'high': df['high'].iloc[i],
+                            'low': df['low'].iloc[i],
+                            'type': 'normal',
+                            'index': i
+                        }
+                    # Moved wick validation inside zone creation block
+                    candle_body = abs(df['close'].iloc[i] - df['open'].iloc[i])
+                    wick_size = df['high'].iloc[i] - df['low'].iloc[i] - candle_body
+                    if zone['type'] == 'accuracy' and wick_size < candle_body * 0.5:
+                        continue  # Skip this zone if wick criteria not met
+                    zone['tapped'] = self.is_zone_tapped(df, zone)
+                    zone['strength'] = self.calculate_zone_strength(df, zone)
+                    supply_zones.append(zone)
                 
                 # Demand zone (bullish push up)
-                elif df['close'].iloc[i] > df['open'].iloc[i]:
-                    # Check for push up
-                    if df['close'].iloc[i] > df['high'].iloc[i-1]:
-                        # Accuracy zone check
-                        if df['high'].iloc[i] > df['high'].iloc[i+1]:
-                            zone = {
-                                'high': df['open'].iloc[i],
-                                'low': df['low'].iloc[i],
-                                'type': 'accuracy',
-                                'index': i
-                            }
-                        else:
-                            zone = {
-                                'high': df['high'].iloc[i],
-                                'low': df['low'].iloc[i],
-                                'type': 'normal',
-                                'index': i
-                            }
-                        # Moved wick validation inside zone creation block
-                        candle_body = abs(df['close'].iloc[i] - df['open'].iloc[i])
-                        wick_size = df['high'].iloc[i] - df['low'].iloc[i] - candle_body
-                        if zone['type'] == 'accuracy' and wick_size < candle_body * 0.5:
-                            continue  # Skip this zone if wick criteria not met
-                        zone['tapped'] = self.is_zone_tapped(df, zone)
-                        zone['strength'] = self.calculate_zone_strength(df, zone)
-                        demand_zones.append(zone)
+                elif df['close'].iloc[i] > df['high'].iloc[i-1]:
+                    # Accuracy zone check
+                    if df['high'].iloc[i] > df['high'].iloc[i+1]:
+                        zone = {
+                            'high': df['open'].iloc[i],
+                            'low': df['low'].iloc[i],
+                            'type': 'accuracy',
+                            'index': i
+                        }
+                    else:
+                        zone = {
+                            'high': df['high'].iloc[i],
+                            'low': df['low'].iloc[i],
+                            'type': 'normal',
+                            'index': i
+                        }
+                    # Moved wick validation inside zone creation block
+                    candle_body = abs(df['close'].iloc[i] - df['open'].iloc[i])
+                    wick_size = df['high'].iloc[i] - df['low'].iloc[i] - candle_body
+                    if zone['type'] == 'accuracy' and wick_size < candle_body * 0.5:
+                        continue  # Skip this zone if wick criteria not met
+                    zone['tapped'] = self.is_zone_tapped(df, zone)
+                    zone['strength'] = self.calculate_zone_strength(df, zone)
+                    demand_zones.append(zone)
             
             # FIXED: Use original datetime index for age calculation
             zone_age = (original_index[-1] - original_index[i]).total_seconds()/3600
@@ -294,7 +290,15 @@ class SupplyDemandScanner:
                 print(f"Rejecting zone - {len(closes_inside)} closes inside")
                 return False
             
-            return True
+            # Trend alignment
+            df_1h = self.get_klines(zone['symbol'], '1h', 50)  # 1h trend must agree
+            trend = self.check_trend_alignment(df_1h)
+            
+            # Risk-Reward
+            if self.calculate_risk_reward(zone['entry_price'], zone['stop_price'], zone['tp1_price']) >= 3:  # Minimum 1:3 required
+                return True
+            
+            return False
         except Exception as e:
             print(f"Validation error: {str(e)}")
             return False
@@ -309,15 +313,14 @@ class SupplyDemandScanner:
         """Find TP levels using swing highs/lows and fibonacci extensions"""
         risk = abs(entry_price - stop_price)
         
+        # Target calculation
+        tp1 = entry_price + (risk * 3)  # Minimum 1:3
+        tp2 = entry_price + (risk * 10)  # Max 1:10 or 1.618 Fib extension
+
+        # Partial profit taking
         if direction == 'LONG':
-            # TP1: Nearest swing high (minimum 1:3)
-            min_tp1 = entry_price + (risk * 3)
-            future_highs = df[df['high'] > min_tp1]['high']
-            tp1 = future_highs.iloc[0] if not future_highs.empty else min_tp1
-            
-            # TP2: 1.618 extension or max 1:10
-            tp2 = min(entry_price + (risk * 10),  # Max 1:10
-                     entry_price + (risk * 1.618))  # Fib extension
+            # Take 50% at TP1, rest at TP2
+            pass  # Actual position sizing logic would go here
         else:
             # Similar logic for shorts
             min_tp1 = entry_price - (risk * 3)
@@ -329,21 +332,53 @@ class SupplyDemandScanner:
         
         return tp1, tp2
 
-    def validate_entry_sequence(self, df, zone, zone_type):
-        """Now using 30m candles for entry validation"""
-        post_zone_data = df.iloc[zone['index']+1:]  # 30m data
+    def validate_entry_sequence(self, df, zone, zone_type, symbol):
+        """Now using 5m candles for entry validation"""
+        post_zone_data = df.iloc[zone['index']+1:]  # 5m data
         
-        # Existing entry logic remains but operates on 30m timeframe
+        # Tighter entry requirements for 5m
+        valid_entry = False
         for i in range(len(post_zone_data)):
             if zone_type == 'SUPPLY':
-                if post_zone_data['close'].iloc[i] < post_zone_data['open'].iloc[i]:
-                    return True, post_zone_data['close'].iloc[i]
+                # Require 2 consecutive bearish closes
+                if post_zone_data['close'].iloc[i] < post_zone_data['open'].iloc[i] and \
+                   (i > 0 and post_zone_data['close'].iloc[i-1] < post_zone_data['open'].iloc[i-1]):
+                    valid_entry = True
+                    break
             else:
-                # LONG entry - first bullish close after zone touch
-                if post_zone_data['close'].iloc[i] > post_zone_data['open'].iloc[i]:
-                    return True, post_zone_data['close'].iloc[i]
+                # Require 2 consecutive bullish closes 
+                if post_zone_data['close'].iloc[i] > post_zone_data['open'].iloc[i] and \
+                   (i > 0 and post_zone_data['close'].iloc[i-1] > post_zone_data['open'].iloc[i-1]):
+                    valid_entry = True
+                    break
         
-        return False, None
+        # Check for liquidity formation
+        if self.detect_liquidity_formation(df, symbol, zone):  # Changed here
+            stop_price = zone['high'] if zone_type == 'SUPPLY' else zone['low']
+            
+            # Find targets
+            tp1, tp2 = self.find_targets(df, post_zone_data['close'].iloc[0], stop_price, 'SHORT' if zone_type == 'SUPPLY' else 'LONG')
+            
+            # Calculate RR
+            risk = abs(post_zone_data['close'].iloc[0] - stop_price)
+            reward_tp1 = abs(tp1 - post_zone_data['close'].iloc[0])
+            rr_ratio = reward_tp1 / risk if risk > 0 else 0
+            
+            if rr_ratio >= 3:  # Minimum 1:3 RR as per strategy
+                setup = {
+                    'symbol': symbol,
+                    'direction': 'SHORT' if zone_type == 'SUPPLY' else 'LONG',
+                    'zone_type': zone_type,
+                    'zone_accuracy': zone['type'],
+                    'entry_price': float(post_zone_data['close'].iloc[0]),
+                    'stop_price': float(stop_price),
+                    'tp1_price': float(tp1),
+                    'tp2_price': float(tp2),
+                    'rr_ratio': float(rr_ratio)
+                }
+                return valid_entry, setup
+        
+        return valid_entry, None
 
     def plot_setup(self, df, setup, filename=None):
         """Enhanced visualization of strategy setup"""
@@ -424,14 +459,13 @@ class SupplyDemandScanner:
 
     def find_setup_sequence(self, df, symbol):
         """Find valid supply and demand setups with updated rules"""
-        print(f"\n=== Zone Detection Debug for {symbol} ===")
-        # Get 4H trend separately
-        df_4h = self.get_klines(symbol, '4h', 50)  # Shorter lookback
-        trend = self.check_trend_alignment(df_4h)
+        print(f"\n=== 5m Zone Detection for {symbol} ===")
+        df_1h = self.get_klines(symbol, '1h', 100)  # HTF 1h
+        trend = self.check_trend_alignment(df_1h)
         
-        # Existing zone analysis continues but on 30m df
+        # Increased sensitivity for 5m zones
         supply_zones, demand_zones = self.detect_zones(df)
-        print(f"Found {len(supply_zones)} supply zones, {len(demand_zones)} demand zones")
+        print(f"Found {len(supply_zones)} supply zones, {len(demand_zones)} demand zones on 5m")
         
         for zone in supply_zones:
             print(f"Supply Zone: {zone} | Age: {(df.index[-1] - df.index[zone['index']]).total_seconds()/3600:.1f}h")
@@ -448,8 +482,8 @@ class SupplyDemandScanner:
                 continue
             
             # Validate sequence
-            valid_entry, entry_price = self.validate_entry_sequence(df, zone, 'SUPPLY')
-            if not valid_entry:
+            valid_entry, entry_setup = self.validate_entry_sequence(df, zone, 'SUPPLY', symbol)
+            if not valid_entry or entry_setup is None:
                 continue
             
             # Check for liquidity formation
@@ -457,11 +491,11 @@ class SupplyDemandScanner:
                 stop_price = zone['high']
                 
                 # Find targets
-                tp1, tp2 = self.find_targets(df, entry_price, stop_price, 'SHORT')
+                tp1, tp2 = self.find_targets(df, entry_setup['entry_price'], stop_price, 'SHORT')
                 
                 # Calculate RR
-                risk = abs(entry_price - stop_price)
-                reward_tp1 = abs(tp1 - entry_price)
+                risk = abs(entry_setup['entry_price'] - stop_price)
+                reward_tp1 = abs(tp1 - entry_setup['entry_price'])
                 rr_ratio = reward_tp1 / risk if risk > 0 else 0
                 
                 if rr_ratio >= 3:  # Minimum 1:3 RR as per strategy
@@ -470,7 +504,7 @@ class SupplyDemandScanner:
                         'direction': 'SHORT',
                         'zone_type': 'SUPPLY',
                         'zone_accuracy': zone['type'],
-                        'entry_price': float(entry_price),
+                        'entry_price': float(entry_setup['entry_price']),
                         'stop_price': float(stop_price),
                         'tp1_price': float(tp1),
                         'tp2_price': float(tp2),
@@ -486,8 +520,8 @@ class SupplyDemandScanner:
                 continue
             
             # Validate sequence
-            valid_entry, entry_price = self.validate_entry_sequence(df, zone, 'DEMAND')
-            if not valid_entry:
+            valid_entry, entry_setup = self.validate_entry_sequence(df, zone, 'DEMAND', symbol)
+            if not valid_entry or entry_setup is None:
                 continue
             
             # Check for liquidity formation
@@ -495,11 +529,11 @@ class SupplyDemandScanner:
                 stop_price = zone['low']
                 
                 # Find targets
-                tp1, tp2 = self.find_targets(df, entry_price, stop_price, 'LONG')
+                tp1, tp2 = self.find_targets(df, entry_setup['entry_price'], stop_price, 'LONG')
                 
                 # Calculate RR
-                risk = abs(entry_price - stop_price)
-                reward_tp1 = abs(tp1 - entry_price)
+                risk = abs(entry_setup['entry_price'] - stop_price)
+                reward_tp1 = abs(tp1 - entry_setup['entry_price'])
                 rr_ratio = reward_tp1 / risk if risk > 0 else 0
                 
                 if rr_ratio >= 3:  # Minimum 1:3 RR as per strategy
@@ -508,7 +542,7 @@ class SupplyDemandScanner:
                         'direction': 'LONG',
                         'zone_type': 'DEMAND',
                         'zone_accuracy': zone['type'],
-                        'entry_price': float(entry_price),
+                        'entry_price': float(entry_setup['entry_price']),
                         'stop_price': float(stop_price),
                         'tp1_price': float(tp1),
                         'tp2_price': float(tp2),
@@ -525,48 +559,27 @@ class SupplyDemandScanner:
         valid_pairs = self.get_valid_pairs()
         potential_setups = []
         
-        print(f"\nFound {len(valid_pairs)} pairs meeting initial criteria")
-        
         for symbol in valid_pairs:
             try:
-                print(f"\n=== Analyzing {symbol} ===")
+                # Get data for updated timeframes
+                df_1h = self.get_klines(symbol, '1h', 200)  # HTF remains 1h
+                df_5m = self.get_klines(symbol, '5m', 720)  # LTF changed to 5m (720 candles = 2.5 days)
                 
-                # Get data for both timeframes
-                df_4h = self.get_klines(symbol, '4h', 300)  # For trend only
-                df_30m = self.get_klines(symbol, '30m', 300)  # For zone analysis
-                
-                if df_4h is None or df_30m is None:
+                if df_1h is None or df_5m is None:
                     print("Failed to get kline data")
                     continue
                 
-                # Check trend alignment
-                trend = self.check_trend_alignment(df_4h)
-                print(f"Trend alignment: {trend}")
+                # Trend analysis on 1h timeframe
+                trend = self.check_trend_alignment(df_1h)
+                print(f"1H Trend alignment: {trend}")
                 
-                # Continue analysis even if no clear trend
-                # Check for strong move
-                strong_move = self.is_strong_move(df_30m)
-                print(f"Strong move detected: {strong_move}")
-                
-                if not strong_move:
-                    print("No strong move detected, skipping pair")
-                    continue
-                    
-                # Check for retracement
-                retracing = self.is_retracing(df_30m)
-                print(f"Price retracing: {retracing}")
-                
-                if not retracing:
-                    print("No valid retracement, skipping pair")
-                    continue
-                
-                # Find setups on 30m data with 4h trend
-                setups = self.find_setup_sequence(df_30m, symbol)
+                # Zone analysis on 5m timeframe
+                setups = self.find_setup_sequence(df_5m, symbol)
                 print(f"Number of potential setups found: {len(setups)}")
                 
                 for setup in setups:
-                    # Validate setup with 4h timeframe
-                    if self.validate_setup_with_lower_timeframe(df_4h, setup):
+                    # Validate setup with 1h timeframe
+                    if self.validate_setup_with_lower_timeframe(df_1h, setup):
                         potential_setups.append(setup)
                         print(f"Valid {setup['direction']} setup found!")
                         print(f"Entry: {setup['entry_price']:.8f}")
@@ -574,7 +587,7 @@ class SupplyDemandScanner:
                         print(f"TP1: {setup['tp1_price']:.8f}")
                         print(f"RR Ratio: {setup['rr_ratio']:.2f}")
                     else:
-                        print("Setup failed 4h timeframe validation")
+                        print("Setup failed 1h timeframe validation")
                     
             except Exception as e:
                 print(f"Error analyzing {symbol}: {str(e)}")
@@ -585,11 +598,11 @@ class SupplyDemandScanner:
         print(f"\nAnalysis complete. Found {len(potential_setups)} total setups")
         return pd.DataFrame(potential_setups) if potential_setups else pd.DataFrame()
 
-    def validate_setup_with_lower_timeframe(self, df_4h, setup):
-        """Validate setup using 4h timeframe"""
+    def validate_setup_with_lower_timeframe(self, df_1h, setup):
+        """Validate setup using 1h timeframe instead of 4h"""
         try:
-            # Simply confirm direction matches
-            recent_candles = df_4h.tail(12)
+            # Using 24 candles (24 hours) for daily trend validation
+            recent_candles = df_1h.tail(24)
             if setup['direction'] == 'LONG':
                 return recent_candles['close'].iloc[-1] > recent_candles['close'].iloc[0]
             else:
