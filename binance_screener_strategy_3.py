@@ -321,43 +321,38 @@ class SupplyDemandScanner:
         return tp1, tp2
 
     def validate_entry_sequence(self, df, zone, zone_type, symbol):
-        """Simplified entry validation based on tap + close"""
+        """Updated entry validation for long setups"""
         try:
             post_zone_data = df.iloc[zone['index']+1:]
             
-            # Check for zone tap (wick only)
-            tapped = False
-            entry_bar = None
-            
-            # Look for first tap followed by directional close
-            for i in range(len(post_zone_data)):
+            for i in range(len(post_zone_data)-1):  # Need at least 2 candles
                 current = post_zone_data.iloc[i]
+                next_candle = post_zone_data.iloc[i+1]
                 
-                # Check if price wick entered zone
-                if zone_type == 'SUPPLY' and current['high'] > zone['low']:
-                    tapped = True
-                elif zone_type == 'DEMAND' and current['low'] < zone['high']:
-                    tapped = True
+                # For DEMAND (LONG) zones
+                if zone_type == 'DEMAND':
+                    # 1. Check if current candle wick tapped zone (bearish candle)
+                    tapped = current['low'] < zone['high'] and current['close'] < current['open']
                     
-                # After tap, check next candle close
-                if tapped and i < len(post_zone_data)-1:
-                    next_close = post_zone_data.iloc[i+1]['close']
-                    prev_close = post_zone_data.iloc[i]['close']
-                    
-                    # Direction check
-                    if zone_type == 'SUPPLY' and next_close < prev_close:
+                    # 2. Check next candle closes bullish
+                    if tapped and next_candle['close'] > next_candle['open']:
                         return True, {
-                            'entry_price': float(next_close),
-                            'stop_price': zone['high']
-                        }
-                    elif zone_type == 'DEMAND' and next_close > prev_close:
-                        return True, {
-                            'entry_price': float(next_close),
+                            'entry_price': float(next_candle['close']),
                             'stop_price': zone['low']
+                        }
+                
+                # For SUPPLY (SHORT) zones
+                else:
+                    # Reverse logic for shorts
+                    tapped = current['high'] > zone['low'] and current['close'] > current['open']
+                    
+                    if tapped and next_candle['close'] < next_candle['open']:
+                        return True, {
+                            'entry_price': float(next_candle['close']),
+                            'stop_price': zone['high']
                         }
             
             return False, None
-            
         except Exception as e:
             print(f"Entry validation error: {str(e)}")
             return False, None
