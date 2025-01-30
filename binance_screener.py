@@ -49,7 +49,7 @@ class ForeverModelScanner:
                         
         return valid_pairs
 
-    def get_klines(self, symbol, interval, limit=100):
+    def get_klines(self, symbol, interval, limit=200):
         """Get kline/candlestick data"""
         endpoint = "/api/v3/klines"
         params = {
@@ -78,25 +78,87 @@ class ForeverModelScanner:
         return df['volume'].rolling(window=periods).mean()
 
     def detect_liquidity_sweep(self, df, avg_volume):
-        """Detect potential liquidity sweeps"""
-        volume_spikes = df['volume'] > (avg_volume * 2.5)
-        high_wicks = (df['high'] - df['close']) > (df['high'] - df['low']) * 0.6
-        low_wicks = (df['close'] - df['low']) > (df['high'] - df['low']) * 0.6
+        """Detect potential liquidity sweeps with volume requirements"""
+        # Volume must be between 2.5x and 5x average (relaxed upper limit)
+        volume_valid = (df['volume'] > (avg_volume * 2.5)) & (df['volume'] < (avg_volume * 7))  # Relaxed upper limit
         
-        return volume_spikes & (high_wicks | low_wicks)
+        # Price action requirements - relaxed wick requirements
+        high_wicks = (df['high'] - df['close']) > (df['high'] - df['low']) * 0.4  # Relaxed from 0.6
+        low_wicks = (df['close'] - df['low']) > (df['high'] - df['low']) * 0.4   # Relaxed from 0.6
+        
+        # Must show clean sweep with weak closing price - relaxed conditions
+        bearish_sweep = high_wicks & (df['close'] <= df['open'])
+        bullish_sweep = low_wicks & (df['close'] >= df['open'])
+        
+        return (volume_valid & (bearish_sweep | bullish_sweep))
 
-    def detect_fvg(self, df, min_gap_percent=1.2):
-        """Detect Fair Value Gaps"""
+    def detect_consolidation(self, df, min_candles=6, max_candles=12):  # Reduced min candles
+        """Check for 6-12 candle consolidation pattern"""
+        # Calculate price range as percentage
+        price_range = (df['high'] - df['low']) / df['low'] * 100
+        
+        # Check for tight consolidation - relaxed threshold
+        is_consolidating = price_range < 2.0  # Increased from 1.2
+        
+        # Check volume decrease during consolidation - simplified
+        volume_decrease = df['volume'] < df['volume'].rolling(window=3).mean()
+        
+        # Combine conditions and look for sustained periods - relaxed requirement
+        consolidation = is_consolidating & volume_decrease
+        return consolidation.rolling(window=min_candles).sum() >= (min_candles * 0.7)  # Allow some flexibility
+
+    def detect_fvg(self, df, min_gap_percent=1.0):  # Reduced gap requirement
+        """Detect Fair Value Gaps with validation"""
+        # Basic FVG detection
         fvg_bullish = (df['low'].shift(1) > df['high'].shift(-1)) & \
                      ((df['low'].shift(1) - df['high'].shift(-1)) / df['close'] * 100 >= min_gap_percent)
         
         fvg_bearish = (df['high'].shift(-1) > df['low'].shift(1)) & \
                      ((df['high'].shift(-1) - df['low'].shift(1)) / df['close'] * 100 >= min_gap_percent)
         
-        return fvg_bullish | fvg_bearish
+        # Calculate ATR for validation
+        atr = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close']).average_true_range()
+        
+        # Validate FVG with ATR - relaxed condition
+        fvg = (fvg_bullish | fvg_bearish) & (df['high'] - df['low'] > atr * 0.5)  # Reduced ATR requirement
+        return fvg
 
-    def scan_for_setups(self, timeframe='4h', limit=100):
-        """Main scanning function"""
+    def check_setup_sequence(self, df):
+        """Verify core setup components exist"""
+        # Get component signals
+        avg_volume = self.calculate_average_volume(df)
+        sweeps = self.detect_liquidity_sweep(df, avg_volume)
+        fvg = self.detect_fvg(df)
+        
+        # Just check if we have both sweep and FVG within the last 20 candles
+        recent_sweeps = sweeps.iloc[-20:].any()
+        recent_fvg = fvg.iloc[-20:].any()
+        
+        return recent_sweeps and recent_fvg
+
+    def check_timeframe_alignment(self, symbol):
+        """Check alignment between 4h and 15m timeframes"""
+        # Get data for both timeframes
+        df_4h = self.get_klines(symbol, '4h', 200)
+        df_15m = self.get_klines(symbol, '15m', 100)
+        
+        if df_4h is None or df_15m is None:
+            return False
+            
+        # Check if recent 15m candles confirm 4h trend
+        last_4h_candle = df_4h.iloc[-1]
+        recent_15m = df_15m.tail(3)  # Last 3 15m candles
+        
+        # Relaxed trend alignment - only need 2 out of 3 candles to align
+        if last_4h_candle['close'] > last_4h_candle['open']:  # Bullish 4h
+            aligned_candles = sum(1 for _, c in recent_15m.iterrows() if c['close'] > c['open'])
+            return aligned_candles >= 2
+        else:  # Bearish 4h
+            aligned_candles = sum(1 for _, c in recent_15m.iterrows() if c['close'] < c['open'])
+            return aligned_candles >= 2
+
+    def scan_for_setups(self):
+        """Main scanning function focusing on core components"""
         valid_pairs = self.get_valid_pairs()
         potential_setups = []
         
@@ -104,40 +166,44 @@ class ForeverModelScanner:
             try:
                 print(f"\nAnalyzing {symbol}...")
                 
-                # Get klines data
-                df = self.get_klines(symbol, timeframe, limit)
-                if df is None:
+                # Get 4h data (primary timeframe)
+                df_4h = self.get_klines(symbol, '4h', 200)
+                if df_4h is None:
                     continue
                 
                 # Calculate indicators
-                avg_volume = self.calculate_average_volume(df)
-                df['rsi'] = ta.momentum.RSIIndicator(df['close']).rsi()
+                df_4h['rsi'] = ta.momentum.RSIIndicator(df_4h['close']).rsi()
                 
-                # Detect potential setups
-                has_liquidity_sweep = self.detect_liquidity_sweep(df, avg_volume).any()
-                has_fvg = self.detect_fvg(df).any()
+                # Check for core setup components
+                has_setup = self.check_setup_sequence(df_4h)
+                
+                if not has_setup:
+                    continue
+                
+                # RSI criteria - slightly relaxed
+                rsi = df_4h['rsi'].iloc[-1]
+                rsi_extreme = (rsi < 37) or (rsi > 63)  # Relaxed from 35/65
                 
                 # Volume criteria
-                recent_volume = df['volume'].iloc[-1]
-                avg_vol_last = avg_volume.iloc[-1]
-                recent_volume_increase = recent_volume > avg_vol_last * 1.8
+                avg_volume = self.calculate_average_volume(df_4h)
+                recent_volume = df_4h['volume'].iloc[-1]
+                volume_ratio = recent_volume / avg_volume.iloc[-1]
                 
-                # RSI criteria (oversold or overbought)
-                rsi = df['rsi'].iloc[-1]
-                rsi_extreme = (rsi < 35) or (rsi > 65)
+                # Check timeframe alignment
+                has_tf_alignment = self.check_timeframe_alignment(symbol)
                 
-                # If meeting initial criteria, add to potential setups
-                if has_liquidity_sweep and has_fvg and recent_volume_increase and rsi_extreme:
+                # Accept setups with core components and either RSI extreme or timeframe alignment
+                if has_setup and (rsi_extreme or has_tf_alignment):
                     setup = {
                         'symbol': symbol,
-                        'current_price': df['close'].iloc[-1],
-                        'volume_ratio': recent_volume / avg_vol_last,
+                        'current_price': df_4h['close'].iloc[-1],
+                        'volume_ratio': volume_ratio,
                         'rsi': rsi,
-                        'has_liquidity_sweep': has_liquidity_sweep,
-                        'has_fvg': has_fvg
+                        'timeframe_aligned': has_tf_alignment,
+                        'setup_quality': 'A+' if (rsi_extreme and has_tf_alignment) else 'A'
                     }
                     potential_setups.append(setup)
-                    print(f"Found potential setup for {symbol}")
+                    print(f"Found potential setup for {symbol} (Quality: {setup['setup_quality']})")
                     
             except Exception as e:
                 print(f"Error scanning {symbol}: {str(e)}")
@@ -145,17 +211,24 @@ class ForeverModelScanner:
         
         return pd.DataFrame(potential_setups)
 
-    def get_setup_details(self, symbol, timeframe='4h'):
+    def get_setup_details(self, symbol):
         """Get detailed analysis for a specific setup"""
-        df = self.get_klines(symbol, timeframe, limit=100)
-        if df is None:
+        # Get data for both timeframes
+        df_4h = self.get_klines(symbol, '4h', 200)
+        df_15m = self.get_klines(symbol, '15m', 100)
+        
+        if df_4h is None:
             return None
             
-        # Calculate additional metrics for detailed analysis
-        df['atr'] = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close']).average_true_range()
-        df['rsi'] = ta.momentum.RSIIndicator(df['close']).rsi()
+        # Calculate additional metrics
+        df_4h['atr'] = ta.volatility.AverageTrueRange(df_4h['high'], df_4h['low'], df_4h['close']).average_true_range()
+        df_4h['rsi'] = ta.momentum.RSIIndicator(df_4h['close']).rsi()
         
-        return df
+        # Add 15m confirmation if available
+        if df_15m is not None:
+            df_4h['15m_aligned'] = self.check_timeframe_alignment(symbol)
+        
+        return df_4h
 
 def main():
     try:
@@ -169,8 +242,8 @@ def main():
             print("No setups found matching criteria")
             return
         
-        # Sort by volume ratio to prioritize most active setups
-        setups_sorted = setups.sort_values('volume_ratio', ascending=False)
+        # Sort by setup quality and volume ratio
+        setups_sorted = setups.sort_values(['setup_quality', 'volume_ratio'], ascending=[False, False])
         
         # Create output directory if it doesn't exist
         os.makedirs('screener-results', exist_ok=True)
