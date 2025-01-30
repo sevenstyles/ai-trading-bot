@@ -7,55 +7,28 @@ CORE COMPONENTS:
 ----------------------
 1. Liquidity Sweep/Manipulation:
    - Must occur BEFORE inverse FVG formation
-   - Volume requirements:
-
-   a) Minimum: 2.5x average volume
-   b) Maximum: 5x average volume (reject if exceeded)
-
-
-   - Maximum formation time: 3 candles
    - Multiple sweeps in same direction add confluence
    - Must show clean sweep with weak closing price
 
 2. Inverse Fair Value Gap (FVG):
    - Forms AFTER confirmed liquidity sweep
-   - Minimum size: 1.2% of current price
    - Maximum age: 48 hours from formation
    - Multiple aligned FVGs add confluence
    - Must be validated by ATR penetration
-   - Pre-FVG Requirements:
-
-   a) Minimum 8 candle consolidation at new highs/lows
-   b) Maximum 12 candle consolidation period
 
 3. Structural Change Confirmation:
    - Must show clear Change of Character (CHoCH)
    - Break of Structure (BOS) with volume confirmation
-   - Volume requirements on break:
 
-   a) Minimum: 1.8x average volume
-   b) Maximum: 5x average volume
-
-
-   - RSI confirmation:
-
-   a) Bullish: RSI > 65
-   b) Bearish: RSI < 35
-
-
-   - MACD requirements:
-
-   a) Histogram showing increasing momentum
-   b) Minimum 3 candles of progressive increase
 
 4. Smart Money Trap (SMT) [Optional A++]:
-   - Clear price rejection (2.5-3% wick)
+   - Clear price rejection
    - Must align with HTF order block
    - Volume-weighted rejection pattern
    - Presence upgrades setup to A++ rating
 
 5. Opposing Liquidity Target:
-   - Minimum 3 equal highs/lows (within 0.5% range)
+   - Minimum 3 equal highs/lows
    - Must form over minimum 12 candles
    - Decreasing volume profile required
    - Must meet 1:3 risk-reward minimum
@@ -70,13 +43,11 @@ Primary Entry Method:
 1. Exact Entry Triggers:
 
    - Retest of inverse FVG zone
-   - Price reaction at 50% retracement
    - HTF pivot level confluence
    - Timeframe alignment:
 
    a) Primary: 4-hour chart
    b) Secondary: 15-minute chart
-   c) Require minimum 3 aligned 15m candles
 
 
 2. Entry Types:
@@ -120,14 +91,7 @@ MANDATORY REJECTION CRITERIA:
 ----------------------
 Reject Trade If:
 
-1. Volume-related:
-
-   - Sweep volume exceeds 5x average
-   - Volume decreases over 3+ consecutive candles
-   - Entry volume below 1.8x average
-
-
-2. Structure-related:
+1. Structure-related:
 
    - FVG forms before liquidity sweep
    - No clear HTF liquidity target
@@ -135,14 +99,11 @@ Reject Trade If:
    - HTF trend misalignment
 
 
-3. Technical-related:
+2. Technical-related:
 
    - ATR exceeds 3.5% of current price
    - Stop loss exceeds 2.5x current ATR
-   - No RSI divergence present
-   - MACD histogram not progressively increasing
    - Lower timeframe (15m) misalignment
-   - Less than 3 aligned 15m candles
 
 IMPORTANT FORMATTING RULES:
 -----------------------
