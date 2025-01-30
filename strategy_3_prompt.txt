@@ -19,7 +19,7 @@ CORE COMPONENTS:
    - Must be untapped zones only
    - No candle closures inside zone
    - Must align with higher timeframe trend
-   - Zones near trend extremes preferred over middle zones
+   - Zones remain valid until tapped regardless of age
 
 ENTRY RULES:
 ---------------------------

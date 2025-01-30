@@ -66,12 +66,17 @@ class SupplyDemandScanner:
     def is_strong_move(self, df):
         """Check if there's been a strong recent move"""
         try:
-            # Look for 3 consecutive candles in same direction
+            # Should also consider single strong candle that creates the zone
             recent_candles = df.tail(3)
-            if all(recent_candles['close'] > recent_candles['open']) or \
-               all(recent_candles['close'] < recent_candles['open']):
-                return True
-            return False
+            
+            # Check for 3 consecutive candles OR one strong candle (>2x avg size)
+            avg_body = abs(recent_candles['close'] - recent_candles['open']).mean()
+            strong_single = any(abs(recent_candles['close'] - recent_candles['open']) > 2*avg_body)
+            
+            consecutive = all(recent_candles['close'] > recent_candles['open']) or \
+                         all(recent_candles['close'] < recent_candles['open'])
+            
+            return consecutive or strong_single
         except Exception as e:
             print(f"Error in is_strong_move: {str(e)}")
             return False
@@ -79,43 +84,23 @@ class SupplyDemandScanner:
     def is_retracing(self, df):
         """Check if price is retracing after a strong move"""
         try:
-            df = df.copy()
+            # Modified to allow extreme retracements near swing points
             recent_data = df.tail(10)
-            recent_high = recent_data['high'].max()
-            recent_low = recent_data['low'].min()
             current_price = df['close'].iloc[-1]
             
-            # Calculate retracement levels
-            up_retracement = (recent_high - current_price) / (recent_high - recent_low)
-            down_retracement = (current_price - recent_low) / (recent_high - recent_low)
+            # Get nearest swing high/low
+            swing_high = recent_data['high'].max()
+            swing_low = recent_data['low'].min()
             
-            # Calculate momentum
-            price_change = abs(df['close'].iloc[-1] - df['close'].iloc[-2])
-            price_change_pct = price_change / df['close'].iloc[-2] * 100
-            
-            # Adjust retracement thresholds
+            # Allow retracements up to 90% from swing point
             valid_retracement = (
-                (0.25 <= up_retracement <= 0.75) or    # Expanded to 25-75%
-                (0.25 <= down_retracement <= 0.75) or  
-                (price_change_pct >= 0.5)            # Lowered to 0.5% 
+                current_price <= swing_high * 0.9 or  # 10% below swing high
+                current_price >= swing_low * 1.1      # 10% above swing low
             )
             
-            print(f"Retracement analysis:")
-            print(f"Recent high: {recent_high:.8f}")
-            print(f"Recent low: {recent_low:.8f}")
-            print(f"Current price: {current_price:.8f}")
-            print(f"Up retracement: {up_retracement:.2%}")
-            print(f"Down retracement: {down_retracement:.2%}")
-            print(f"Price change %: {price_change_pct:.2f}%")
-            print(f"Valid retracement: {valid_retracement}")
-            
             return valid_retracement
-            
         except Exception as e:
             print(f"Error in is_retracing: {str(e)}")
-            print("Full error:")
-            import traceback
-            print(traceback.format_exc())
             return False
 
     def get_valid_pairs(self):
@@ -196,18 +181,11 @@ class SupplyDemandScanner:
         demand_zones = []
         
         for i in range(1, len(df)-1):
-            # Add maximum lookback of 50 candles for zones
-            if i < len(df) - 50:  
-                continue
-            # Modified strong move detection
-            lookback = max(5, int(len(df)*0.1))  # Dynamic lookback
-            avg_body_size = df['body_size'].iloc[i-lookback:i].mean()
-            is_strong_push = df['body_size'].iloc[i] > avg_body_size * 0.9
+            # Remove dynamic lookback and volume confirmation
+            is_strong_push = df['body_size'].iloc[i] > df['body_size'].iloc[i-5:i].mean() * 0.9
             
-            # Add volume confirmation
-            volume_above_avg = df['volume'].iloc[i] > df['volume'].iloc[i-lookback:i].mean()
-            
-            if is_strong_push and volume_above_avg:  # Added volume filter
+            # Modified condition (remove volume_above_avg check)
+            if is_strong_push:  # Simplified condition
                 # Supply zone (bearish push down)
                 if df['close'].iloc[i] < df['open'].iloc[i]:
                     # Check for push down
@@ -271,21 +249,22 @@ class SupplyDemandScanner:
         return supply_zones, demand_zones
 
     def calculate_zone_strength(self, df, zone):
-        """Calculate zone strength score"""
+        """Calculate zone strength score based on strategy rules"""
         strength = 0
-        # Add points for big body size
-        body_size = abs(df['close'].iloc[zone['index']] - df['open'].iloc[zone['index']])
-        strength += min(3, body_size / df['body_size'].mean())
         
-        # Add points for high volume
-        strength += min(2, df['volume'].iloc[zone['index']] / df['volume'].mean())
+        # Base points for zone type
+        strength += 2 if zone['type'] == 'accuracy' else 1
         
-        # Deduct points for wick size if accuracy zone
-        if zone['type'] == 'accuracy':
-            wick_size = (df['high'].iloc[zone['index']] - df['low'].iloc[zone['index']]) - body_size
-            strength -= wick_size / body_size
+        # Add points for proximity to swing point
+        swing_high = df['high'].max()
+        swing_low = df['low'].min()
         
-        return round(strength, 2)
+        if zone['type'] == 'supply':
+            strength += 1 if zone['high'] >= swing_high * 0.95 else 0
+        else:
+            strength += 1 if zone['low'] <= swing_low * 1.05 else 0
+        
+        return strength
 
     def detect_liquidity_formation(self, df, symbol, zone):
         """Detect liquidity formation per strategy rules"""
@@ -325,14 +304,6 @@ class SupplyDemandScanner:
                                           (post_zone_data['close'] < zone['high'])]
             if not in_zone_closes.empty:
                 print("Candle closed inside zone - rejecting")
-                return False
-            
-            # Maximum zone age of 48 hours
-            zone_time = df.iloc[zone['index']].name
-            current_time = df.index[-1]
-            zone_age = (current_time - zone_time).total_seconds() / 3600
-            if zone_age > 48:
-                print(f"Zone too old ({zone_age}h) - rejecting")
                 return False
             
             return True
@@ -386,44 +357,81 @@ class SupplyDemandScanner:
         return False, None
 
     def plot_setup(self, df, setup, filename=None):
-        """Plot the setup with zones and entry points"""
-        # Create a copy of the dataframe for plotting
-        plot_df = df.copy()
+        """Enhanced visualization of strategy setup"""
+        # Create plot with annotations
+        apds = [
+            mpf.make_addplot(df['close'], panel=0, color='dodgerblue', ylabel='Price'),
+        ]
         
-        # Configure style
-        mc = mpf.make_marketcolors(up='green', down='red',
-                                  edge='inherit',
-                                  wick='inherit',
-                                  volume='in')
-        s = mpf.make_mpf_style(marketcolors=mc)
+        # Create figure
+        fig, axes = mpf.plot(df, 
+                           type='candle',
+                           style='yahoo',
+                           addplot=apds,
+                           volume=True,
+                           figsize=(20, 12),
+                           returnfig=True)
         
-        # Create the plot
-        fig, axes = mpf.plot(plot_df, type='candle', style=s,
-                            volume=True, returnfig=True,
-                            figsize=(15, 10))
+        ax = axes[0]
         
-        # Add zone
+        # Draw supply/demand zone
         if setup['zone_type'] == 'SUPPLY':
-            plt.axhline(y=setup['stop_price'], color='r', linestyle='--', label='Supply Zone High')
-            plt.axhline(y=setup['entry_price'], color='r', linestyle='--', label='Supply Zone Low')
+            zone_color = 'red'
+            ax.axhspan(setup['stop_price'], setup['entry_price'], 
+                     facecolor='red', alpha=0.1, label='Supply Zone')
         else:
-            plt.axhline(y=setup['stop_price'], color='g', linestyle='--', label='Demand Zone Low')
-            plt.axhline(y=setup['entry_price'], color='g', linestyle='--', label='Demand Zone High')
+            zone_color = 'green'
+            ax.axhspan(setup['entry_price'], setup['stop_price'],
+                     facecolor='green', alpha=0.1, label='Demand Zone')
         
-        # Add targets
-        plt.axhline(y=setup['tp1_price'], color='b', linestyle=':', label='TP1')
-        plt.axhline(y=setup['tp2_price'], color='b', linestyle='--', label='TP2')
+        # Plot entry point
+        entry_time = df.index[-1]  # Simplified for example
+        ax.plot(entry_time, setup['entry_price'], 
+              marker='^' if setup['direction'] == 'LONG' else 'v', 
+              markersize=15, color='lime', label='Entry')
         
-        # Add title and legend
-        plt.title(f"{setup['symbol']} {setup['zone_type']} Zone Setup (RR: {setup['rr_ratio']:.1f})")
-        plt.legend()
+        # Plot liquidity levels
+        ax.axhline(y=setup['stop_price'], color=zone_color, 
+                 linestyle='--', linewidth=2, label='Liquidity Level')
+        
+        # Plot targets and stops
+        ax.axhline(setup['tp1_price'], color='blue', linestyle=':', 
+                 label='TP1 (1:3 RR)')
+        ax.axhline(setup['tp2_price'], color='navy', linestyle='--', 
+                 label='TP2 (1:10 RR)')
+        ax.axhline(setup['stop_price'], color='red', 
+                 linestyle='-', label='Stop Loss')
+        
+        # Add strategy info box
+        info_text = (
+            f"Strategy 3 Setup\n"
+            f"Direction: {setup['direction']}\n"
+            f"RR Ratio: 1:{setup['rr_ratio']:.1f}\n"
+            f"Zone Type: {setup['zone_accuracy'].title()}\n"
+            f"Confidence: {self.calculate_confidence(setup)}/10"
+        )
+        ax.text(0.05, 0.95, info_text, 
+              transform=ax.transAxes, 
+              bbox=dict(facecolor='white', alpha=0.8))
+        
+        # Add legend and labels
+        ax.set_title(f"{setup['symbol']} - Supply & Demand Strategy Visualization", fontsize=16)
+        ax.legend(loc='upper left')
         
         # Save or show
         if filename:
-            plt.savefig(filename)
+            plt.savefig(filename, bbox_inches='tight')
             plt.close()
         else:
             plt.show()
+
+    def calculate_confidence(self, setup):
+        """Simple confidence scoring for visualization"""
+        score = 0
+        # Add your confidence metrics here
+        score += 3 if setup['rr_ratio'] >= 3 else 0
+        score += 2 if setup['zone_accuracy'] == 'accuracy' else 1
+        return min(10, score)
 
     def find_setup_sequence(self, df, symbol):
         """Find valid supply and demand setups with updated rules"""
@@ -447,11 +455,6 @@ class SupplyDemandScanner:
         for zone in supply_zones:
             # Only consider supply zones in downtrend or no clear trend
             if trend == 'up':
-                continue
-            
-            # Check zone age (max 48 hours as per strategy)
-            zone_age = (df.index[-1] - df.index[zone['index']]).total_seconds() / 3600
-            if zone_age > 48:
                 continue
             
             # Validate sequence
@@ -481,8 +484,7 @@ class SupplyDemandScanner:
                         'stop_price': float(stop_price),
                         'tp1_price': float(tp1),
                         'tp2_price': float(tp2),
-                        'rr_ratio': float(rr_ratio),
-                        'zone_age': zone_age
+                        'rr_ratio': float(rr_ratio)
                     }
                     valid_setups.append(setup)
                     print(f"Found valid SUPPLY setup for {symbol}")
@@ -491,11 +493,6 @@ class SupplyDemandScanner:
         for zone in demand_zones:
             # Only consider demand zones in uptrend or no clear trend
             if trend == 'down':
-                continue
-            
-            # Check zone age
-            zone_age = (df.index[-1] - df.index[zone['index']]).total_seconds() / 3600
-            if zone_age > 48:
                 continue
             
             # Validate sequence
@@ -525,8 +522,7 @@ class SupplyDemandScanner:
                         'stop_price': float(stop_price),
                         'tp1_price': float(tp1),
                         'tp2_price': float(tp2),
-                        'rr_ratio': float(rr_ratio),
-                        'zone_age': zone_age
+                        'rr_ratio': float(rr_ratio)
                     }
                     valid_setups.append(setup)
                     print(f"Found valid DEMAND setup for {symbol}")
@@ -615,10 +611,15 @@ class SupplyDemandScanner:
     def is_zone_tapped(self, df, zone):
         """Check if price has entered zone since creation"""
         post_zone_data = df.iloc[zone['index']+1:]
+        
         if zone['type'] == 'supply':
-            return any(post_zone_data['high'] >= zone['low'])
+            # Only consider closes above zone low as taps
+            taps = post_zone_data['close'] > zone['low']
         else:
-            return any(post_zone_data['low'] <= zone['high'])
+            # Only consider closes below zone high as taps
+            taps = post_zone_data['close'] < zone['high']
+        
+        return taps.any()  # True if any closes in zone
 
 def main():
     try:
