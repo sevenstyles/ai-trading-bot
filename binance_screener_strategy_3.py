@@ -263,18 +263,6 @@ class SupplyDemandScanner:
         
         return strength
 
-    def detect_liquidity_formation(self, df, symbol, zone):
-        """Simplified liquidity check without sweep counting"""
-        try:
-            # Check for break of previous high/low only
-            if zone['type'] == 'supply':
-                return df['high'].iloc[-1] > df['high'].iloc[-2]
-            else:
-                return df['low'].iloc[-1] < df['low'].iloc[-2]
-        except Exception as e:
-            print(f"Error in detect_liquidity_formation: {str(e)}")
-            return False
-
     def validate_zone(self, df, zone):
         """Updated validation with proper tap checking"""
         try:
@@ -333,52 +321,46 @@ class SupplyDemandScanner:
         return tp1, tp2
 
     def validate_entry_sequence(self, df, zone, zone_type, symbol):
-        """Now using 5m candles for entry validation"""
-        post_zone_data = df.iloc[zone['index']+1:]  # 5m data
-        
-        # Tighter entry requirements for 5m
-        valid_entry = False
-        for i in range(len(post_zone_data)):
-            if zone_type == 'SUPPLY':
-                # Require 2 consecutive bearish closes
-                if post_zone_data['close'].iloc[i] < post_zone_data['open'].iloc[i] and \
-                   (i > 0 and post_zone_data['close'].iloc[i-1] < post_zone_data['open'].iloc[i-1]):
-                    valid_entry = True
-                    break
-            else:
-                # Require 2 consecutive bullish closes 
-                if post_zone_data['close'].iloc[i] > post_zone_data['open'].iloc[i] and \
-                   (i > 0 and post_zone_data['close'].iloc[i-1] > post_zone_data['open'].iloc[i-1]):
-                    valid_entry = True
-                    break
-        
-        # Check for liquidity formation
-        if self.detect_liquidity_formation(df, symbol, zone):  # Changed here
-            stop_price = zone['high'] if zone_type == 'SUPPLY' else zone['low']
+        """Simplified entry validation based on tap + close"""
+        try:
+            post_zone_data = df.iloc[zone['index']+1:]
             
-            # Find targets
-            tp1, tp2 = self.find_targets(df, post_zone_data['close'].iloc[0], stop_price, 'SHORT' if zone_type == 'SUPPLY' else 'LONG')
+            # Check for zone tap (wick only)
+            tapped = False
+            entry_bar = None
             
-            # Calculate RR
-            risk = abs(post_zone_data['close'].iloc[0] - stop_price)
-            reward_tp1 = abs(tp1 - post_zone_data['close'].iloc[0])
-            rr_ratio = reward_tp1 / risk if risk > 0 else 0
+            # Look for first tap followed by directional close
+            for i in range(len(post_zone_data)):
+                current = post_zone_data.iloc[i]
+                
+                # Check if price wick entered zone
+                if zone_type == 'SUPPLY' and current['high'] > zone['low']:
+                    tapped = True
+                elif zone_type == 'DEMAND' and current['low'] < zone['high']:
+                    tapped = True
+                    
+                # After tap, check next candle close
+                if tapped and i < len(post_zone_data)-1:
+                    next_close = post_zone_data.iloc[i+1]['close']
+                    prev_close = post_zone_data.iloc[i]['close']
+                    
+                    # Direction check
+                    if zone_type == 'SUPPLY' and next_close < prev_close:
+                        return True, {
+                            'entry_price': float(next_close),
+                            'stop_price': zone['high']
+                        }
+                    elif zone_type == 'DEMAND' and next_close > prev_close:
+                        return True, {
+                            'entry_price': float(next_close),
+                            'stop_price': zone['low']
+                        }
             
-            if rr_ratio >= 3:  # Minimum 1:3 RR as per strategy
-                setup = {
-                    'symbol': symbol,
-                    'direction': 'SHORT' if zone_type == 'SUPPLY' else 'LONG',
-                    'zone_type': zone_type,
-                    'zone_accuracy': zone['type'],
-                    'entry_price': float(post_zone_data['close'].iloc[0]),
-                    'stop_price': float(stop_price),
-                    'tp1_price': float(tp1),
-                    'tp2_price': float(tp2),
-                    'rr_ratio': float(rr_ratio)
-                }
-                return valid_entry, setup
-        
-        return valid_entry, None
+            return False, None
+            
+        except Exception as e:
+            print(f"Entry validation error: {str(e)}")
+            return False, None
 
     def plot_setup(self, df, setup, filename=None):
         """Enhanced visualization of strategy setup"""
@@ -486,32 +468,29 @@ class SupplyDemandScanner:
             if not valid_entry or entry_setup is None:
                 continue
             
-            # Check for liquidity formation
-            if self.detect_liquidity_formation(df, symbol, zone):
-                stop_price = zone['high']
-                
-                # Find targets
-                tp1, tp2 = self.find_targets(df, entry_setup['entry_price'], stop_price, 'SHORT')
-                
-                # Calculate RR
-                risk = abs(entry_setup['entry_price'] - stop_price)
-                reward_tp1 = abs(tp1 - entry_setup['entry_price'])
-                rr_ratio = reward_tp1 / risk if risk > 0 else 0
-                
-                if rr_ratio >= 3:  # Minimum 1:3 RR as per strategy
-                    setup = {
-                        'symbol': symbol,
-                        'direction': 'SHORT',
-                        'zone_type': 'SUPPLY',
-                        'zone_accuracy': zone['type'],
-                        'entry_price': float(entry_setup['entry_price']),
-                        'stop_price': float(stop_price),
-                        'tp1_price': float(tp1),
-                        'tp2_price': float(tp2),
-                        'rr_ratio': float(rr_ratio)
-                    }
-                    valid_setups.append(setup)
-                    print(f"Found valid SUPPLY setup for {symbol}")
+            # Remove liquidity formation check
+            stop_price = entry_setup['stop_price']
+            entry_price = entry_setup['entry_price']
+            
+            # Calculate targets directly
+            risk = abs(entry_price - stop_price)
+            tp1 = entry_price + (risk * 3) if zone['type'] == 'DEMAND' else entry_price - (risk * 3)
+            tp2 = entry_price + (risk * 10) if zone['type'] == 'DEMAND' else entry_price - (risk * 10)
+            
+            # Create setup without liquidity check
+            setup = {
+                'symbol': symbol,
+                'direction': 'LONG' if zone['type'] == 'DEMAND' else 'SHORT',
+                'zone_type': zone['type'],
+                'zone_accuracy': zone['type'],
+                'entry_price': entry_price,
+                'stop_price': stop_price,
+                'tp1': tp1,
+                'tp2': tp2,
+                'rr_ratio': abs(tp1 - entry_price) / risk
+            }
+            valid_setups.append(setup)
+            print(f"Found valid {zone['type']} setup for {symbol}")
         
         # Similar logic for demand zones
         for zone in demand_zones:
@@ -524,32 +503,29 @@ class SupplyDemandScanner:
             if not valid_entry or entry_setup is None:
                 continue
             
-            # Check for liquidity formation
-            if self.detect_liquidity_formation(df, symbol, zone):
-                stop_price = zone['low']
-                
-                # Find targets
-                tp1, tp2 = self.find_targets(df, entry_setup['entry_price'], stop_price, 'LONG')
-                
-                # Calculate RR
-                risk = abs(entry_setup['entry_price'] - stop_price)
-                reward_tp1 = abs(tp1 - entry_setup['entry_price'])
-                rr_ratio = reward_tp1 / risk if risk > 0 else 0
-                
-                if rr_ratio >= 3:  # Minimum 1:3 RR as per strategy
-                    setup = {
-                        'symbol': symbol,
-                        'direction': 'LONG',
-                        'zone_type': 'DEMAND',
-                        'zone_accuracy': zone['type'],
-                        'entry_price': float(entry_setup['entry_price']),
-                        'stop_price': float(stop_price),
-                        'tp1_price': float(tp1),
-                        'tp2_price': float(tp2),
-                        'rr_ratio': float(rr_ratio)
-                    }
-                    valid_setups.append(setup)
-                    print(f"Found valid DEMAND setup for {symbol}")
+            # Remove liquidity formation check
+            stop_price = entry_setup['stop_price']
+            entry_price = entry_setup['entry_price']
+            
+            # Calculate targets directly
+            risk = abs(entry_price - stop_price)
+            tp1 = entry_price + (risk * 3) if zone['type'] == 'DEMAND' else entry_price - (risk * 3)
+            tp2 = entry_price + (risk * 10) if zone['type'] == 'DEMAND' else entry_price - (risk * 10)
+            
+            # Create setup without liquidity check
+            setup = {
+                'symbol': symbol,
+                'direction': 'LONG' if zone['type'] == 'DEMAND' else 'SHORT',
+                'zone_type': zone['type'],
+                'zone_accuracy': zone['type'],
+                'entry_price': entry_price,
+                'stop_price': stop_price,
+                'tp1': tp1,
+                'tp2': tp2,
+                'rr_ratio': abs(tp1 - entry_price) / risk
+            }
+            valid_setups.append(setup)
+            print(f"Found valid {zone['type']} setup for {symbol}")
         
         return valid_setups
 
@@ -584,7 +560,8 @@ class SupplyDemandScanner:
                         print(f"Valid {setup['direction']} setup found!")
                         print(f"Entry: {setup['entry_price']:.8f}")
                         print(f"Stop: {setup['stop_price']:.8f}")
-                        print(f"TP1: {setup['tp1_price']:.8f}")
+                        print(f"TP1: {setup['tp1']:.8f}")
+                        print(f"TP2: {setup['tp2']:.8f}")
                         print(f"RR Ratio: {setup['rr_ratio']:.2f}")
                     else:
                         print("Setup failed 1h timeframe validation")
