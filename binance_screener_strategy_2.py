@@ -78,25 +78,51 @@ class ForeverModelScanner:
         return df['volume'].rolling(window=periods).mean()
 
     def detect_liquidity_sweep(self, df, avg_volume):
-        """Detect potential liquidity sweeps with strict volume and price action requirements"""
-        # Volume requirements - must be between 2.5x and 5x average
-        volume_valid = (df['volume'] > (avg_volume * 2.5)) & (df['volume'] < (avg_volume * 5))
+        """Detect institutional liquidity sweeps with balanced criteria"""
+        # Calculate key levels with improved swing detection
+        df['swing_high'] = (df['high'] > df['high'].shift(1)) & \
+                          (df['high'] > df['high'].shift(2)) & \
+                          (df['high'] > df['high'].shift(-1)) & \
+                          (df['high'] > df['high'].shift(-2))
+                          
+        df['swing_low'] = (df['low'] < df['low'].shift(1)) & \
+                         (df['low'] < df['low'].shift(2)) & \
+                         (df['low'] < df['low'].shift(-1)) & \
+                         (df['low'] < df['low'].shift(-2))
         
-        # Clean sweep requirements (0.6 for clear sweeps)
-        high_wicks = (df['high'] - df['close']) > (df['high'] - df['low']) * 0.6
-        low_wicks = (df['close'] - df['low']) > (df['high'] - df['low']) * 0.6
+        # Volume requirements - more flexible
+        volume_spike = df['volume'] > (avg_volume * 2.0)
+        not_excessive = df['volume'] < (avg_volume * 5)
+        volume_valid = volume_spike & not_excessive
         
-        # Weak closing price requirements
-        bearish_sweep = high_wicks & (df['close'] < df['open'] * 0.997)  # Close below open
-        bullish_sweep = low_wicks & (df['close'] > df['open'] * 1.003)   # Close above open
+        # Calculate candle characteristics
+        body_size = abs(df['close'] - df['open'])
+        total_range = df['high'] - df['low']
+        upper_wick = df['high'] - df[['open', 'close']].max(axis=1)
+        lower_wick = df[['open', 'close']].min(axis=1) - df['low']
         
-        # Detect sweeps
-        sweeps = volume_valid & (bearish_sweep | bullish_sweep)
+        # Detect sweeps with relaxed criteria
+        bullish_sweep = (
+            (df['low'] < df['low'].shift(1)) &     # Takes out previous low
+            (lower_wick > body_size * 1.2) &       # Reduced from 1.5
+            (body_size < total_range * 0.5) &      # Increased from 0.4
+            (df['close'] >= df['low'] + total_range * 0.3)  # Closes in upper half
+        )
+        
+        bearish_sweep = (
+            (df['high'] > df['high'].shift(1)) &   # Takes out previous high
+            (upper_wick > body_size * 1.2) &       # Reduced from 1.5
+            (body_size < total_range * 0.5) &      # Increased from 0.4
+            (df['close'] <= df['high'] - total_range * 0.3)  # Closes in lower half
+        )
+        
+        # Combine with volume confirmation
+        sweeps = volume_valid & (bullish_sweep | bearish_sweep)
         
         # Label sweep direction
         sweep_direction = pd.Series(index=df.index, dtype=str)
-        sweep_direction[bearish_sweep & volume_valid] = 'BEARISH'
         sweep_direction[bullish_sweep & volume_valid] = 'BULLISH'
+        sweep_direction[bearish_sweep & volume_valid] = 'BEARISH'
         
         return sweeps, sweep_direction
 
@@ -121,18 +147,29 @@ class ForeverModelScanner:
         return sustained_consolidation
 
     def detect_fvg(self, df, min_gap_percent=1.2):
-        """Detect Fair Value Gaps with ATR validation"""
+        """Detect Fair Value Gaps with improved validation"""
         # Calculate ATR for validation
         atr = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close']).average_true_range()
         
-        # FVG detection with ATR validation
-        fvg_bullish = (df['low'].shift(1) > df['high'].shift(-1)) & \
-                     ((df['low'].shift(1) - df['high'].shift(-1)) / df['close'] * 100 >= min_gap_percent) & \
-                     ((df['low'].shift(1) - df['high'].shift(-1)) > atr)
+        # Calculate trend direction using EMA
+        df['ema20'] = ta.trend.EMAIndicator(df['close'], window=20).ema_indicator()
+        bullish_trend = df['close'] > df['ema20']
+        bearish_trend = df['close'] < df['ema20']
         
-        fvg_bearish = (df['high'].shift(-1) > df['low'].shift(1)) & \
-                     ((df['high'].shift(-1) - df['low'].shift(1)) / df['close'] * 100 >= min_gap_percent) & \
-                     ((df['high'].shift(-1) - df['low'].shift(1)) > atr)
+        # FVG detection with ATR and trend validation
+        fvg_bullish = (
+            (df['low'].shift(1) > df['high'].shift(-1)) & \
+            ((df['low'].shift(1) - df['high'].shift(-1)) / df['close'] * 100 >= min_gap_percent) & \
+            ((df['low'].shift(1) - df['high'].shift(-1)) > atr) & \
+            bullish_trend  # Must align with trend
+        )
+        
+        fvg_bearish = (
+            (df['high'].shift(-1) > df['low'].shift(1)) & \
+            ((df['high'].shift(-1) - df['low'].shift(1)) / df['close'] * 100 >= min_gap_percent) & \
+            ((df['high'].shift(-1) - df['low'].shift(1)) > atr) & \
+            bearish_trend  # Must align with trend
+        )
         
         # Combine conditions
         fvg = fvg_bullish | fvg_bearish
@@ -145,45 +182,52 @@ class ForeverModelScanner:
         return fvg, fvg_direction
 
     def check_timeframe_alignment(self, symbol):
-        """Check alignment between 4h and 15m timeframes"""
+        """Check alignment between 4h and 15m timeframes with less strict validation"""
         # Get data for both timeframes
         df_4h = self.get_klines(symbol, '4h', 200)
-        df_15m = self.get_klines(symbol, '15m', 100)
+        df_15m = self.get_klines(symbol, '15m', 800)
         
         if df_4h is None or df_15m is None:
             return False, None
             
-        # Check if recent 15m candles confirm 4h trend
+        # Get recent candles (last 12 15m candles = 3 hours)
+        recent_15m = df_15m.tail(12)
         last_4h_candle = df_4h.iloc[-1]
-        recent_15m = df_15m.tail(3)  # Last 3 15m candles
         
-        # Check for alignment
+        # Check for relatively clean price action (relaxed criteria)
+        clean_wicks = all(
+            abs(c['high'] - c['close']) < abs(c['close'] - c['open']) * 0.8 and  # Increased from 0.5
+            abs(c['low'] - c['open']) < abs(c['close'] - c['open']) * 0.8        # Increased from 0.5
+            for _, c in recent_15m.iterrows()
+        )
+        
+        # Simplified momentum alignment check - removed EMA and RSI requirements
         if last_4h_candle['close'] > last_4h_candle['open']:  # Bullish 4h
-            aligned = all(c['close'] > c['open'] for _, c in recent_15m.iterrows())
-            direction = 'BULLISH' if aligned else None
+            momentum_aligned = recent_15m['close'].iloc[-1] > recent_15m['close'].iloc[-3]  # Overall upward movement
+            direction = 'BULLISH' if momentum_aligned and clean_wicks else None
         else:  # Bearish 4h
-            aligned = all(c['close'] < c['open'] for _, c in recent_15m.iterrows())
-            direction = 'BEARISH' if aligned else None
+            momentum_aligned = recent_15m['close'].iloc[-1] < recent_15m['close'].iloc[-3]  # Overall downward movement
+            direction = 'BEARISH' if momentum_aligned and clean_wicks else None
             
-        return aligned, direction
+        return momentum_aligned and clean_wicks, direction
 
     def detect_structural_change(self, df):
-        """Detect Change of Character (CHoCH) and Break of Structure (BOS) with volume confirmation"""
-        # Calculate higher highs and lower lows
-        df['higher_high'] = (df['high'] > df['high'].shift(1)) & (df['high'] > df['high'].shift(2))
-        df['lower_low'] = (df['low'] < df['low'].shift(1)) & (df['low'] < df['low'].shift(2))
+        """Detect structural changes with more relaxed criteria"""
+        # Calculate basic trend changes
+        df['higher_high'] = df['high'] > df['high'].shift(1)
+        df['lower_low'] = df['low'] < df['low'].shift(1)
         
-        # Volume confirmation
+        # Volume confirmation - more relaxed
         avg_volume = self.calculate_average_volume(df)
-        volume_confirmed = df['volume'] > avg_volume * 1.5
+        volume_confirmed = df['volume'] > avg_volume * 1.1  # Reduced from 1.2
         
-        # Detect BOS
-        bullish_bos = (df['close'] > df['high'].shift(1)) & volume_confirmed & df['higher_high']
-        bearish_bos = (df['close'] < df['low'].shift(1)) & volume_confirmed & df['lower_low']
+        # Detect BOS with relaxed criteria
+        bullish_bos = (df['close'] > df['high'].shift(1)) & volume_confirmed
+        bearish_bos = (df['close'] < df['low'].shift(1)) & volume_confirmed
         
-        # Detect CHoCH (Change of Character)
-        bullish_choch = bullish_bos & (df['low'].shift(1) > df['low'].shift(2))
-        bearish_choch = bearish_bos & (df['high'].shift(1) < df['high'].shift(2))
+        # Simplified CHoCH with relaxed criteria
+        bullish_choch = bullish_bos & (df['low'].shift(1) > df['low'].shift(3))  # Changed from shift(2)
+        bearish_choch = bearish_bos & (df['high'].shift(1) < df['high'].shift(3))  # Changed from shift(2)
         
         # Combine conditions
         structural_change = bullish_choch | bearish_choch
@@ -196,24 +240,30 @@ class ForeverModelScanner:
         return structural_change, direction
 
     def detect_smt(self, df):
-        """Detect Smart Money Trap (SMT) patterns"""
+        """Detect Smart Money Trap (SMT) patterns with relaxed criteria"""
         # Calculate price rejection
         df['body_size'] = abs(df['close'] - df['open'])
         df['upper_wick'] = df['high'] - df[['open', 'close']].max(axis=1)
         df['lower_wick'] = df[['open', 'close']].min(axis=1) - df['low']
         
-        # Volume-weighted rejection
+        # Volume-weighted rejection - relaxed
         avg_volume = self.calculate_average_volume(df)
-        volume_confirmed = df['volume'] > avg_volume * 2.0
+        volume_confirmed = df['volume'] > avg_volume * 1.5  # Reduced from 2.0
         
-        # Detect rejection patterns
-        bullish_rejection = (df['lower_wick'] > df['body_size'] * 2) & \
-                          (df['close'] > df['open']) & \
-                          volume_confirmed
-                          
-        bearish_rejection = (df['upper_wick'] > df['body_size'] * 2) & \
-                          (df['close'] < df['open']) & \
-                          volume_confirmed
+        # Detect rejection patterns - relaxed
+        bullish_rejection = (
+            (df['lower_wick'] > df['body_size'] * 1.5) &  # Reduced from 2
+            (df['close'] > df['open']) &
+            volume_confirmed &
+            (df['close'] > df['close'].shift(1))  # Closes higher
+        )
+        
+        bearish_rejection = (
+            (df['upper_wick'] > df['body_size'] * 1.5) &  # Reduced from 2
+            (df['close'] < df['open']) &
+            volume_confirmed &
+            (df['close'] < df['close'].shift(1))  # Closes lower
+        )
         
         # Combine conditions
         smt = bullish_rejection | bearish_rejection
@@ -225,31 +275,39 @@ class ForeverModelScanner:
         
         return smt, direction
 
-    def detect_opposing_liquidity(self, df, min_candles=12):
-        """Detect opposing liquidity targets with volume profile"""
-        # Find equal highs/lows (minimum 3)
-        tolerance = df['close'].mean() * 0.001  # 0.1% tolerance
+    def detect_opposing_liquidity(self, df, min_candles=12, max_target_distance=0.2):  # Increased from 0.15
+        """Detect opposing liquidity targets with balanced criteria"""
+        # Calculate swing points with relaxed window
+        df['swing_high'] = df['high'].rolling(3).max() == df['high']
+        df['swing_low'] = df['low'].rolling(3).min() == df['low']
         
-        df['equal_high'] = df.groupby(df['high'].round(decimals=4))['high'].transform('count') >= 3
-        df['equal_low'] = df.groupby(df['low'].round(decimals=4))['low'].transform('count') >= 3
+        # Group similar levels with wider tolerance
+        df['level_high'] = df['high'].round(decimals=3)  # Reduced precision
+        df['level_low'] = df['low'].round(decimals=3)    # Reduced precision
         
-        # Check volume profile
-        volume_ma = df['volume'].rolling(window=min_candles).mean()
-        decreasing_volume = volume_ma < volume_ma.shift(1)
+        # Count touches at each level
+        df['high_touches'] = df.groupby('level_high')['high'].transform('count')
+        df['low_touches'] = df.groupby('level_low')['low'].transform('count')
         
-        # Combine conditions
-        valid_highs = df['equal_high'] & decreasing_volume
-        valid_lows = df['equal_low'] & decreasing_volume
+        # Valid liquidity levels - relaxed criteria
+        valid_highs = (df['high_touches'] >= 2) & df['swing_high']  # Reduced from 3 touches
+        valid_lows = (df['low_touches'] >= 2) & df['swing_low']     # Reduced from 3 touches
         
         # Get target levels
         target_levels = pd.Series(index=df.index, dtype=float)
         target_levels[valid_highs] = df.loc[valid_highs, 'high']
         target_levels[valid_lows] = df.loc[valid_lows, 'low']
         
+        # Filter targets by maximum distance (increased to 20%)
+        current_price = df['close'].iloc[-1]
+        max_distance = current_price * max_target_distance
+        
+        target_levels = target_levels[abs(target_levels - current_price) <= max_distance]
+        
         return target_levels
 
     def find_setup_sequence(self, df):
-        """Find setup sequences with all required components"""
+        """Find setup sequences with more relaxed criteria"""
         avg_volume = self.calculate_average_volume(df)
         valid_setups = []
         
@@ -257,20 +315,25 @@ class ForeverModelScanner:
         sweeps, sweep_direction = self.detect_liquidity_sweep(df, avg_volume)
         structural_change, struct_direction = self.detect_structural_change(df)
         smt, smt_direction = self.detect_smt(df)
-        target_levels = self.detect_opposing_liquidity(df)
+        target_levels = self.detect_opposing_liquidity(df, max_target_distance=0.2)  # Increased from 0.15
         
         # Look for valid sweeps
         sweep_indices = sweeps[sweeps].index
         for sweep_idx in sweep_indices:
             sweep_dir = sweep_direction.loc[sweep_idx]
             
-            # Look for structural change after sweep
-            struct_window = df.loc[sweep_idx:].head(15)  # Look within 15 candles
+            # Check 15m alignment with relaxed criteria
+            aligned, align_direction = self.check_timeframe_alignment(df.name)
+            if not aligned or align_direction != sweep_dir:
+                continue
+                
+            # Look for structural change after sweep (increased window)
+            struct_window = df.loc[sweep_idx:].head(25)  # Increased from 20
             if not (structural_change.loc[struct_window.index] & (struct_direction.loc[struct_window.index] == sweep_dir)).any():
                 continue
             
-            # Look for FVG after structural change
-            fvg_window = df.loc[sweep_idx:].head(20)  # Look within 20 candles
+            # Look for FVG after structural change (increased window)
+            fvg_window = df.loc[sweep_idx:].head(30)  # Increased from 25
             fvg, fvg_direction = self.detect_fvg(fvg_window)
             
             if not (fvg & (fvg_direction == sweep_dir)).any():
@@ -285,7 +348,7 @@ class ForeverModelScanner:
                 smt_matches = smt_direction.loc[sweep_idx:fvg_idx] == sweep_dir
                 has_smt = smt_matches.any()
             
-            # Find opposing liquidity target
+            # Find closest valid opposing liquidity target
             target_level = None
             if sweep_dir == 'BULLISH':
                 future_targets = target_levels[target_levels > df.loc[fvg_idx, 'high']]
@@ -294,29 +357,42 @@ class ForeverModelScanner:
             else:
                 future_targets = target_levels[target_levels < df.loc[fvg_idx, 'low']]
                 if not future_targets.empty:
-                    target_level = future_targets.iloc[0]
+                    target_level = future_targets.iloc[-1]
             
             if target_level is None:
                 continue
             
             # Calculate metrics
             entry_price = df.loc[fvg_idx, 'close']
-            stop_price = df.loc[sweep_idx, 'low' if sweep_dir == 'BULLISH' else 'high']
+            stop_price = df.loc[sweep_idx, 'high' if sweep_dir == 'BULLISH' else 'low']
+            current_price = df['close'].iloc[-1]
+            
+            # Validate stop distance with minimum pip size (reduced)
+            min_stop_distance = current_price * 0.002  # Reduced from 0.003
+            if abs(entry_price - stop_price) < min_stop_distance:
+                continue
+            
+            # Validate stop distance (increased)
+            atr = ta.volatility.AverageTrueRange(df['high'], df['low'], df['close']).average_true_range()
+            current_atr = atr.iloc[-1]
+            if abs(entry_price - stop_price) > (current_atr * 3.0):  # Increased from 2.5
+                continue
+                
             risk = abs(entry_price - stop_price)
             reward = abs(target_level - entry_price)
             rr_ratio = reward / risk if risk > 0 else 0
             
-            # Only include if RR meets minimum 1:3
-            if rr_ratio >= 3:
+            # More flexible RR requirements
+            if 2.0 <= rr_ratio <= 20:  # Widened range from 2.5-15
                 valid_setups.append({
                     'direction': sweep_dir,
                     'sweep_index': sweep_idx,
                     'fvg_index': fvg_idx,
-                    'sweep_price': df.loc[sweep_idx, 'close'],
-                    'entry_price': entry_price,
-                    'stop_price': stop_price,
-                    'target_price': target_level,
-                    'rr_ratio': rr_ratio,
+                    'sweep_price': float(df.loc[sweep_idx, 'close']),
+                    'entry_price': float(entry_price),
+                    'stop_price': float(stop_price),
+                    'target_price': float(target_level),
+                    'rr_ratio': float(rr_ratio),
                     'has_smt': has_smt,
                     'setup_quality': 'A++' if has_smt else 'A'
                 })
@@ -375,7 +451,7 @@ class ForeverModelScanner:
         return df_setups
 
     def get_setup_details(self, symbol):
-        """Get detailed analysis for a specific setup"""
+        """Get detailed analysis for a specific setup with proper JSON serialization"""
         df_4h = self.get_klines(symbol, '4h', 200)
         if df_4h is None:
             return None
@@ -387,11 +463,23 @@ class ForeverModelScanner:
         setups = self.find_setup_sequence(df_4h)
         if setups:
             latest_setup = setups[-1]
-            df_4h['setup_direction'] = latest_setup['direction']
-            df_4h['sweep_price'] = latest_setup['sweep_price']
-            df_4h['fvg_price'] = latest_setup['fvg_price']
+            # Create JSON-serializable dictionary
+            details_dict = {
+                'timestamp': df_4h['timestamp'].iloc[-1].strftime('%Y-%m-%d %H:%M:%S'),
+                'setup_direction': latest_setup['direction'],
+                'sweep_price': float(latest_setup['sweep_price']),
+                'entry_price': float(latest_setup['entry_price']),
+                'stop_price': float(latest_setup['stop_price']),
+                'target_price': float(latest_setup['target_price']),
+                'rr_ratio': float(latest_setup['rr_ratio']),
+                'has_smt': latest_setup['has_smt'],
+                'setup_quality': latest_setup['setup_quality'],
+                'current_price': float(df_4h['close'].iloc[-1]),
+                'current_atr': float(df_4h['atr'].iloc[-1])
+            }
+            return details_dict
         
-        return df_4h
+        return None
 
 def main():
     try:
@@ -441,10 +529,9 @@ def main():
             
             if details is not None:
                 # Save detailed analysis to JSON
-                details_dict = details.tail().to_dict('records')
                 json_filename = f'screener-results/detailed_analysis_{top_symbol}_{timestamp}.json'
                 with open(json_filename, 'w') as f:
-                    json.dump(details_dict, f, indent=2)
+                    json.dump(details, f, indent=2)
                 print(f"Detailed analysis saved to: {json_filename}")
             
     except Exception as e:

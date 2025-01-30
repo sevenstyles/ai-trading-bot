@@ -1,6 +1,0 @@
-timestamp,status,direction,entry,sl,tp,rr_ratio,confidence,analysis
-2025-01-30 11:45:00  ,NO TRADE,NO TRADE,,,,,D,"1. **Liquidity Sweep Details**: Sweep detected on 2025-01-29 (low: 13.513) with volume 2,330,777.53 (~4.6x avg).  
-2. **FVG Coordinates**: No valid inverse FVG identified post-sweep (required 1.2% size not confirmed).  
-3. **Structural Break Analysis**: BOS not confirmed - price rebounded post-sweep but lacks CHoCH/HTF alignment.  
-4. **Target Zone Specifics**: Opposing liquidity cluster not evident (no 3+ equal highs/lows).  
-5. **Volume Analysis**: Entry volume on 15m (4,094.34) fails 1.8x avg"

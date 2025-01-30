@@ -1,0 +1,129 @@
+Supply & Demand Liquidity Strategy Framework
+======================================================
+
+CORE COMPONENTS:
+----------------------
+1. Zone Formation:
+   - Supply: Push down creating supply zone
+   - Demand: Push up creating demand zone
+   - Maximum zone age: 48 hours
+   - Zone drawing rules:
+     a) Normal: Full candle if wick doesn't exceed next candle
+     b) Accuracy: Body + top/bottom wick only if wick exceeds next candle
+
+2. Liquidity Formation:
+   - Small retracement not tapping zone
+   - Must break previous high/low that created liquidity
+   - Multiple liquidity sweeps add confluence
+
+3. Zone Validation:
+   - Must be untapped zones only
+   - No candle closures inside zone
+   - Must align with higher timeframe trend
+   - Zones near trend extremes preferred over middle zones
+
+ENTRY RULES:
+---------------------------
+Primary Entry Methods:
+
+1. Candle Close Entry:
+   - First candle close in intended direction after zone tap
+   - Valid if tapping candle closes in direction
+   - Must show clear momentum/rejection
+
+2. Break of Candle Entry (Secondary):
+   - Only on strong momentum moves
+   - Before bullish/bearish close
+   - When trying not to miss entry
+   - Use with caution, only 10% of setups
+
+3. Flip Entry (Rare):
+   - When candle flips direction in final minutes
+   - Must show strong momentum flip
+   - Only valid if initial tap respected zone
+
+RISK MANAGEMENT:
+----------------------
+Stop Loss Rules:
+
+1. Normal Stops:
+   - Below/above entry wick
+   - Must provide minimum 1:3 RR
+   - Account for retest room
+
+2. Maximum Stop Size:
+   - 1% maximum for majors (BTC, ETH)
+   - 2% maximum for altcoins
+   - Only on extreme rejection wicks
+   - Must still meet RR requirements
+
+Take Profit Strategy:
+
+1. TP1 (Mandatory):
+   - Minimum 1:3 risk reward
+   - Target nearest swing high/low
+   - Take partial position off (50%)
+
+2. TP2 (Extended):
+   - 1.618 Fibonacci extension
+   - Previous major highs/lows
+   - Maximum 1:10 risk reward
+   - Full position target
+
+Break Even Rules:
+   - Only move stop to BE after TP1 hit
+   - Exception: During high impact news/events
+   - Give trade room to breathe/retest
+
+TREND ALIGNMENT:
+----------------------
+1. Higher Timeframe:
+   - Check 4H/1H for trend direction
+   - Identify major support/resistance
+   - Look for retracement completion zones
+
+2. Local Structure:
+   - Higher highs / higher lows for uptrend
+   - Lower lows / lower highs for downtrend
+   - Clean price action required
+
+REJECTION CRITERIA:
+----------------------
+Reject Trade If:
+
+1. Zone Related:
+   - Candle closes inside zone
+   - Zone already tapped
+   - Against major HTF levels
+   - Middle zone without strong momentum
+
+2. Technical Related:
+   - Stop loss exceeds maximum size
+   - Against clear HTF trend
+   - During major market events/news
+
+3. Time Related:
+   - During major protocol upgrades
+   - High volatility market conditions
+   - During significant macro events
+
+RESPONSE FORMAT:
+----------------------
+- Timestamp: [timestamp]
+- Status: [TRADE/NO TRADE]
+- Direction: [LONG/SHORT/NO TRADE]
+- Entry: [price]
+- SL: [price]
+- TP1: [price] (1:3 minimum)
+- TP2: [price] (if applicable)
+- RR Ratio: [1:x.x]
+- Confidence: [A-F]
+- Analysis:
+1. Zone Formation Details
+2. Liquidity Analysis
+3. Entry Method Used
+4. Trend Alignment
+5. Target Justification
+6. Risk Notes
+
+  END RESPONSE 
