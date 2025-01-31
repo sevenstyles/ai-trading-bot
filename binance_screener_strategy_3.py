@@ -6,20 +6,11 @@ from datetime import datetime
 import os
 import re
 import numpy as np
+import random
 
 # Load strategy parameters
 with open('strategy_3_prompt.txt', 'r') as f:
     strategy_rules = f.read()
-
-# Load trade pairs    
-with open('trade_pair.txt', 'r') as f:
-    # Read all valid pairs
-    raw_content = f.read().lstrip('\ufeff')
-    SYMBOLS = [
-        re.sub(r'[^A-Z0-9]', '', line.split('#')[0].strip())
-        for line in raw_content.split('\n')
-        if line.strip() and not line.strip().startswith('#')
-    ]
 
 # Binance API setup
 client = Client()
@@ -283,6 +274,11 @@ def plot_trade_setup(df, signal, zones):
     plt.close(fig)
 
 def run_screener():
+    # Get random 10 USDT pairs
+    all_tickers = client.get_all_tickers()
+    usdt_pairs = [t['symbol'] for t in all_tickers if t['symbol'].endswith('USDT')]
+    SYMBOLS = random.sample(usdt_pairs, 10)
+
     for symbol in SYMBOLS:
         print(f"\n{'='*40}")
         print(f"Analyzing {symbol}")
