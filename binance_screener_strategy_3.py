@@ -131,8 +131,15 @@ def detect_supply_demand_zones(data):
             
             i += 1
     
-    # Merge nearby zones
-    return merge_zones(zones)
+    # Add zone invalidation check
+    current_price = data['5m'].close.iloc[-1]
+    
+    for zone in zones:
+        # Mark zone as invalid if price has entered
+        if zone['low'] < current_price < zone['high']:
+            zone['valid'] = False
+            
+    return zones
 
 def merge_zones(zones):
     """Combine overlapping zones of same type"""
@@ -153,7 +160,12 @@ def merge_zones(zones):
         else:
             merged.append(zone)
     
-    return merged
+    for zone in merged:
+        # Preserve validity status when merging
+        if any(z['valid'] for z in merged if z['type'] == zone['type']):
+            zone['valid'] = True
+            
+    return [z for z in merged if z['valid']]  # Remove invalid zones
 
 def check_entry_conditions(data, zones):
     """Institutional entry validation"""
@@ -185,41 +197,37 @@ def check_entry_conditions(data, zones):
     return trade_signal
 
 def plot_trade_setup(df, signal, zones):
-    """Plot with zones and trade setup"""
-    apds = []
-    colors = {'supply': 'red', 'demand': 'green'}
+    """Plot with properly shaded zones using matplotlib"""
+    # Create main plot
+    fig, axes = mpf.plot(
+        df,
+        type='candle',
+        style='charles',
+        title=f'{SYMBOL} Trade Setup',
+        ylabel='Price',
+        figsize=(12,6),
+        returnfig=True
+    )
     
-    # Plot zones
+    # Get main axis
+    ax = axes[0]
+    
+    # Plot zones as shaded regions
     for zone in zones:
-        if zone['timeframe'] == '1h':  # Plot new HTF zones
-            style = mpf.make_addplot(
-                pd.Series([zone['high']]*len(df), index=df.index),
-                type='line', color=colors[zone['type']], alpha=0.3, width=2
-            )
-            apds.append(style)
+        if zone['valid']:
+            color = 'red' if zone['type'] == 'supply' else 'green'
+            alpha = 0.3
             
-            style = mpf.make_addplot(
-                pd.Series([zone['low']]*len(df), index=df.index),
-                type='line', color=colors[zone['type']], alpha=0.3, width=2
-            )
-            apds.append(style)
+            # Create horizontal lines for zone boundaries
+            ax.axhspan(zone['low'], zone['high'], 
+                       facecolor=color, alpha=alpha, edgecolor='none')
     
-    # Plot trade signals
-    if signal.get('Status') == 'TRADE':
-        entry_line = mpf.make_addplot(
-            pd.Series(signal['Entry'], index=df.index),
-            type='scatter', color='blue', markersize=50
-        )
-        apds.append(entry_line)
-    
-    # Configure plot
-    mpf.plot(df, type='candle', style='charles',
-             title=f'{SYMBOL} Trade Setup',
-             ylabel='Price',
-             addplot=apds,
-             figsize=(12,6),
-             savefig=f"plots/{SYMBOL}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
-    
+    # Save plot
+    os.makedirs('plots', exist_ok=True)
+    filename = f"plots/{SYMBOL}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+    fig.savefig(filename)
+    plt.close(fig)
+
 def run_screener():
     data = fetch_data(SYMBOL)
     zones = detect_supply_demand_zones(data)
