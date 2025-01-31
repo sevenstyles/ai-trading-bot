@@ -22,14 +22,13 @@ client = Client()
 def fetch_data(symbol):
     """Fetch multi-timeframe data"""
     intervals = {
-        '4h': 200,  # HTF (Higher Time Frame)
-        '1h': 100   # LTF (Lower Time Frame)
+        '1h': 200,   # New HTF (Higher Time Frame)
+        '5m': 500    # New LTF (Lower Time Frame)
     }
     
     data = {}
     for interval, limit in intervals.items():
         klines = client.get_klines(symbol=symbol, interval=interval, limit=limit)
-        # Include all 12 columns from Binance API response
         columns = ['timestamp', 'open', 'high', 'low', 'close', 'volume',
                    'close_time', 'quote_asset_volume', 'number_of_trades',
                    'taker_buy_base', 'taker_buy_quote', 'ignore']
@@ -37,49 +36,152 @@ def fetch_data(symbol):
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df.set_index('timestamp', inplace=True)
         df = df.astype(float)
-        # Select only the columns we actually need
-        data[interval] = df[['open', 'high', 'low', 'close']]
+        # Include volume in the selected columns
+        data[interval] = df[['open', 'high', 'low', 'close', 'volume']]
     return data
 
 def detect_supply_demand_zones(data):
-    """Identify valid supply/demand zones"""
+    """Institutional-grade zone detection with volume validation"""
     zones = []
     for tf, df in data.items():
-        for i in range(1, len(df)-1):
-            # Identify swing points
-            prev_candle = df.iloc[i-1]
-            current_candle = df.iloc[i]
-            next_candle = df.iloc[i+1]
+        # Calculate volume benchmarks
+        vol_ma = df.volume.rolling(20).mean()
+        df['vol_ma'] = vol_ma
+        df['vol_pct'] = df.volume / vol_ma
+        
+        i = 1
+        while i < len(df)-2:
+            current = df.iloc[i]
             
-            # Supply Zone (Bearish)
-            if current_candle.high > prev_candle.high and current_candle.high > next_candle.high:
-                if current_candle.close < current_candle.open:  # Bearish candle
-                    zone_high = max(current_candle.high, prev_candle.high)
-                    zone_low = min(current_candle.low, prev_candle.low)
-                    zones.append({
-                        'type': 'supply',
-                        'high': zone_high,
-                        'low': zone_low,
-                        'timeframe': tf
-                    })
+            # Institutional volume threshold
+            if current.vol_pct < 1.2:  # Skip low volume formations
+                i += 1
+                continue
+                
+            # Liquidity check (price at swing high/low)
+            is_liquidity_area = (
+                current.high == df.high.rolling(50).max().iloc[i] or 
+                current.low == df.low.rolling(50).min().iloc[i]
+            )
+            
+            if current.close < current.open and is_liquidity_area:  # Supply
+                push_start = i
+                while i < len(df)-1 and df.iloc[i].close < df.iloc[i].open:
+                    i += 1
+                push_end = i-1
+                
+                # Institutional filter: Minimum 3 candles in push
+                if (push_end - push_start) < 2:
+                    continue
                     
-            # Demand Zone (Bullish)
-            elif current_candle.low < prev_candle.low and current_candle.low < next_candle.low:
-                if current_candle.close > current_candle.open:  # Bullish candle
-                    zone_high = max(current_candle.high, prev_candle.high)
-                    zone_low = min(current_candle.low, prev_candle.low)
-                    zones.append({
-                        'type': 'demand',
-                        'high': zone_high,
-                        'low': zone_low,
-                        'timeframe': tf
-                    })
-    return zones
+                extreme_candle = df.iloc[push_start:push_end+1].low.idxmin()
+                extreme_candle = df.loc[extreme_candle]
+                
+                # Volume confirmation
+                if extreme_candle.vol_pct < 1.5:
+                    continue
+                    
+                # Zone formation
+                next_candle = df.iloc[push_end+1]
+                if next_candle.high > extreme_candle.high:
+                    zone_high = extreme_candle.high
+                    zone_low = extreme_candle.low
+                else:
+                    zone_high = max(extreme_candle.open, extreme_candle.close)
+                    zone_low = min(extreme_candle.open, extreme_candle.close)
+                
+                zones.append({
+                    'type': 'supply', 
+                    'high': zone_high,
+                    'low': zone_low,
+                    'timeframe': tf,
+                    'valid': True
+                })
 
-def check_entry_conditions(df, zones):
-    """Check strategy entry conditions"""
+            elif current.close > current.open and is_liquidity_area:  # Demand
+                push_start = i
+                while i < len(df)-1 and df.iloc[i].close > df.iloc[i].open:
+                    i += 1
+                push_end = i-1
+                
+                if (push_end - push_start) < 2:
+                    continue
+                    
+                extreme_candle = df.iloc[push_start:push_end+1].high.idxmax()
+                extreme_candle = df.loc[extreme_candle]
+                
+                if extreme_candle.vol_pct < 1.5:
+                    continue
+                    
+                next_candle = df.iloc[push_end+1]
+                if next_candle.low < extreme_candle.low:
+                    zone_high = extreme_candle.high
+                    zone_low = extreme_candle.low
+                else:
+                    zone_high = max(extreme_candle.open, extreme_candle.close)
+                    zone_low = min(extreme_candle.open, extreme_candle.close)
+                
+                zones.append({
+                    'type': 'demand',
+                    'high': zone_high,
+                    'low': zone_low,
+                    'timeframe': tf,
+                    'valid': True
+                })
+            
+            i += 1
+    
+    # Merge nearby zones
+    return merge_zones(zones)
+
+def merge_zones(zones):
+    """Combine overlapping zones of same type"""
+    merged = []
+    for zone in sorted(zones, key=lambda x: x['high'], reverse=True):
+        if not merged:
+            merged.append(zone)
+            continue
+            
+        last = merged[-1]
+        if (zone['type'] == last['type'] and 
+            zone['timeframe'] == last['timeframe'] and
+            abs(zone['high'] - last['high']) < last['high'] * 0.005):
+            
+            # Merge zones
+            merged[-1]['high'] = max(last['high'], zone['high'])
+            merged[-1]['low'] = min(last['low'], zone['low'])
+        else:
+            merged.append(zone)
+    
+    return merged
+
+def check_entry_conditions(data, zones):
+    """Institutional entry validation"""
     trade_signal = {}
-    # Implement strategy entry rules here
+    ltf = data['5m']
+    
+    # Fix deprecated indexing
+    recent_volume = ltf.volume.iloc[-3:].mean()
+    vol_ma = ltf.volume.rolling(20).mean().iloc[-1]
+    volume_ok = recent_volume > vol_ma * 2
+    
+    # Price action validation
+    last_close = ltf.close.iloc[-1]
+    zone_active = any(
+        zone['low'] < last_close < zone['high'] 
+        for zone in zones if zone['valid']
+    )
+    
+    if volume_ok and zone_active:
+        # Basic entry logic (needs expansion)
+        trade_signal = {
+            'Direction': 'LONG' if last_close > ltf.open.iloc[-1] else 'SHORT',
+            'Entry': last_close,
+            'SL': last_close * 0.99,  # 1% stop loss
+            'TP1': last_close * 1.03,  # 3% take profit
+            'Analysis': ['Volume confirmed zone activation']
+        }
+        
     return trade_signal
 
 def plot_trade_setup(df, signal, zones):
@@ -89,7 +191,7 @@ def plot_trade_setup(df, signal, zones):
     
     # Plot zones
     for zone in zones:
-        if zone['timeframe'] == '4h':  # Only plot HTF zones
+        if zone['timeframe'] == '1h':  # Plot new HTF zones
             style = mpf.make_addplot(
                 pd.Series([zone['high']]*len(df), index=df.index),
                 type='line', color=colors[zone['type']], alpha=0.3, width=2
@@ -119,13 +221,14 @@ def plot_trade_setup(df, signal, zones):
              savefig=f"plots/{SYMBOL}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
     
 def run_screener():
-    # Get multi-timeframe data
-    data = fetch_data(SYMBOL)  # Returns dict of DataFrames
+    data = fetch_data(SYMBOL)
     zones = detect_supply_demand_zones(data)
     
+    # Pass full data dict to entry check
+    signal = check_entry_conditions(data, zones)
+    
     # Use 1h data for plotting
-    plot_df = data['1h']  # Get LTF dataframe for charting
-    signal = check_entry_conditions(plot_df, zones)
+    plot_df = data['1h']
     
     # Generate output
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
