@@ -47,7 +47,7 @@ def fetch_data(symbol):
     return data
 
 def detect_supply_demand_zones(data):
-    """Institutional-grade zone detection with volume validation"""
+    """Improved zone validation"""
     zones = []
     for tf, df in data.items():
         # Calculate volume benchmarks
@@ -139,13 +139,13 @@ def detect_supply_demand_zones(data):
             
             i += 1
     
-    # Replace historical close check with current price check
-    current_price = data['5m'].close.iloc[-1]
+    # Keep existing detection logic but modify invalidation
+    current_1h_price = data['1h'].close.iloc[-1]  # Use HTF price for validation
     
     for zone in zones:
-        # Only invalidate if CURRENT PRICE is in zone
-        if zone['low'] < current_price < zone['high']:
-            zone['valid'] = False
+        # Only invalidate if price is INSIDE zone on HTF
+        zone_active = zone['low'] < current_1h_price < zone['high']
+        zone['valid'] = not zone_active  # Invert validation status
     return zones
 
 def merge_zones(zones):
@@ -204,75 +204,37 @@ def check_entry_conditions(data, zones):
     return trade_signal
 
 def plot_trade_setup(df, signal, zones):
-    # Filter zones to match plotted timeframe
-    plot_tf = '1h'
-    relevant_zones = [z for z in zones if z['timeframe'] == plot_tf]
+    """Enhanced zone visualization"""
+    # Filter valid zones and convert to DataFrame
+    valid_zones = [z for z in zones if z['valid'] and z['timeframe'] == '1h']
     
-    # Create main plot with proper scaling
-    fig, axes = mpf.plot(
-        df,
-        type='candle',
-        style='charles',
-        title=f"{signal['Symbol']} Trade Setup",
-        ylabel='Price',
-        figsize=(12,6),
-        returnfig=True,
-        tight_layout=True  # Add tight layout
+    # Create zone boundaries
+    for i, zone in enumerate(valid_zones):
+        df[f'zone_{i}_high'] = np.where(df.index >= zone['timestamp'], zone['high'], np.nan)
+        df[f'zone_{i}_low'] = np.where(df.index >= zone['timestamp'], zone['low'], np.nan)
+    
+    # Create plot with zones
+    apds = [
+        mpf.make_addplot(df[[f'zone_{i}_high', f'zone_{i}_low']], 
+                        type='line', 
+                        color=('#FF0000' if z['type']=='supply' else '#00FF00'),
+                        alpha=0.4,
+                        linestyle='--',
+                        width=1,
+                        panel=0)
+        for i, z in enumerate(valid_zones)
+    ]
+    
+    # Plot with zones behind candles
+    mpf.plot(df,
+            type='candle',
+            style='charles',
+            addplot=apds,
+            title=f"{signal['Symbol']} Trade Setup",
+            ylabel='Price',
+            figsize=(12,6),
+            savefig=f"plots/{signal['Symbol']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
     )
-    
-    ax = axes[0]
-    
-    # Plot zones first to ensure visibility
-    for zone in relevant_zones:
-        if not zone['valid']:
-            continue
-            
-        color = '#FF0000' if zone['type'] == 'supply' else '#00FF00'
-        alpha = 0.3
-        
-        # Create zone boundaries
-        y_high = [zone['high'] if ts >= zone['timestamp'] else np.nan 
-                 for ts in df.index]
-        y_low = [zone['low'] if ts >= zone['timestamp'] else np.nan
-                for ts in df.index]
-        
-        # Plot zone area
-        ax.fill_between(
-            df.index,
-            y_low,
-            y_high,
-            where=df.index >= zone['timestamp'],
-            facecolor=color,
-            alpha=alpha,
-            edgecolor='none',
-            zorder=1  # Ensure zones are behind candles
-        )
-        
-        # Plot zone borders within the loop
-        ax.plot(
-            df.index, 
-            y_high, 
-            color=color, 
-            alpha=0.7, 
-            linestyle='--', 
-            linewidth=1,
-            zorder=2
-        )
-        ax.plot(
-            df.index, 
-            y_low, 
-            color=color, 
-            alpha=0.7, 
-            linestyle='--', 
-            linewidth=1,
-            zorder=2
-        )
-    
-    # Save plot
-    os.makedirs('plots', exist_ok=True)
-    filename = f"plots/{signal['Symbol']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-    fig.savefig(filename)
-    plt.close(fig)
 
 def run_screener():
     for symbol in SYMBOLS:
