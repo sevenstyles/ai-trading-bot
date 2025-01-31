@@ -10,11 +10,15 @@ import re
 with open('strategy_3_prompt.txt', 'r') as f:
     strategy_rules = f.read()
 
-# Load trade pair    
+# Load trade pairs    
 with open('trade_pair.txt', 'r') as f:
-    # Read with BOM handling and comment stripping
-    raw_content = f.read().lstrip('\ufeff').split('#')[0].strip().upper()
-    SYMBOL = re.sub(r'[^A-Z0-9]', '', raw_content)  # Remove any non-alphanum chars
+    # Read all valid pairs
+    raw_content = f.read().lstrip('\ufeff')
+    SYMBOLS = [
+        re.sub(r'[^A-Z0-9]', '', line.split('#')[0].strip())
+        for line in raw_content.split('\n')
+        if line.strip() and not line.strip().startswith('#')
+    ]
 
 # Binance API setup
 client = Client()
@@ -131,12 +135,12 @@ def detect_supply_demand_zones(data):
             
             i += 1
     
-    # Add zone invalidation check
-    current_price = data['5m'].close.iloc[-1]
-    
+    # After zone creation, check for closes within zones
     for zone in zones:
-        # Mark zone as invalid if price has entered
-        if zone['low'] < current_price < zone['high']:
+        zone_df = data[zone['timeframe']]
+        # Check if any candle CLOSED within the zone
+        closes_inside = (zone_df['close'] > zone['low']) & (zone_df['close'] < zone['high'])
+        if closes_inside.any():
             zone['valid'] = False
             
     return zones
@@ -198,12 +202,15 @@ def check_entry_conditions(data, zones):
 
 def plot_trade_setup(df, signal, zones):
     """Plot with properly shaded zones using matplotlib"""
+    # Modify zone plotting to only show valid zones
+    valid_zones = [z for z in zones if z['valid']]
+    
     # Create main plot
     fig, axes = mpf.plot(
         df,
         type='candle',
         style='charles',
-        title=f'{SYMBOL} Trade Setup',
+        title=f"{signal['Symbol']} Trade Setup",
         ylabel='Price',
         figsize=(12,6),
         returnfig=True
@@ -213,53 +220,55 @@ def plot_trade_setup(df, signal, zones):
     ax = axes[0]
     
     # Plot zones as shaded regions
-    for zone in zones:
-        if zone['valid']:
-            color = 'red' if zone['type'] == 'supply' else 'green'
-            alpha = 0.3
-            
-            # Create horizontal lines for zone boundaries
-            ax.axhspan(zone['low'], zone['high'], 
-                       facecolor=color, alpha=alpha, edgecolor='none')
+    for zone in valid_zones:
+        color = 'red' if zone['type'] == 'supply' else 'green'
+        alpha = 0.3
+        
+        # Create horizontal lines for zone boundaries
+        ax.axhspan(zone['low'], zone['high'], 
+                   facecolor=color, alpha=alpha, edgecolor='none')
     
     # Save plot
     os.makedirs('plots', exist_ok=True)
-    filename = f"plots/{SYMBOL}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+    filename = f"plots/{signal['Symbol']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
     fig.savefig(filename)
     plt.close(fig)
 
 def run_screener():
-    data = fetch_data(SYMBOL)
-    zones = detect_supply_demand_zones(data)
-    
-    # Pass full data dict to entry check
-    signal = check_entry_conditions(data, zones)
-    
-    # Use 1h data for plotting
-    plot_df = data['1h']
-    
-    # Generate output
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    output = {
-        'Timestamp': timestamp,
-        'Status': 'NO TRADE',
-        'Direction': 'NO TRADE',
-        'Analysis': []
-    }
-    
-    if signal:
-        output.update(signal)
-        output['Status'] = 'TRADE'
-    
-    # Print formatted output
-    print(f"\n{'='*40}")
-    print("Strategy 3 Screener Results:")
-    for k, v in output.items():
-        print(f"{k}: {v}")
-    print(f"{'='*40}\n")
-    
-    # Plot the chart with actual DataFrame
-    plot_trade_setup(plot_df, output, zones)
-    
+    for symbol in SYMBOLS:
+        print(f"\n{'='*40}")
+        print(f"Analyzing {symbol}")
+        try:
+            data = fetch_data(symbol)
+            zones = detect_supply_demand_zones(data)
+            signal = check_entry_conditions(data, zones)
+
+            # Generate output
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            output = {
+                'Symbol': symbol,
+                'Timestamp': timestamp,
+                'Status': 'NO TRADE',
+                'Direction': 'NO TRADE',
+                'Analysis': []
+            }
+
+            if signal:
+                output.update(signal)
+                output['Status'] = 'TRADE'
+
+            # Print results
+            print(f"\nStrategy 3 Results for {symbol}:")
+            for k, v in output.items():
+                if k != 'Symbol':
+                    print(f"{k}: {v}")
+
+            # Plot using 1h data
+            plot_trade_setup(data['1h'], output, zones)
+
+        except Exception as e:
+            print(f"Error processing {symbol}: {str(e)}")
+        print(f"{'='*40}\n")
+
 if __name__ == '__main__':
     run_screener()
