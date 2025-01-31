@@ -189,32 +189,26 @@ class SupplyDemandScanner:
     def detect_zones(self, df, symbol):
         """Final sensitivity adjustments"""
         try:
-            # Removed volatility check completely
-            # Only these filters remain:
-            # 1. Volume filter (based on pair category)
-            # 2. ATR-based body size filter
-            # 3. Price action patterns
-            
             # Store original timestamps
             original_index = df.index
             df = df.reset_index(drop=True)
             df['original_timestamp'] = original_index
             
-            # No volatility calculations here
+            # RESTORE THESE LINES
             df['body_size'] = abs(df['close'] - df['open'])
             df['upper_wick'] = df['high'] - df[['open', 'close']].max(axis=1)
             df['lower_wick'] = df[['open', 'close']].min(axis=1) - df['low']
-            
-            # Dynamic volume threshold remains
-            if symbol in self.major_pairs:
-                vol_multiplier = 0.8
-            elif symbol in self.mid_caps:
-                vol_multiplier = 0.4
-            else:
-                vol_multiplier = 0.3
-            
-            df = df[df['volume'] > df['volume'].rolling(20).mean() * vol_multiplier]
-            
+
+            # COMMENTED OUT VOLUME FILTER
+            # if symbol in self.major_pairs:
+            #     vol_multiplier = 0.8
+            # elif symbol in self.mid_caps:
+            #     vol_multiplier = 0.4
+            # else:
+            #     vol_multiplier = 0.3
+            # 
+            # df = df[df['volume'] > df['volume'].rolling(20).mean() * vol_multiplier]
+
             # ATR filter for candle body size remains
             atr = self.calculate_atr(df, 14)
             min_body_size = atr * 0.2 if df['close'].mean() < 50 else atr * 0.3
@@ -229,23 +223,23 @@ class SupplyDemandScanner:
                 
                 # Loosen rejection candle criteria
                 is_bearish_rejection = (current['close'] < current['open'] and 
-                                       current['upper_wick'] > current['body_size'] * 1.2)  # Changed from 1.5
+                                       current['upper_wick'] > current['body_size'] * 1.2)
                 is_bullish_rejection = (current['close'] > current['open'] and 
-                                       current['lower_wick'] > current['body_size'] * 1.2)  # Changed from 1.5
+                                       current['lower_wick'] > current['body_size'] * 1.2)
                 
                 if not (is_bearish_rejection or is_bullish_rejection):
                     continue
                     
-                # Loosen volume confirmation
-                if symbol in self.major_pairs:
-                    volume_threshold = prev1['volume'] * self.major_pair_volume_multiplier
-                else:
-                    volume_threshold = prev1['volume'] * 1.05
+                # COMMENTED OUT VOLUME THRESHOLD CHECK
+                # if symbol in self.major_pairs:
+                #     volume_threshold = prev1['volume'] * self.major_pair_volume_multiplier
+                # else:
+                #     volume_threshold = prev1['volume'] * 1.05
+                # 
+                # if current['volume'] < volume_threshold:
+                #     print(f"Rejected zone at {i} - insufficient volume")
+                #     continue
                 
-                if current['volume'] < volume_threshold:
-                    print(f"Rejected zone at {i} - insufficient volume")
-                    continue
-                    
                 # Add price buffer for subsequent validation
                 if is_bearish_rejection:
                     if next1['high'] > current['high'] * 1.002 or next1['close'] > current['close'] * 1.002:
@@ -387,28 +381,26 @@ class SupplyDemandScanner:
         return tp1, tp2
 
     def validate_entry_sequence(self, df, zone, zone_type, symbol):
-        """Updated entry validation for long setups"""
         try:
             post_zone_data = df.iloc[zone['original_index']+1:]
             
-            # After zone touch (wick in zone)
             for i in range(len(post_zone_data)-1):
-                current = post_zone_data.iloc[i]     # Candle that touched zone
-                next_candle = post_zone_data.iloc[i+1]  # Confirmation candle
+                current = post_zone_data.iloc[i]     # Touch candle
+                next_candle = post_zone_data.iloc[i+1]  # Must be immediate next
                 
-                # For LONG (DEMAND) setups
+                # FIX NEEDED: Structure should be IF/ELSE
                 if zone_type == 'DEMAND':
-                    confirmed = next_candle['close'] > next_candle['open']  # Simple bullish close
-                # For SHORT (SUPPLY) setups    
-                else:
-                    confirmed = next_candle['close'] < next_candle['open']  # Simple bearish close
-                
-                # If both conditions met → Trade executes
-                if confirmed:
-                    return True, {
-                        'entry_price': next_candle['close'],  # Entry at confirmation candle close
-                        'stop_price': zone['low'] if zone_type == 'SUPPLY' else zone['high']
-                    }
+                    if next_candle['close'] > next_candle['open']:
+                        return True, {
+                            'entry_price': next_candle['close'],
+                            'stop_price': zone['low']  # WAS INCORRECT (zone['high'] -> zone['low'])
+                        }
+                else:  # SUPPLY
+                    if next_candle['close'] < next_candle['open']:
+                        return True, {
+                            'entry_price': next_candle['close'],
+                            'stop_price': zone['high']  # Stop above supply zone (was "demand zone")
+                        }
             
             return False, None
         except Exception as e:
@@ -545,13 +537,12 @@ class SupplyDemandScanner:
         """Check if price has entered zone since creation - FIXED"""
         post_zone_data = df.iloc[zone['original_index']+1:]
         
-        # Changed to check wicks rather than closes for taps
+        # Supply Zone: Wick touches if high > zone_low
         if zone['type'] == 'supply':
-            # Considered tapped if price WICK enters the zone
             taps = (post_zone_data['high'] > zone['low'])
+        # Demand Zone: Wick touches if low < zone_high 
         else:
             taps = (post_zone_data['low'] < zone['high'])
-        
         return taps.any()
 
     def test_visualization(self, symbol="BTCUSDT", interval="4h"):
@@ -779,7 +770,7 @@ def main():
             print(f"Backtesting {len(pairs)} pairs from file...")
             
             for pair in pairs:
-                backtester.backtest_pair(pair, '5m', days_back=3)
+                backtester.backtest_pair(pair, '5m', days_back=7)
             
             report_result = backtester.generate_report()
             if report_result is None:
