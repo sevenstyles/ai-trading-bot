@@ -9,8 +9,7 @@ import time
 
 class BinanceClient:
     def __init__(self):
-        load_dotenv()
-        self.base_url = os.getenv('BINANCE_BASE_URL')
+        self.base_url = "https://api.binance.com"  # Direct public API endpoint
         
     def _read_end_date(self):
         """Read and parse human-readable END date from text file"""
