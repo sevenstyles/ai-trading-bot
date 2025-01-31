@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 import os
 import json
 import argparse
+import sys
 
 # Load environment variables
 load_dotenv()
@@ -17,6 +18,7 @@ class SupplyDemandScanner:
         self.min_volume_usdt = 1000000  # Minimum 24h volume in USDT
         self.min_price_usdt = 0.1  # Minimum price in USDT
         self.major_pairs = ['BTCUSDT', 'ETHUSDT']  # Major pairs have stricter rules
+        self.major_pair_volume_multiplier = 0.8  # 80% of normal volume requirement
         
     def _send_request(self, endpoint, params=None):
         """Send public API request"""
@@ -137,16 +139,8 @@ class SupplyDemandScanner:
         print(f"\nFound {len(valid_pairs)} pairs meeting volume/price criteria")
         return valid_pairs
 
-    def get_klines(self, symbol, interval, limit=200):
-        """Get kline/candlestick data"""
-        endpoint = "/api/v3/klines"
-        params = {
-            'symbol': symbol,
-            'interval': interval,
-            'limit': limit
-        }
-        
-        data = self._send_request(endpoint, params)
+    def process_klines_data(self, data):
+        """Process raw klines data into DataFrame"""
         if not data:
             return None
             
@@ -157,12 +151,20 @@ class SupplyDemandScanner:
         
         df[['open', 'high', 'low', 'close', 'volume']] = df[['open', 'high', 'low', 'close', 'volume']].astype(float)
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        
-        # Set timestamp as index
         df.set_index('timestamp', inplace=True)
-        
-        print(f"First candle time: {df.index[0]} | Last candle time: {df.index[-1]}")
         return df
+
+    def get_klines(self, symbol, interval, limit=200):
+        """Get kline/candlestick data"""
+        endpoint = "/api/v3/klines"
+        params = {
+            'symbol': symbol,
+            'interval': interval,
+            'limit': limit
+        }
+        
+        data = self._send_request(endpoint, params)
+        return self.process_klines_data(data)
 
     def calculate_atr(self, df, period=14):
         """Calculate Average True Range with pandas compatibility"""
@@ -192,10 +194,10 @@ class SupplyDemandScanner:
             
             # Reset index after each filter operation
             print(f"Initial candles: {len(df)}")
-            df = df[df['volume'] > df['volume'].rolling(20).mean() * 0.8].reset_index(drop=True)
+            df = df[df['volume'] > df['volume'].rolling(20).mean() * 0.5].reset_index(drop=True)
             print(f"After volume filter: {len(df)}")
             atr = self.calculate_atr(df, 14)
-            df = df[df['body_size'] > atr * 0.5].reset_index(drop=True)
+            df = df[df['body_size'] > atr * 0.3].reset_index(drop=True)
             print(f"After ATR filter: {len(df)}")
 
             zones = []
@@ -215,7 +217,12 @@ class SupplyDemandScanner:
                     continue
                     
                 # Loosen volume confirmation
-                if current['volume'] < prev1['volume'] * 1.1:  # Changed from 1.2
+                if symbol in self.major_pairs:
+                    volume_threshold = prev1['volume'] * self.major_pair_volume_multiplier
+                else:
+                    volume_threshold = prev1['volume'] * 1.05
+                
+                if current['volume'] < volume_threshold:
                     print(f"Rejected zone at {i} - insufficient volume")
                     continue
                     
@@ -365,30 +372,33 @@ class SupplyDemandScanner:
         try:
             post_zone_data = df.iloc[zone['original_index']+1:]
             
-            for i in range(len(post_zone_data)-1):  # Need at least 2 candles
-                current = post_zone_data.iloc[i]
-                next_candle = post_zone_data.iloc[i+1]
+            # After zone touch (wick in zone)
+            for i in range(len(post_zone_data)-1):
+                current = post_zone_data.iloc[i]     # Candle that touched zone
+                next_candle = post_zone_data.iloc[i+1]  # Confirmation candle
                 
-                # For DEMAND (LONG) zones
+                # For LONG (DEMAND) setups
                 if zone_type == 'DEMAND':
-                    # Allow any bullish rejection pattern
-                    tapped = current['low'] <= zone['high'] * 1.005  # 0.5% buffer
-                    confirmed = next_candle['close'] > next_candle['open'] * 0.995  # Allow slight wicks
-                    if tapped and confirmed:
-                        return True, {
-                            'entry_price': float(next_candle['close']),
-                            'stop_price': zone['low']
-                        }
-                
-                # For SUPPLY (SHORT) zones
+                    # 1. Price must touch zone with wick (2% buffer)
+                    tapped = current['low'] <= zone['high'] * 1.02
+                    
+                    # 2. Next candle must close above midpoint of its range
+                    confirmed = next_candle['close'] > (next_candle['open'] + next_candle['low'])/2
+                    
+                # For SHORT (SUPPLY) setups    
                 else:
-                    tapped = current['high'] >= zone['low'] * 0.995  # 0.5% buffer
-                    confirmed = next_candle['close'] < next_candle['open'] * 1.005
-                    if tapped and confirmed:
-                        return True, {
-                            'entry_price': float(next_candle['close']),
-                            'stop_price': zone['high']
-                        }
+                    # 1. Price must touch zone with wick (2% buffer)
+                    tapped = current['high'] >= zone['low'] * 0.98
+                    
+                    # 2. Next candle must close below midpoint of its range
+                    confirmed = next_candle['close'] < (next_candle['open'] + next_candle['high'])/2
+                
+                # If both conditions met → Trade executes
+                if tapped and confirmed:
+                    return True, {
+                        'entry_price': next_candle['close'],  # Entry at confirmation candle close
+                        'stop_price': zone['low'] if zone_type == 'SUPPLY' else zone['high']
+                    }
             
             return False, None
         except Exception as e:
@@ -593,22 +603,190 @@ class SupplyDemandScanner:
                     merged.append(zone)
         return merged
 
+    class Backtester:
+        def __init__(self, scanner):
+            self.scanner = scanner
+            self.results = []
+            
+        def backtest_pair(self, symbol, interval, days_back=3):
+            """Backtest a single pair"""
+            print(f"\nBacktesting {symbol} for last {days_back} days...")
+            end_time = datetime.now()
+            start_time = end_time - timedelta(days=days_back)
+            
+            # Get historical data
+            df = self.scanner.get_historical_klines(symbol, interval, start_time, end_time)
+            if df is None or len(df) < 100:
+                return
+                
+            # Find all setups in historical data
+            all_setups = []
+            window_step = 10  # Process every 10 candles instead of 1
+            for i in range(100, len(df), window_step):
+                window = df.iloc[:i]
+                setups = self.scanner.find_setup_sequence(window, symbol)
+                all_setups.extend(setups)
+                
+            # Evaluate setups
+            for setup in all_setups:
+                if setup['entry_triggered']:
+                    self.evaluate_trade(setup, df)
+            
+        def evaluate_trade(self, setup, full_df):
+            """Evaluate trade outcome based on historical data"""
+            try:
+                # Add timestamp validation
+                if pd.Timestamp(setup['trigger_time']) > full_df.index.max():
+                    print(f"Invalid trigger time {setup['trigger_time']} - beyond data range")
+                    return
+                    
+                entry_index = full_df.index.get_loc(setup['trigger_time'])
+                trade_data = full_df.iloc[entry_index:]
+                
+                if setup['direction'] == 'LONG':
+                    stop_hit = (trade_data['low'] < setup['stop_price']).any()
+                    tp1_hit = (trade_data['high'] >= setup['tp1']).any()
+                    tp2_hit = (trade_data['high'] >= setup['tp2']).any() if not stop_hit else False
+                else:
+                    stop_hit = (trade_data['high'] > setup['stop_price']).any()
+                    tp1_hit = (trade_data['low'] <= setup['tp1']).any()
+                    tp2_hit = (trade_data['low'] <= setup['tp2']).any() if not stop_hit else False
+                
+                # Calculate result
+                result = {
+                    'symbol': setup['symbol'],
+                    'direction': setup['direction'],
+                    'entry_time': setup['trigger_time'],
+                    'entry_price': setup['entry_price'],
+                    'stop_price': setup['stop_price'],
+                    'tp1': setup['tp1'],
+                    'tp2': setup['tp2'],
+                    'outcome': 'STOP' if stop_hit else 'TP1' if tp1_hit else 'TP2' if tp2_hit else 'OPEN',
+                    'rr_achieved': self.calculate_actual_rr(trade_data, setup)
+                }
+                self.results.append(result)
+                
+            except KeyError as e:
+                print(f"Skipping invalid setup: {str(e)}")
+                return
+            except Exception as e:
+                print(f"Error evaluating trade: {str(e)}")
+                return
+            
+        def calculate_actual_rr(self, trade_data, setup):
+            """Calculate actual risk/reward achieved"""
+            entry = setup['entry_price']
+            risk = abs(entry - setup['stop_price'])
+            
+            if setup['direction'] == 'LONG':
+                max_price = trade_data['high'].max()
+                reward = max_price - entry
+            else:
+                min_price = trade_data['low'].min()
+                reward = entry - min_price
+                
+            return reward / risk if risk > 0 else 0
+            
+        def generate_report(self):
+            """Generate backtest performance report"""
+            if not self.results:
+                return None
+                
+            df = pd.DataFrame(self.results)
+            df['win'] = df['outcome'].isin(['TP1', 'TP2'])
+            
+            report = {
+                'total_trades': len(df),
+                'win_rate': df['win'].mean(),
+                'avg_rr': df['rr_achieved'].mean(),
+                'profit_factor': self.calculate_profit_factor(df),
+                'max_drawdown': self.calculate_drawdown(df),
+                'best_trade': df['rr_achieved'].max(),
+                'worst_trade': df['rr_achieved'].min()
+            }
+            return report, df
+            
+        def calculate_profit_factor(self, df):
+            winners = df[df['win']]
+            losers = df[~df['win']]
+            return winners['rr_achieved'].sum() / abs(losers['rr_achieved'].sum()) if not losers.empty else np.inf
+            
+        def calculate_drawdown(self, df):
+            cumulative = df['rr_achieved'].cumsum()
+            peak = cumulative.expanding(min_periods=1).max()
+            drawdown = (peak - cumulative).max()
+            return drawdown
+
+    def get_historical_klines(self, symbol, interval, start_time, end_time):
+        """Get historical klines between dates"""
+        endpoint = "/api/v3/klines"
+        params = {
+            'symbol': symbol,
+            'interval': interval,
+            'startTime': int(start_time.timestamp() * 1000),
+            'endTime': int(end_time.timestamp() * 1000),
+            'limit': 1000
+        }
+        
+        all_data = []
+        while True:
+            data = self._send_request(endpoint, params)
+            if not data:
+                break
+            all_data.extend(data)
+            
+            # Update params for next request
+            params['startTime'] = data[-1][0] + 1
+            if params['startTime'] > params['endTime']:
+                break
+            
+        return self.process_klines_data(all_data)
+
 def main():
     try:
-        # Initialize scanner
-        print("Initializing scanner...")
         scanner = SupplyDemandScanner()
         
-        print("Scanning for potential setups...")
-        try:
-            setups = scanner.scan_for_setups()
-        except Exception as e:
-            print(f"Error during scan_for_setups: {str(e)}")
-            import traceback
-            print("Full traceback:")
-            print(traceback.format_exc())
+        if '--backtest' in sys.argv:
+            backtester = scanner.Backtester(scanner)
+            
+            # Check for pair file in CURRENT DIRECTORY
+            pair_file_path = 'trade_pair.txt'  # Changed from 'binance_data/trade_pair.txt'
+            if not os.path.exists(pair_file_path):
+                print(f"Error: {pair_file_path} not found in current directory")
+                return
+                
+            with open(pair_file_path) as f:
+                pairs = [line.strip() for line in f.readlines() if line.strip()]
+                
+            if not pairs:
+                print("No pairs found in trade_pair.txt")
+                return
+                
+            print(f"Backtesting {len(pairs)} pairs from file...")
+            
+            for pair in pairs:
+                backtester.backtest_pair(pair, '5m', days_back=3)
+            
+            report_result = backtester.generate_report()
+            if report_result is None:
+                print("\nNo trades executed during backtest period")
+                return
+                
+            report, detailed_df = report_result
+            print("\nBacktest Report:")
+            print(json.dumps(report, indent=2))
+            
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f'screener-results/backtest_{pairs[0]}_{timestamp}.csv' if len(pairs) == 1 else \
+                      f'screener-results/backtest_{len(pairs)}_pairs_{timestamp}.csv'
+            detailed_df.to_csv(filename, index=False)
+            print(f"\nSaved backtest results to {filename}")
             return
-        
+        else:
+            # Existing main logic
+            setups = scanner.scan_for_setups()
+            # ... rest of existing main code ...
+
         if setups is None or (isinstance(setups, pd.DataFrame) and setups.empty):
             print("No setups found matching criteria")
             return
@@ -657,9 +835,12 @@ def test():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--test', action='store_true', help='Run visualization test')
+    parser.add_argument('--backtest', action='store_true', help='Run backtesting')
     args = parser.parse_args()
     
     if args.test:
         test()
+    elif args.backtest:
+        main()
     else:
         main() 
