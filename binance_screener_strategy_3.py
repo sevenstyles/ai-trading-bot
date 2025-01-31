@@ -27,9 +27,9 @@ client = Client()
 def fetch_data(symbol):
     """Optimized historical data ranges"""
     intervals = {
-        '1h': 500,  # 500 candles (~21 days)
-        '4h': 200,  # 200 candles (~33 days)
-        '5m': 288   # 288 candles (1 day)
+        '30m': 500,  # Zone creation timeframe
+        '4h': 200,   # Trend direction
+        '5m': 288    # Entry criteria
     }
     
     data = {}
@@ -45,6 +45,12 @@ def fetch_data(symbol):
         # Include volume in the selected columns
         data[interval] = df[['open', 'high', 'low', 'close', 'volume']]
     return data
+
+def get_trend_direction(df_4h):
+    """Determine trend using 4h data"""
+    sma_50 = df_4h.close.rolling(50).mean().iloc[-1]
+    current_price = df_4h.close.iloc[-1]
+    return 'bullish' if current_price > sma_50 else 'bearish'
 
 def detect_supply_demand_zones(data):
     """Improved zone validation"""
@@ -139,13 +145,13 @@ def detect_supply_demand_zones(data):
             
             i += 1
     
-    # Keep existing detection logic but modify invalidation
-    current_1h_price = data['1h'].close.iloc[-1]  # Use HTF price for validation
+    # Use 30m price for validation instead of 1h
+    current_30m_price = data['30m'].close.iloc[-1]
     
     for zone in zones:
-        # Only invalidate if price is INSIDE zone on HTF
-        zone_active = zone['low'] < current_1h_price < zone['high']
-        zone['valid'] = not zone_active  # Invert validation status
+        # Validate using 30m price
+        zone_active = zone['low'] < current_30m_price < zone['high']
+        zone['valid'] = not zone_active
     return zones
 
 def merge_zones(zones):
@@ -174,39 +180,49 @@ def merge_zones(zones):
             
     return [z for z in merged if z['valid']]  # Remove invalid zones
 
-def check_entry_conditions(data, zones):
-    """Institutional entry validation"""
-    trade_signal = {}
+def check_entry_conditions(data, zones, trend):
+    """Use 5m data with trend alignment"""
     ltf = data['5m']
+    trade_signal = {
+        'Direction': 'NO TRADE',
+        'Entry': None,
+        'SL': None,
+        'TP1': None,
+        'Analysis': []
+    }
     
-    # Fix deprecated indexing
+    # Require trend alignment
+    if trend == 'bullish':
+        valid_zones = [z for z in zones if z['type'] == 'demand']
+    else:
+        valid_zones = [z for z in zones if z['type'] == 'supply']
+    
     recent_volume = ltf.volume.iloc[-3:].mean()
     vol_ma = ltf.volume.rolling(20).mean().iloc[-1]
     volume_ok = recent_volume > vol_ma * 2
     
-    # Price action validation
     last_close = ltf.close.iloc[-1]
     zone_active = any(
         zone['low'] < last_close < zone['high'] 
-        for zone in zones if zone['valid']
+        for zone in valid_zones if zone['valid']
     )
     
     if volume_ok and zone_active:
-        # Basic entry logic (needs expansion)
-        trade_signal = {
-            'Direction': 'LONG' if last_close > ltf.open.iloc[-1] else 'SHORT',
+        direction = 'LONG' if last_close > ltf.open.iloc[-1] else 'SHORT'
+        trade_signal.update({
+            'Direction': direction,
             'Entry': last_close,
-            'SL': last_close * 0.99,  # 1% stop loss
-            'TP1': last_close * 1.03,  # 3% take profit
+            'SL': last_close * 0.99,
+            'TP1': last_close * 1.03,
             'Analysis': ['Volume confirmed zone activation']
-        }
+        })
         
     return trade_signal
 
 def plot_trade_setup(df, signal, zones):
     """Enhanced zone visualization"""
     # Filter valid zones and convert to DataFrame
-    valid_zones = [z for z in zones if z['valid'] and z['timeframe'] == '1h']
+    valid_zones = [z for z in zones if z['valid'] and z['timeframe'] == '30m']
     
     # Create zone boundaries
     for i, zone in enumerate(valid_zones):
@@ -236,6 +252,9 @@ def plot_trade_setup(df, signal, zones):
             savefig=f"plots/{signal['Symbol']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
     )
 
+    # Plot 30m zones on 5m chart
+    valid_zones = [z for z in zones if z['timeframe'] == '30m']
+
 def run_screener():
     for symbol in SYMBOLS:
         print(f"\n{'='*40}")
@@ -243,7 +262,8 @@ def run_screener():
         try:
             data = fetch_data(symbol)
             zones = detect_supply_demand_zones(data)
-            signal = check_entry_conditions(data, zones)
+            trend = get_trend_direction(data['4h'])
+            signal = check_entry_conditions(data, zones, trend)
 
             # Generate output
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -265,8 +285,8 @@ def run_screener():
                 if k != 'Symbol':
                     print(f"{k}: {v}")
 
-            # Plot using 1h data
-            plot_trade_setup(data['1h'], output, zones)
+            # Plot using 30m data
+            plot_trade_setup(data['30m'], output, zones)
 
             # Add debug info
             print(f"Found {len(zones)} zones")
