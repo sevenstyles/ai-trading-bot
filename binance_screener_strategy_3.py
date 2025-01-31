@@ -17,7 +17,8 @@ class SupplyDemandScanner:
         self.base_url = os.getenv('BINANCE_BASE_URL', 'https://api.binance.com')
         self.min_volume_usdt = 1000000  # Minimum 24h volume in USDT
         self.min_price_usdt = 0.1  # Minimum price in USDT
-        self.major_pairs = ['BTCUSDT', 'ETHUSDT']  # Major pairs have stricter rules
+        self.major_pairs = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT']  # Added SOL
+        self.mid_caps = ['EGLDUSDT']  # Add mid-cap list
         self.major_pair_volume_multiplier = 0.8  # 80% of normal volume requirement
         
     def _send_request(self, endpoint, params=None):
@@ -34,8 +35,9 @@ class SupplyDemandScanner:
     def check_trend_alignment(self, df):
         """Check for higher highs/lower lows trend alignment"""
         try:
-            # Get recent swing points (last 30 candles)
-            recent_df = df.tail(30)
+            # Extended analysis window
+            recent_df = df.tail(72)  # 72 candles = 3 days of 1h data
+            ema_200 = df['close'].ewm(span=200).mean()  # Add EMA filter
             
             swing_highs = []
             swing_lows = []
@@ -54,9 +56,13 @@ class SupplyDemandScanner:
                 lower_highs = swing_highs[-1] < swing_highs[0]
                 lower_lows = swing_lows[-1] < swing_lows[0]
                 
-                if higher_highs and higher_lows:
+                # Require price above/below EMA for trend direction
+                price_above_ema = recent_df['close'].iloc[-1] > ema_200.iloc[-1]
+                price_below_ema = recent_df['close'].iloc[-1] < ema_200.iloc[-1]
+                
+                if higher_highs and higher_lows and price_above_ema:
                     return 'up'
-                elif lower_highs and lower_lows:
+                elif lower_highs and lower_lows and price_below_ema:
                     return 'down'
             
             return None
@@ -167,39 +173,53 @@ class SupplyDemandScanner:
         return self.process_klines_data(data)
 
     def calculate_atr(self, df, period=14):
-        """Calculate Average True Range with pandas compatibility"""
+        """Calculate Average True Range with proper index alignment"""
         try:
-            high_low = df['high'].values - df['low'].values
-            high_close = np.abs(df['high'].values - df['close'].shift().values)
-            low_close = np.abs(df['low'].values - df['close'].shift().values)
+            # Use DataFrame's index for proper alignment
+            high_low = df['high'] - df['low']
+            high_close = (df['high'] - df['close'].shift()).abs()
+            low_close = (df['low'] - df['close'].shift()).abs()
             
-            true_range = pd.Series(np.maximum.reduce([high_low, high_close, low_close]))
+            true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
             return true_range.rolling(period).mean()
         except Exception as e:
             print(f"ATR calculation error: {str(e)}")
-            return pd.Series(np.zeros(len(df)))
+            return pd.Series(np.zeros(len(df)), index=df.index)
 
-    def detect_zones(self, df):
+    def detect_zones(self, df, symbol):
         """Final sensitivity adjustments"""
         try:
-            # Store original timestamps as a separate series
+            # Removed volatility check completely
+            # Only these filters remain:
+            # 1. Volume filter (based on pair category)
+            # 2. ATR-based body size filter
+            # 3. Price action patterns
+            
+            # Store original timestamps
             original_index = df.index
             df = df.reset_index(drop=True)
             df['original_timestamp'] = original_index
             
-            # Existing calculations and filters...
+            # No volatility calculations here
             df['body_size'] = abs(df['close'] - df['open'])
             df['upper_wick'] = df['high'] - df[['open', 'close']].max(axis=1)
             df['lower_wick'] = df[['open', 'close']].min(axis=1) - df['low']
             
-            # Reset index after each filter operation
-            print(f"Initial candles: {len(df)}")
-            df = df[df['volume'] > df['volume'].rolling(20).mean() * 0.5].reset_index(drop=True)
-            print(f"After volume filter: {len(df)}")
+            # Dynamic volume threshold remains
+            if symbol in self.major_pairs:
+                vol_multiplier = 0.8
+            elif symbol in self.mid_caps:
+                vol_multiplier = 0.4
+            else:
+                vol_multiplier = 0.3
+            
+            df = df[df['volume'] > df['volume'].rolling(20).mean() * vol_multiplier]
+            
+            # ATR filter for candle body size remains
             atr = self.calculate_atr(df, 14)
-            df = df[df['body_size'] > atr * 0.3].reset_index(drop=True)
-            print(f"After ATR filter: {len(df)}")
-
+            min_body_size = atr * 0.2 if df['close'].mean() < 50 else atr * 0.3
+            df = df[df['body_size'] > min_body_size]
+            
             zones = []
             # Add bounds check for loop range
             for i in range(2, min(len(df)-3, 1000)):  # Dynamic range calculation
@@ -260,14 +280,13 @@ class SupplyDemandScanner:
                 post_zone = df.iloc[zone['original_index']+1:]
                 
                 # Allow up to 5% of candles to revisit zone
-                if zone['type'] == 'supply':
-                    revisit_count = (post_zone['high'] > zone['low']).sum()
-                    if revisit_count > len(post_zone)*0.05:
-                        continue
-                else:
-                    revisit_count = (post_zone['low'] < zone['high']).sum()
-                    if revisit_count > len(post_zone)*0.05:
-                        continue
+                revisit_threshold = 0.15  # Allow 15% revisits for altcoins
+                if symbol not in self.major_pairs:
+                    revisit_threshold = 0.10
+                
+                revisit_count = (post_zone['high'] > zone['low']).sum()
+                if revisit_count > len(post_zone)*revisit_threshold:
+                    continue
                 
                 valid_zones.append(zone)
             
@@ -379,22 +398,13 @@ class SupplyDemandScanner:
                 
                 # For LONG (DEMAND) setups
                 if zone_type == 'DEMAND':
-                    # 1. Price must touch zone with wick (2% buffer)
-                    tapped = current['low'] <= zone['high'] * 1.02
-                    
-                    # 2. Next candle must close above midpoint of its range
-                    confirmed = next_candle['close'] > (next_candle['open'] + next_candle['low'])/2
-                    
+                    confirmed = next_candle['close'] > next_candle['open']  # Simple bullish close
                 # For SHORT (SUPPLY) setups    
                 else:
-                    # 1. Price must touch zone with wick (2% buffer)
-                    tapped = current['high'] >= zone['low'] * 0.98
-                    
-                    # 2. Next candle must close below midpoint of its range
-                    confirmed = next_candle['close'] < (next_candle['open'] + next_candle['high'])/2
+                    confirmed = next_candle['close'] < next_candle['open']  # Simple bearish close
                 
                 # If both conditions met → Trade executes
-                if tapped and confirmed:
+                if confirmed:
                     return True, {
                         'entry_price': next_candle['close'],  # Entry at confirmation candle close
                         'stop_price': zone['low'] if zone_type == 'SUPPLY' else zone['high']
@@ -420,7 +430,7 @@ class SupplyDemandScanner:
             df_1h = self.get_klines(symbol, '1h', 100)  # HTF 1h
             trend = self.check_trend_alignment(df_1h)
             
-            zones = self.detect_zones(df)
+            zones = self.detect_zones(df, symbol)
             print(f"Found {len(zones)} zones")
             
             valid_setups = []
@@ -522,8 +532,7 @@ class SupplyDemandScanner:
     def validate_setup_with_lower_timeframe(self, df_1h, setup):
         """Validate setup using 1h timeframe instead of 4h"""
         try:
-            # Using 24 candles (24 hours) for daily trend validation
-            recent_candles = df_1h.tail(24)
+            recent_candles = df_1h.tail(24)  # 24 hours of 1h data
             if setup['direction'] == 'LONG':
                 return recent_candles['close'].iloc[-1] > recent_candles['close'].iloc[0]
             else:
@@ -678,14 +687,19 @@ class SupplyDemandScanner:
             entry = setup['entry_price']
             risk = abs(entry - setup['stop_price'])
             
-            if setup['direction'] == 'LONG':
-                max_price = trade_data['high'].max()
-                reward = max_price - entry
-            else:
-                min_price = trade_data['low'].min()
-                reward = entry - min_price
-                
-            return reward / risk if risk > 0 else 0
+            if setup['outcome'] == 'STOP':
+                return -1.0  # Clear loss marker
+            elif setup['outcome'] == 'TP1':
+                return 3.0
+            elif setup['outcome'] == 'TP2':
+                return 10.0
+            else:  # Open trades
+                if setup['direction'] == 'LONG':
+                    current_price = trade_data['close'].iloc[-1]
+                    return (current_price - entry) / risk
+                else:
+                    current_price = trade_data['close'].iloc[-1]
+                    return (entry - current_price) / risk
             
         def generate_report(self):
             """Generate backtest performance report"""
