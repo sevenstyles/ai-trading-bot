@@ -163,14 +163,6 @@ def detect_supply_demand_zones(data):
         if (datetime.now(zone['timestamp'].tzinfo) - zone['timestamp']).days > 7:
             zone['valid'] = False
     
-    # Add price position check to validation
-    current_price = data['30m'].close.iloc[-1]
-    
-    for zone in zones:
-        # Keep zone valid if price is near (within 2%)
-        if zone['low'] * 0.98 < current_price < zone['high'] * 1.02:
-            zone['valid'] = True
-    
     return zones
 
 def merge_zones(zones):
