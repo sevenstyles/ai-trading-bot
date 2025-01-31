@@ -163,6 +163,14 @@ def detect_supply_demand_zones(data):
         if (datetime.now(zone['timestamp'].tzinfo) - zone['timestamp']).days > 7:
             zone['valid'] = False
     
+    # Add price position check to validation
+    current_price = data['30m'].close.iloc[-1]
+    
+    for zone in zones:
+        # Keep zone valid if price is near (within 2%)
+        if zone['low'] * 0.98 < current_price < zone['high'] * 1.02:
+            zone['valid'] = True
+    
     return zones
 
 def merge_zones(zones):
@@ -232,77 +240,50 @@ def check_entry_conditions(data, zones, trend):
     return trade_signal
 
 def plot_trade_setup(df, signal, zones):
-    # Increase visible candles to 500 (≈10 days of 30m data)
-    plot_df = df.iloc[-500:]  # Changed from -200
+    """Guarantee zone visibility on charts"""
+    # Get full historical data range
+    plot_df = df.iloc[-1000:]
     
-    # Create main plot with adjusted scale
+    # Create base plot
     fig, axes = mpf.plot(
         plot_df,
         type='candle',
         style='charles',
         title=f"{signal['Symbol']} Trade Setup",
         ylabel='Price',
-        figsize=(16,8),  # Larger figure size
+        figsize=(18, 9),
         returnfig=True,
-        tight_layout=True,
-        ylim=(
-            plot_df.low.min() * 0.997,  # Reduced padding
-            plot_df.high.max() * 1.003
-        )
+        tight_layout=True
     )
     ax = axes[0]
+
+    # Get all valid zones
+    valid_zones = [z for z in zones if z['valid']]
+    print(f"Plotting {len(valid_zones)} valid zones")
     
-    # Filter only 30m timeframe zones
-    valid_zones = [z for z in zones if z['timeframe'] == '30m' and z['valid']]
-    
-    # Debug output
-    print(f"Valid 30m zones: {len(valid_zones)}")
-    for z in valid_zones:
-        print(f"{z['type']} zone {z['low']}-{z['high']} formed at "
-              f"{z['timestamp'].tz_convert('America/New_York')}")
-    
-    # Plot zones as shaded boxes
+    # Calculate unified y-axis limits
+    if valid_zones:
+        min_low = min([z['low'] for z in valid_zones] + [plot_df.low.min()])
+        max_high = max([z['high'] for z in valid_zones] + [plot_df.high.max()])
+        ax.set_ylim(min_low * 0.98, max_high * 1.02)
+
+    # Plot each zone across full chart width
     for zone in valid_zones:
         color = '#FF0000' if zone['type'] == 'supply' else '#00FF00'
-        alpha = 0.2
         
-        # Extend zone plotting to current candle
-        mask = (plot_df.index >= zone['timestamp']) & (plot_df.index <= plot_df.index[-1])
-        
-        # Plot shaded zone
-        ax.fill_between(
-            plot_df.index[mask],
+        # Full width zone rectangle
+        ax.axhspan(
             zone['low'],
             zone['high'],
             facecolor=color,
-            alpha=alpha,
-            edgecolor='none',
-            zorder=0  # Behind candles
+            alpha=0.2,
+            zorder=0
         )
         
-        # Add zone borders
-        ax.plot(
-            plot_df.index[mask], 
-            [zone['high']]*sum(mask),
-            color=color,
-            alpha=0.5,
-            linewidth=1
-        )
-        ax.plot(
-            plot_df.index[mask],
-            [zone['low']]*sum(mask),
-            color=color,
-            alpha=0.5,
-            linewidth=1
-        )
-    
-    # Plot zones even if partially out of view
-    for zone in valid_zones:
-        # Extend plot boundaries to include zones
-        y_min = min(df.low.min(), zone['low'])
-        y_max = max(df.high.max(), zone['high'])
-        ax.set_ylim(y_min * 0.995, y_max * 1.005)
-    
+        # Zone borders
+        ax.axhline(zone['high'], color=color, alpha=0.5, linestyle='--')
+        ax.axhline(zone['low'], color=color, alpha=0.5, linestyle='--')
+
     # Save plot
     os.makedirs('plots', exist_ok=True)
     filename = f"plots/{signal['Symbol']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
