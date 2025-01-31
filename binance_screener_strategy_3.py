@@ -5,6 +5,7 @@ import mplfinance as mpf
 from datetime import datetime
 import os
 import re
+import numpy as np
 
 # Load strategy parameters
 with open('strategy_3_prompt.txt', 'r') as f:
@@ -24,10 +25,11 @@ with open('trade_pair.txt', 'r') as f:
 client = Client()
 
 def fetch_data(symbol):
-    """Fetch multi-timeframe data"""
+    """Optimized historical data ranges"""
     intervals = {
-        '1h': 200,   # New HTF (Higher Time Frame)
-        '5m': 500    # New LTF (Lower Time Frame)
+        '1h': 500,  # 500 candles (~21 days)
+        '4h': 200,  # 200 candles (~33 days)
+        '5m': 288   # 288 candles (1 day)
     }
     
     data = {}
@@ -64,8 +66,8 @@ def detect_supply_demand_zones(data):
                 
             # Liquidity check (price at swing high/low)
             is_liquidity_area = (
-                current.high == df.high.rolling(50).max().iloc[i] or 
-                current.low == df.low.rolling(50).min().iloc[i]
+                current.high == df.high.rolling(200).max().iloc[i] or  # 200-period lookback
+                current.low == df.low.rolling(200).min().iloc[i]
             )
             
             if current.close < current.open and is_liquidity_area:  # Supply
@@ -99,7 +101,8 @@ def detect_supply_demand_zones(data):
                     'high': zone_high,
                     'low': zone_low,
                     'timeframe': tf,
-                    'valid': True
+                    'valid': True,
+                    'timestamp': extreme_candle.name
                 })
 
             elif current.close > current.open and is_liquidity_area:  # Demand
@@ -130,19 +133,19 @@ def detect_supply_demand_zones(data):
                     'high': zone_high,
                     'low': zone_low,
                     'timeframe': tf,
-                    'valid': True
+                    'valid': True,
+                    'timestamp': extreme_candle.name
                 })
             
             i += 1
     
-    # After zone creation, check for closes within zones
+    # Replace historical close check with current price check
+    current_price = data['5m'].close.iloc[-1]
+    
     for zone in zones:
-        zone_df = data[zone['timeframe']]
-        # Check if any candle CLOSED within the zone
-        closes_inside = (zone_df['close'] > zone['low']) & (zone_df['close'] < zone['high'])
-        if closes_inside.any():
+        # Only invalidate if CURRENT PRICE is in zone
+        if zone['low'] < current_price < zone['high']:
             zone['valid'] = False
-            
     return zones
 
 def merge_zones(zones):
@@ -201,11 +204,11 @@ def check_entry_conditions(data, zones):
     return trade_signal
 
 def plot_trade_setup(df, signal, zones):
-    """Plot with properly shaded zones using matplotlib"""
-    # Modify zone plotting to only show valid zones
-    valid_zones = [z for z in zones if z['valid']]
+    # Filter zones to match plotted timeframe
+    plot_tf = '1h'
+    relevant_zones = [z for z in zones if z['timeframe'] == plot_tf]
     
-    # Create main plot
+    # Create main plot with proper scaling
     fig, axes = mpf.plot(
         df,
         type='candle',
@@ -213,20 +216,57 @@ def plot_trade_setup(df, signal, zones):
         title=f"{signal['Symbol']} Trade Setup",
         ylabel='Price',
         figsize=(12,6),
-        returnfig=True
+        returnfig=True,
+        tight_layout=True  # Add tight layout
     )
     
-    # Get main axis
     ax = axes[0]
     
-    # Plot zones as shaded regions
-    for zone in valid_zones:
-        color = 'red' if zone['type'] == 'supply' else 'green'
+    # Plot zones first to ensure visibility
+    for zone in relevant_zones:
+        if not zone['valid']:
+            continue
+            
+        color = '#FF0000' if zone['type'] == 'supply' else '#00FF00'
         alpha = 0.3
         
-        # Create horizontal lines for zone boundaries
-        ax.axhspan(zone['low'], zone['high'], 
-                   facecolor=color, alpha=alpha, edgecolor='none')
+        # Create zone boundaries
+        y_high = [zone['high'] if ts >= zone['timestamp'] else np.nan 
+                 for ts in df.index]
+        y_low = [zone['low'] if ts >= zone['timestamp'] else np.nan
+                for ts in df.index]
+        
+        # Plot zone area
+        ax.fill_between(
+            df.index,
+            y_low,
+            y_high,
+            where=df.index >= zone['timestamp'],
+            facecolor=color,
+            alpha=alpha,
+            edgecolor='none',
+            zorder=1  # Ensure zones are behind candles
+        )
+        
+        # Plot zone borders within the loop
+        ax.plot(
+            df.index, 
+            y_high, 
+            color=color, 
+            alpha=0.7, 
+            linestyle='--', 
+            linewidth=1,
+            zorder=2
+        )
+        ax.plot(
+            df.index, 
+            y_low, 
+            color=color, 
+            alpha=0.7, 
+            linestyle='--', 
+            linewidth=1,
+            zorder=2
+        )
     
     # Save plot
     os.makedirs('plots', exist_ok=True)
@@ -265,6 +305,11 @@ def run_screener():
 
             # Plot using 1h data
             plot_trade_setup(data['1h'], output, zones)
+
+            # Add debug info
+            print(f"Found {len(zones)} zones")
+            for z in zones:
+                print(f"{z['type']} zone: {z['low']}-{z['high']} ({z['timeframe']})")
 
         except Exception as e:
             print(f"Error processing {symbol}: {str(e)}")
