@@ -27,8 +27,8 @@ def main():
     # Update the interval values here
     intervals = {
         '1d': 50,   
-        '4h': 200,   
-        '15m': 100    
+        '4h': 400,   
+        '15m': 200    
     }
     
     # Process each symbol

@@ -1,0 +1,70 @@
+Volatility-Confirmed Dual Timeframe Breakout Strategy
+======================================================
+
+CORE ANALYSIS COMPONENTS:
+--------------------------
+1. High Timeframe Structure Analysis:
+   - Identify Consolidation Phases:
+       * Look for extended periods (3+ candles) on HTF charts with narrow range movement (e.g. ≤2.0% range).
+       * Mark turning points when the price is testing key support/resistance levels.
+   - Detect Breakouts:
+       * Confirm a valid breakout when the price closes outside the consolidation range with a significant move.
+       * Look for a substantial increase in volume during breakout candles as confirmation of directional bias.
+   - Note Trend Shifts:
+       * Use the breakup of previously established levels (such as strong highs or lows) to indicate change of market character.
+
+2. Lower Timeframe Entry Timing:
+   - Micro Breakout and Fakeout Detection:
+       * On LTF charts, look for oscillations or micro "fakeout" patterns following a breakout.
+       * Confirm entry when a candle closes decisively in the breakout direction and is supported by a relative volume surge.
+   - Dual Timeframe Confirmation:
+       * Align the high timeframe breakout signal with corresponding micro-level confirmation for precise trade entry.
+
+3. Volume Confirmation:
+   - Validate Breakout Strength:
+       * Ensure that identified breakout moves are accompanied by a clear spike in volume relative to the preceding candles.
+       * Use volume clustering on both high and lower timeframes to filter out weak or false moves.
+
+RISK MANAGEMENT PROTOCOL:
+--------------------------
+- Stop Loss (SL):
+   * Place SL just beyond the consolidation zone (recent high for long setups and recent low for short setups) plus an ATR-based buffer.
+- Take Profit (TP):
+   * Set TP at the next identified resistance (in bearish trades) or support (in bullish trades), ensuring a minimum risk-reward ratio of 1:3.
+- Adjust Position Sizing:
+   * Make sure the SL level is acceptable relative to the trade's risk and the overall ATR-based volatility.
+
+ENTRY & REJECTION CRITERIA:
+---------------------------
+1. Mandatory Setup Conditions:
+   - Evidence of a clear consolidation phase on the higher timeframe.
+   - A valid breakout is confirmed with a strong close and accompanying volume surge.
+   - Lower timeframe (15-minute) charts display a congruent micro-level breakout pattern that avoids false "fakeout" signals.
+   - Dual timeframe alignment is present with both trend direction and timing cues.
+
+2. Reject Trade If:
+   - The price remains in consolidation or there is no clear breakout.
+   - Volume is insufficient or the breakout candle is weak.
+   - Lower timeframe signals conflict with the established high timeframe direction.
+   - External or volatile news conditions distort the technical patterns.
+
+MANDATORY RESPONSE OUTPUT FORMAT:
+-----------------------------------
+- Timestamp: [timestamp]
+- Status: [TRADE/NO TRADE]
+- Direction: [LONG/SHORT/NO TRADE]
+- Entry: [price]
+- SL: [price]
+- TP: [price]
+- RR Ratio: [1:x.x]
+- Confidence: [x/5]
+- Analysis:
+   1. High Timeframe Consolidation and Breakout Confirmation
+   2. Micro-Level Entry Timing on Lower Timeframe
+   3. Volume Surge Validation
+   4. Alignment of Support/Resistance and Trend Shift
+   5. Risk & Reward Assessment and SL/TP Justification
+   6. Additional Observations based on OHLC & Volume Patterns
+   7. Final Setup Validation Notes
+
+  END RESPONSE 

@@ -8,8 +8,17 @@ import re
 import numpy as np
 import random
 
+# Determine the base directory (i.e. the directory where this script is located)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Update path for the strategy prompt file if it remains in the same folder as before or moved.
+# For example, if you want to keep it in binance_data, update accordingly:
+# STRATEGY_FILE = os.path.join(BASE_DIR, '../strategy_3_prompt.txt')
+# If you have moved it into the screener folder too, you can simply do:
+STRATEGY_FILE = os.path.join(BASE_DIR, '..', 'strategy_3_prompt.txt')
+
 # Load strategy parameters
-with open('strategy_3_prompt.txt', 'r') as f:
+with open(STRATEGY_FILE, 'r') as f:
     strategy_rules = f.read()
 
 # Binance API setup
@@ -267,9 +276,10 @@ def plot_trade_setup(df, signal, zones):
         ax.axhline(zone['high'], color=color, alpha=0.5, linestyle='--')
         ax.axhline(zone['low'], color=color, alpha=0.5, linestyle='--')
 
-    # Save plot
-    os.makedirs('plots', exist_ok=True)
-    filename = f"plots/{signal['Symbol']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+    # Save plot: if you wish to write the plots to binance_data/screener/plots you can do:
+    plots_dir = os.path.join(BASE_DIR, 'plots')
+    os.makedirs(plots_dir, exist_ok=True)
+    filename = os.path.join(plots_dir, f"{signal['Symbol']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png")
     fig.savefig(filename)
     plt.close(fig)
 
@@ -277,7 +287,7 @@ def run_screener():
     # Get random 10 USDT pairs
     all_tickers = client.get_all_tickers()
     usdt_pairs = [t['symbol'] for t in all_tickers if t['symbol'].endswith('USDT')]
-    SYMBOLS = random.sample(usdt_pairs, 10)
+    SYMBOLS = random.sample(usdt_pairs, 20)
 
     for symbol in SYMBOLS:
         print(f"\n{'='*40}")

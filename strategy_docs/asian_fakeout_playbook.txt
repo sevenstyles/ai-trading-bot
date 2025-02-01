@@ -1,0 +1,85 @@
+# Asian Session Fakeout Strategy v3.1 (Universal with Enhancements)
+# Last Updated: 2025-02-15
+
+=== Core Parameters ===
+* Session Hours: 00:00 - 08:00 UTC
+* Confirmation Candles: 3 (adaptive: 2–4 based on current volatility)
+* Days Active: Sun-Thu
+
+Volatility Tiers:
+| Tier   | Buffer          | SL           | TP1          | Vol Filter      |
+|--------|-----------------|--------------|--------------|-----------------|
+| High   | 0.3-0.6%        | 0.9-1.2%     | 1.8-2.5%     | 1.7-2.0x        |
+| Medium | 0.7-1.0%        | 1.3-1.8%     | 2.6-3.5%     | 1.3-1.6x        |
+| Low    | 1.1-1.5%        | 1.9-2.5%     | 3.6-4.5%     | 1.1-1.3x        |
+
+=== Execution Steps ===
+1. Pre-Session Prep (22:00 UTC)
+   - Calculate session range (High-Low)
+   - Set buffers:
+     Long: High + (Range * 0.15) adjusted dynamically by recent ATR
+     Short: Low - (Range * 0.15) adjusted dynamically by recent ATR
+   - Mark zones based on these adaptive buffer levels and set alerts
+
+2. Entry Conditions
+   - Monitor for a 15m close beyond the adaptive buffer zone
+   - Confirm that volume > (20-period MA * Tier Filter) using a dynamic (e.g., z-score) volume filter
+   - Ensure price reclaims the buffer zone within 2–4 candles (confirmation window adapts to intraday volatility)
+
+3. Trade Management
+   - Enter 50% position at TP1 (target adjusted per tier, typically 1.8–4.5%)
+   - Move stop loss to break-even immediately after partial profit
+   - Trail the remaining position using a 14-period ATR-based trailing stop, adjusting stop levels to current volatility
+
+4. Exit Conditions
+   - Trigger exit if price velocity exceeds 3x current tier volatility or if there is a liquidity drop (volume < 0.7x 20-period MA)
+   - Exit automatically at session close (08:00 UTC) if the position is still open
+
+=== Technical Requirements ===
+1. Chart Setup:
+   - Use 15m and 4h timeframes
+   - Display volume profile and VWAP with 0.5σ bands
+2. Indicators:
+   - 20-period volume MA with dynamic volume deviation (z-score)
+   - 14-period ATR for dynamic buffer and stop adjustments
+   - Markers for session high/low
+
+=== General Exceptions ===
+1. Disable If:
+   - Daily range < 1.5x of the 20-day average range
+   - Asset shows illiquidity (spread > 0.1% of price)
+2. Require:
+   - Minimum 3:1 risk/reward ratio
+   - Correlation r² > 0.7 with a chosen benchmark index (to ensure reliable price action)
+
+=== Universal Checklist ===
+[ ] Session range calculated using recent ATR adjustments  
+[ ] Adaptive buffer zones marked and alerts set  
+[ ] Dynamic volume filter confirmed (ensure significant z-score deviation)  
+[ ] Volatility tier assigned based on current market conditions  
+[ ] Adaptive confirmation window applied (2–4 candles)  
+[ ] Correlation validated  
+[ ] Position size calculated using proper risk management  
+
+=== Enhancements to Increase Win Rate ===
+1. Dynamic Buffer Adjustments:  
+   Calculate buffers as a function of the ATR (e.g., Buffer = Range * 0.15 * (ATR_current/ATR_average)). This ensures that in volatile sessions, the buffer widens appropriately.
+2. Adaptive Volume Filtering:  
+   Use a z-score or similar statistical measure to determine if the breakout volume is significantly different from the norm—reducing noise in both high- and low-volume environments.
+3. Flexible Confirmation Window:  
+   Allow the confirmation period to vary (between 2 to 4 candles) based on intraday volatility, which can help capture genuine fakeouts more accurately.
+4. Dynamic Trailing Stops:  
+   Adjust trailing stops based on 14-period ATR to lock in profits as volatility changes during the session.
+5. Continuous Backtesting and Optimization:  
+   Periodically recalibrate the dynamic multipliers (for buffers, volume filters, and confirmation windows) based on recent historical performance.
+
+=== Strategy Logic ===
+1. Market Mechanic:
+   Exploits liquidity gaps during low-volume sessions where false breakouts trigger stop runs that eventually reverse toward values.
+2. Edge:
+   Statistical mean reversion is expected when:
+   - Breakout volume < 1.5x MA (adjusted for current conditions)
+   - Price remains within VWAP ±0.5σ
+   - Follow-through remains less than 1.2x ATR
+
+By using these dynamic adjustments, the strategy better adapts to changing market conditions to help increase the win rate over time. 
