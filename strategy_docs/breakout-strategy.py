@@ -1329,8 +1329,41 @@ def get_top_volume_pairs(limit=50):
     top_volume_pairs = [t['symbol'] for t in usdt_pairs_sorted[:limit]]
     return top_volume_pairs
 
+def analyze_aggregated_results(all_signals, initial_capital=1000):
+    """Aggregate performance analysis across all symbols traded."""
+    if not all_signals:
+        print("No aggregated trades generated")
+        return
+    try:
+        df = pd.DataFrame(all_signals)
+        df['profit_pct'] = df['profit'] * 100
+        df['outcome'] = np.where(
+            df['profit'] > 0, 'WIN',
+            np.where(df['profit'] < 0, 'LOSS', 'BREAKEVEN')
+        )
+        total_trades = len(df)
+        win_rate = len(df[df['outcome'] == 'WIN']) / total_trades
+        avg_win = df[df['outcome'] == 'WIN']['profit_pct'].mean()
+        avg_loss = df[df['outcome'] == 'LOSS']['profit_pct'].mean()
+        profit_factor = abs(avg_win/avg_loss) if avg_loss != 0 else np.inf
+        max_drawdown = df['drawdown'].min()
+        final_capital = simulate_capital(all_signals, initial_capital=initial_capital)
+      
+        print("=== Aggregated Report Across All Symbols ===")
+        print(f"Total Trades: {total_trades}")
+        print(f"Win Rate: {win_rate:.1%}")
+        print(f"Avg Win: {avg_win:.2f}% | Avg Loss: {avg_loss:.2f}%")
+        print(f"Profit Factor: {profit_factor:.2f}")
+        print(f"Max Drawdown: {max_drawdown*100:.2f}%")
+        print(f"\nStarting Capital: ${initial_capital}")
+        print(f"Final Capital: ${final_capital:.2f}")
+        print("\nSample Aggregated Trades:")
+        print(df[['entry_time','entry_price','stop_loss','take_profit','exit_price','profit_pct','outcome']].head(5))
+    except Exception as e:
+        print(f"Aggregated analysis error: {str(e)}")
+
 def main():
-    """Main execution flow with random selection from top 50 volume pairs"""
+    """Main execution flow with random selection from top 50 volume pairs and aggregated report"""
     top_volume_pairs = get_top_volume_pairs(limit=50)
     if not top_volume_pairs:
         print("No top volume pairs found.")
@@ -1338,14 +1371,19 @@ def main():
     symbols = random.sample(top_volume_pairs, 5)
     print(f"Testing symbols: {', '.join(symbols)}\n")
     
+    all_trades = []
     for symbol in symbols:
         print(f"\n=== TESTING {symbol} ===")
         signals = backtest_strategy(symbol)
         
         if signals:
             analyze_results(signals)
+            all_trades.extend(signals)
         else:
             print("No valid trades generated")
+    
+    print("\n=== AGGREGATED REPORT ===")
+    analyze_aggregated_results(all_trades)
 
 if __name__ == "__main__":
     main()
