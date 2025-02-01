@@ -55,7 +55,13 @@ RISK_REWARD_RATIO = 2.0      # More achievable 2:1 ratio
 ATR_PERIOD = 14        # For volatility-based stops
 
 # Improve stop loss calculation
-ATR_MULTIPLIER = 1.5        # Wider stop for 4h volatility
+def calculate_stop_loss(entry_price, atr, volatility_ratio):
+    """Dynamic stop loss based on volatility regime"""
+    if volatility_ratio > 1.5:
+        return entry_price - (atr * 2.0)  # Wider stops in high volatility
+    elif volatility_ratio < 0.8:
+        return entry_price - (atr * 1.0)  # Tighter stops in low volatility
+    return entry_price - (atr * 1.5)  # Default
 
 CAPITAL = 100000  # $100,000 demo capital
 RISK_PER_TRADE = 0.01  # 1% per trade
@@ -898,7 +904,81 @@ def summarize_trades(trades, symbol):
     print(df[['entry_time', 'entry_price', 'SL', 'TP', 'exit_price', 
             'profit_pct', 'risk_reward', 'outcome', 'duration_hours']].head(5))
 
+    win_rate = len(wins)/len(df)*100 if not df.empty else 0
+    print(f"Win Rate: {win_rate:.1f}%")
+
+def calculate_macd(df, fast=12, slow=26, signal=9):
+    """Calculate MACD indicator"""
+    df['ema_fast'] = df['close'].ewm(span=fast, adjust=False).mean()
+    df['ema_slow'] = df['close'].ewm(span=slow, adjust=False).mean()
+    df['macd'] = df['ema_fast'] - df['ema_slow']
+    df['signal'] = df['macd'].ewm(span=signal, adjust=False).mean()
+    return df
+
+def calculate_adx(df, period=14):
+    """Calculate Average Directional Index (ADX)"""
+    # True Range
+    df['tr'] = df['high'] - df['low']
+    
+    # Directional Movement
+    df['dm_plus'] = np.where(
+        (df['high'] - df['high'].shift(1)) > (df['low'].shift(1) - df['low']),
+        df['high'] - df['high'].shift(1), 
+        0
+    )
+    df['dm_minus'] = np.where(
+        (df['low'].shift(1) - df['low']) > (df['high'] - df['high'].shift(1)),
+        df['low'].shift(1) - df['low'], 
+        0
+    )
+    
+    # Smooth with Wilder's MA
+    df['tr_sma'] = df['tr'].ewm(alpha=1/period, adjust=False).mean()
+    df['dm_plus_sma'] = df['dm_plus'].ewm(alpha=1/period, adjust=False).mean()
+    df['dm_minus_sma'] = df['dm_minus'].ewm(alpha=1/period, adjust=False).mean()
+    
+    # Directional Indicators
+    df['di_plus'] = (df['dm_plus_sma'] / df['tr_sma']) * 100
+    df['di_minus'] = (df['dm_minus_sma'] / df['tr_sma']) * 100
+    
+    # ADX Calculation
+    dx = (abs(df['di_plus'] - df['di_minus']) / (df['di_plus'] + df['di_minus'])) * 100
+    df['adx'] = dx.ewm(alpha=1/period, adjust=False).mean()
+    
+    return df
+
+# Add this function before backtest_breakout_strategy
+def is_favorable_regime(df, i, current_price, entry_price, volatility_ratio, adx_value):
+    """Determine if market conditions are favorable for holding"""
+    price_deviation = abs(current_price - entry_price) / entry_price
+    atr_ratio = volatility_ratio
+    
+    # Calculate volume ratio (current volume vs 20-period average)
+    volume_ratio = df['volume'].iloc[i] / df['volume'].rolling(20).mean().iloc[i]
+    
+    # Check EMA alignment (price above both 50 and 200 EMAs)
+    ema_alignment = (current_price > df['ema50'].iloc[i]) and (current_price > df['ema200'].iloc[i])
+
+    return all([
+        atr_ratio > 0.8,
+        volume_ratio > 1.2,
+        adx_value > 25,
+        ema_alignment
+    ])
+
 def backtest_breakout_strategy(df_4h, df_15m=None, symbol="UNKNOWN"):
+    # Now properly ordered after indicator functions
+    df_4h = calculate_macd(df_4h)
+    df_4h = calculate_adx(df_4h)
+    df_4h['atr'] = calculate_atr(df_4h)
+    # Calculate required indicators
+    df_4h['ema50'] = df_4h['close'].ewm(span=50, adjust=False).mean()
+    df_4h['ema200'] = df_4h['close'].ewm(span=200, adjust=False).mean()
+    
+    # Calculate other indicators (ATR, ADX, etc.)
+    df_4h = calculate_adx(df_4h)
+    df_4h['atr'] = calculate_atr(df_4h)
+    
     trades = []
     df = df_4h.copy()
     
@@ -930,12 +1010,6 @@ def backtest_breakout_strategy(df_4h, df_15m=None, symbol="UNKNOWN"):
     # Volatility-based ATR
     df['atr'] = df['high'] - df['low']
     
-    # Add momentum confirmation
-    def calculate_macd(df, fast=12, slow=26, signal=9):
-        df['macd'] = df['close'].ewm(span=fast).mean() - df['close'].ewm(span=slow).mean()
-        df['signal'] = df['macd'].ewm(span=signal).mean()
-        return df
-
     for i in range(MIN_CONSOL_BARS+1, len(df)):
         try:
             # 3. Validate current candle data
@@ -955,46 +1029,23 @@ def backtest_breakout_strategy(df_4h, df_15m=None, symbol="UNKNOWN"):
             ema = df['ema_50'].iloc[i]
             
             # Entry conditions
-            price_condition = current_high > consol_high * (1 + BUFFER_PCT)
-            volume_condition = vol_ratio >= VOL_SPIKE_MULTIPLIER
-            
-            # 1. Enhanced Trend Filter
-            ema_short = df['ema_21'].iloc[i]
-            ema_long = df['ema_50'].iloc[i]
-            trend_strength = ((current_close - ema_long) / ema_long) * 100
-            adx = df['adx'].iloc[i]
-            
-            trend_condition = all([
-                current_close > ema_long,
-                ema_short > ema_long,
-                trend_strength > 1.0,
-                adx > MIN_ADX
-            ])
-            
-            # 2. Momentum Filter with Larger Window
-            if i >= MOMENTUM_WINDOW*2:
-                prev_close = df['close'].iloc[i-MOMENTUM_WINDOW]
-                prev_prev_close = df['close'].iloc[i-(MOMENTUM_WINDOW*2)]
-                prev_momentum = abs(prev_close - prev_prev_close)
-                current_momentum = abs(current_close - prev_close)
-                momentum_condition = current_momentum > prev_momentum * MIN_MOMENTUM_RATIO
-            else:
-                momentum_condition = False
-            
-            # 3. Session Volatility Filter
-            current_atr = df['atr'].iloc[i]
-            session_vol_condition = current_atr > (df['atr'].rolling(50).mean().iloc[i] * 0.7)
-            
-            # In entry conditions
-            df = calculate_macd(df)
+            price_condition = (current_close > consol_high) & (current_close > df_4h['high'].rolling(50).mean().iloc[i])
+            volume_condition = df['volume'].iloc[i] > df['volume'].rolling(VOL_MA_PERIOD).mean().iloc[i] * VOL_SPIKE_MULTIPLIER
+            trend_condition = df_4h['close'].iloc[i] > df_4h['ema50'].iloc[i]
             momentum_condition = df['macd'].iloc[i] > df['signal'].iloc[i]
+            session_vol_condition = df['consol_range_pct'].iloc[i] >= MIN_SESSION_RANGE_PCT
             
-            # Add 50-period EMA trend filter
-            df['ema50'] = df['close'].ewm(span=50).mean()
-            trend_condition = df['close'].iloc[i] > df['ema50'].iloc[i]
+            # Use scalar values for regime check
+            market_regime_condition = is_favorable_regime(
+                df, i, 
+                current_close, 
+                df['close'].iloc[i], 
+                df['atr'].iloc[i] / df['atr'].rolling(100).mean().iloc[i], 
+                df['adx'].iloc[i]
+            )
             
             if all([price_condition, volume_condition, trend_condition, 
-                   momentum_condition, session_vol_condition]):
+                    momentum_condition, session_vol_condition, market_regime_condition]):
                 # Calculate risk parameters
                 current_atr = df['atr'].iloc[i]
                 entry_price = df['close'].iloc[i]
@@ -1007,12 +1058,16 @@ def backtest_breakout_strategy(df_4h, df_15m=None, symbol="UNKNOWN"):
                 max_hold_bars = max(6, min(48, max_hold_bars))  # 6-48 bars (24-192 hours)
                 
                 # THEN calculate stop loss and take profit
-                stop_loss = entry_price - (current_atr * ATR_MULTIPLIER)
+                stop_loss = calculate_stop_loss(entry_price, current_atr, volatility_factor)
                 take_profit = entry_price + (entry_price - stop_loss) * risk_reward
                 
                 # Calculate position size first
-                risk_amount = CAPITAL * RISK_PER_TRADE * min(2.0, (atr_pct/0.5))
+                risk_amount = CAPITAL * risk_percent  # Use dynamic risk_percent from calculate_risk_params
                 position_size = risk_amount / (entry_price - stop_loss)
+                
+                # Add volatility scaling
+                volatility_scale = min(2.0, max(0.5, (current_atr / df['atr'].rolling(100).mean().iloc[i])))
+                position_size *= volatility_scale
                 
                 # Then initialize trade dictionary
                 trade = {
@@ -1022,7 +1077,8 @@ def backtest_breakout_strategy(df_4h, df_15m=None, symbol="UNKNOWN"):
                     'SL': stop_loss,
                     'TP': take_profit,
                     'position_size': position_size,  # Now properly initialized
-                    'partial_closes': []
+                    'partial_closes': [],
+                    'trailing_stops': []
                 }
 
                 # Simulate trade outcome
@@ -1096,6 +1152,26 @@ def backtest_breakout_strategy(df_4h, df_15m=None, symbol="UNKNOWN"):
                     })
                     if pd.isna(trade['entry_time']) or pd.isna(trade['exit_time']):
                         continue  # Skip invalid time records
+
+                    # In trade simulation loop
+                    if current_high > entry_price * 1.03:  # When price reaches 3% above entry
+                        # Trail stop to 1% below current high
+                        new_stop = current_high * 0.99
+                        stop_loss = max(stop_loss, new_stop)
+                        
+                        # Update trade record
+                        trade['trailing_stops'].append({
+                            'time': df.index[j],
+                            'price': new_stop,
+                            'reason': '3% profit trail'
+                        })
+
+                    # Add time-based profit protection
+                    if (df.index[j] - trade['entry_time']).total_seconds() // 3600 >= 24:
+                        current_profit = ((current_high - entry_price)/entry_price)*100
+                        if current_profit > 2.0:
+                            stop_loss = max(stop_loss, entry_price * 1.01)  # Lock in 1% profit
+
                     trades.append(trade)
 
         except Exception as e:
@@ -1130,42 +1206,10 @@ def get_random_symbols(count=5):
     
     # Sort by quote volume descending
     valid_symbols.sort(key=lambda x: float(x['quoteVolume']), reverse=True)
-    
+
     # Take top 50 and random sample
     top_symbols = [t['symbol'] for t in valid_symbols[:50]]
     return random.sample(top_symbols, min(count, len(top_symbols)))
-
-def calculate_adx(df, period=14):
-    """Calculate Average Directional Index (ADX)"""
-    # True Range
-    df['tr'] = df['high'] - df['low']
-    
-    # Directional Movement
-    df['dm_plus'] = np.where(
-        (df['high'] - df['high'].shift(1)) > (df['low'].shift(1) - df['low']),
-        df['high'] - df['high'].shift(1), 
-        0
-    )
-    df['dm_minus'] = np.where(
-        (df['low'].shift(1) - df['low']) > (df['high'] - df['high'].shift(1)),
-        df['low'].shift(1) - df['low'], 
-        0
-    )
-    
-    # Smooth with Wilder's MA
-    df['tr_sma'] = df['tr'].ewm(alpha=1/period, adjust=False).mean()
-    df['dm_plus_sma'] = df['dm_plus'].ewm(alpha=1/period, adjust=False).mean()
-    df['dm_minus_sma'] = df['dm_minus'].ewm(alpha=1/period, adjust=False).mean()
-    
-    # Directional Indicators
-    df['di_plus'] = (df['dm_plus_sma'] / df['tr_sma']) * 100
-    df['di_minus'] = (df['dm_minus_sma'] / df['tr_sma']) * 100
-    
-    # ADX Calculation
-    dx = (abs(df['di_plus'] - df['di_minus']) / (df['di_plus'] + df['di_minus'])) * 100
-    df['adx'] = dx.ewm(alpha=1/period, adjust=False).mean()
-    
-    return df
 
 def is_tradable(symbol):
     ticker = client.get_ticker(symbol=symbol)
@@ -1194,3 +1238,48 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+# Modify position sizing to account for correlation
+def calculate_position_size(risk_amount, entry_price, stop_loss, correlation_matrix):
+    """Reduce position size for correlated assets"""
+    base_size = risk_amount / (entry_price - stop_loss)
+    
+    # Get average correlation with other open positions
+    avg_correlation = np.mean(list(correlation_matrix.values())) if correlation_matrix else 0
+    
+    # Size reduction formula
+    size_multiplier = 1 - (0.6 * avg_correlation)  # Reduce up to 60% for high correlation
+    return base_size * max(0.4, size_multiplier)  # Never go below 40% size
+
+def manage_trade_protection(trade, current_high, current_low, entry_price):
+    """Multi-stage profit protection"""
+    current_profit = ((current_high - entry_price)/entry_price)*100
+    
+    # Progressive trailing stops
+    if current_profit > 5.0:
+        new_stop = entry_price * 1.03  # Lock in 3% profit
+    elif current_profit > 3.0:
+        new_stop = entry_price * 1.02  # Lock in 2% profit
+    elif current_profit > 1.5:
+        new_stop = entry_price * 1.01  # Lock in 1% profit
+    else:
+        return trade['SL']  # No adjustment
+    
+    # Only move stop up, never down
+    return max(trade['SL'], new_stop)
+
+def manage_trade_exits(trade, current_price, entry_price, volatility_ratio):
+    """Dynamic exit logic based on market conditions"""
+    # Calculate time in trade using total_seconds()
+    time_in_trade = (datetime.now(timezone.utc) - trade['entry_time']).total_seconds()
+    hours_in_trade = time_in_trade // 3600  # Convert seconds to hours
+
+    # Calculate dynamic profit targets
+    base_target = trade['TP'] - entry_price
+    scaled_target = entry_price + (base_target * min(2.0, volatility_ratio))
+    
+    # Time-based adjustments using calculated hours
+    if hours_in_trade > 48:
+        return scaled_target * 0.8  # Reduce target after 2 days
+    
+    return scaled_target

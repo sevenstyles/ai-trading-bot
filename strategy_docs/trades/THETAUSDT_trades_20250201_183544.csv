@@ -1,2 +1,0 @@
-entry_time,entry_price,SL,TP,position_size,partial_closes,exit_time,exit_price,duration_hours,outcome,profit_pct,consol_range_pct,vol_ratio,atr,risk_percent
-2024-08-29 12:00:00+00:00,1.311,1.23,1.4324999999999999,24691.35802469137,[],2024-08-29 16:00:00+00:00,1.23,4.0,LOSS,-6.18,8.21576763485477,1.2153199994796264,0.05400000000000005,4.118993135011446
