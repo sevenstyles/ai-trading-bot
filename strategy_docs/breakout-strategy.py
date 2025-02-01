@@ -10,6 +10,7 @@ import random
 import json
 import logging
 from pathlib import Path
+import requests
 
 # Determine the base directory (i.e. the directory where this script is located)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -1247,7 +1248,7 @@ def backtest_strategy(symbol, timeframe='4h', days=180):
     return signals
 
 def analyze_results(signals):
-    """Robust performance analysis with error handling"""
+    """Robust performance analysis with error handling and capital simulation"""
     if not signals:
         print("No trades generated")
         return
@@ -1276,6 +1277,11 @@ def analyze_results(signals):
         print(f"Profit Factor: {profit_factor:.2f}")
         print(f"Max Drawdown: {df['drawdown'].min()*100:.2f}%")
         
+        # Simulate capital evolution from a $1000 starting capital
+        final_capital = simulate_capital(signals, initial_capital=1000)
+        print(f"\nStarting Capital: $1000")
+        print(f"Final Capital: ${final_capital:.2f}")
+        
         # Show sample trades
         print("\nSample Trades:")
         print(df[['entry_time', 'entry_price', 'stop_loss', 'take_profit', 
@@ -1284,9 +1290,53 @@ def analyze_results(signals):
     except Exception as e:
         print(f"Analysis error: {str(e)}")
 
+def simulate_capital(signals, initial_capital=1000):
+    """Simulate capital evolution given sequential trade returns.
+    
+    Assumes trades are executed sequentially.
+    Trade profit is computed as (exit_price - entry_price) / entry_price.
+    The capital is updated as: capital * (1 + profit)
+    """
+    # Sort trades by entry_time (assuming entry_time is a datetime)
+    sorted_signals = sorted(signals, key=lambda t: t['entry_time'])
+    capital = initial_capital
+    for trade in sorted_signals:
+        capital *= (1 + trade['profit'])
+    return capital
+
+def get_top_volume_pairs(limit=50):
+    """Retrieve the top volume USDT pairs from Binance 24hr ticker, excluding blacklisted symbols.
+       Uses client.get_ticker_24hr() if available; otherwise falls back to a direct REST API call.
+    """
+    try:
+        if hasattr(client, "get_ticker_24hr"):
+            tickers = client.get_ticker_24hr()
+        else:
+            url = "https://api.binance.com/api/v3/ticker/24hr"
+            response = requests.get(url)
+            tickers = response.json()
+    except Exception as e:
+        print("Failed to fetch ticker data:", e)
+        return []
+    
+    # Filter for USDT pairs and exclude blacklisted symbols
+    usdt_pairs = [
+        t for t in tickers
+        if t['symbol'].endswith("USDT") and t['symbol'] not in BLACKLIST
+    ]
+    # Sort descending by quoteVolume (converted to float)
+    usdt_pairs_sorted = sorted(usdt_pairs, key=lambda x: float(x.get('quoteVolume', 0)), reverse=True)
+    top_volume_pairs = [t['symbol'] for t in usdt_pairs_sorted[:limit]]
+    return top_volume_pairs
+
 def main():
-    """Main execution flow"""
-    symbols = ['BTCUSDT', 'ETHUSDT', 'BNBUSDT', 'XRPUSDT', 'SOLUSDT']
+    """Main execution flow with random selection from top 50 volume pairs"""
+    top_volume_pairs = get_top_volume_pairs(limit=50)
+    if not top_volume_pairs:
+        print("No top volume pairs found.")
+        return
+    symbols = random.sample(top_volume_pairs, 5)
+    print(f"Testing symbols: {', '.join(symbols)}\n")
     
     for symbol in symbols:
         print(f"\n=== TESTING {symbol} ===")
