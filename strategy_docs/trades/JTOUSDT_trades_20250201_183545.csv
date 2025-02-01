@@ -1,0 +1,2 @@
+entry_time,entry_price,SL,TP,position_size,partial_closes,exit_time,exit_price,duration_hours,outcome,profit_pct,consol_range_pct,vol_ratio,atr,risk_percent
+2025-01-26 16:00:00+00:00,3.134,2.9539999999999997,3.404,11111.1111111111,[],2025-01-26 20:00:00+00:00,2.954,4.0,LOSS,-5.74,12.600145666423893,1.614717176184943,0.1200000000000001,3.8289725590299972

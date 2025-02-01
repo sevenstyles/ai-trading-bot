@@ -48,6 +48,7 @@ VOL_MA_PERIOD = 20           # 20-bar volume average
 
 # Add time-based exit to prevent holding through reversions
 MAX_HOLD_PERIOD = 72  # 3 days (72 hours)
+MAX_HOLD_BARS = 36   # 6 days (36*4h)
 
 # Improved risk management parameters
 RISK_REWARD_RATIO = 2.0      # More achievable 2:1 ratio
@@ -55,6 +56,47 @@ ATR_PERIOD = 14        # For volatility-based stops
 
 # Improve stop loss calculation
 ATR_MULTIPLIER = 1.5        # Wider stop for 4h volatility
+
+CAPITAL = 100000  # $100,000 demo capital
+RISK_PER_TRADE = 0.01  # 1% per trade
+
+MIN_ATR_PCT = 0.5  # Minimum 0.5% daily volatility
+
+# Add near top of file
+BLACKLIST = [
+    'EURUSDT', 'GBPUSDT', 'JPYUSDT', 
+    'TUSDUSDT', 'USDPUSDT', 'BUSDUSDT',
+    'AUDUSDT', 'CNYUSDT', 'RUBUSDT'
+]
+
+TREND_STRENGTH_THRESHOLD = 0.3  # From 1.0%
+MIN_MOMENTUM_RATIO = 1.3  # From 1.5
+MIN_ADX = 25  # From 30
+MOMENTUM_WINDOW = 3
+BASE_HOLD_BARS = 18  # 3 days (18*4h)
+
+# Add volume confirmation
+VOL_CONFIRMATION_BARS = 5  # Require 5 consecutive increasing bars
+
+# Add back the EMA parameters
+EMA_SHORT = 21
+EMA_LONG = 50
+
+# Add partial profit taking and trailing stop
+TAKE_PROFIT_LEVELS = {
+    0.5: 0.33,   # Close 33% at 50% of target
+    0.75: 0.25,   # Close 25% at 75% of target
+    1.0: 0.42     # Close remaining 42% at full target
+}
+
+# Add liquidity check
+MIN_LIQUIDITY = 1000000  # $1M daily volume
+
+def calculate_risk_params(atr_pct):
+    """Dynamic risk management based on volatility"""
+    risk_reward = min(3.0, max(1.5, 2.5 - (atr_pct/0.5)))  # 1.5-3.0 range
+    risk_percent = min(0.02, max(0.005, 0.01 * (2.0 - (atr_pct/0.5))))  # 0.5%-2% risk
+    return risk_reward, risk_percent
 
 def fetch_data(symbol, start_time=None, end_time=None):
     """
@@ -765,32 +807,84 @@ def backtest_asian_fakeout(df):
         [print(f"Trade {i+1}: {t['position_size']:.2f} units (${t['position_size']*t['entry_price']:.2f})") for i,t in enumerate(trades)]
     return trades
 
-def summarize_trades(trades):
-    """Enhanced trade analysis with detailed statistics"""
+def summarize_trades(trades, symbol):
+    """Enhanced trade analysis with data cleaning"""
     if not trades:
         print("No trades to summarize")
         return
     
     df = pd.DataFrame(trades)
+    
+    # Convert and validate datetimes
+    df['entry_time'] = pd.to_datetime(df['entry_time'], errors='coerce', utc=True)
+    df['exit_time'] = pd.to_datetime(df['exit_time'], errors='coerce', utc=True)
+    
+    # Filter valid trades
+    valid_trades = (
+        df['entry_time'].notna() & 
+        df['exit_time'].notna() &
+        (df['exit_time'] > df['entry_time']) &
+        df['entry_price'].notna() &
+        df['exit_price'].notna()
+    )
+    df = df[valid_trades].copy()
+    
+    # Handle empty dataframe after cleaning
+    if df.empty:
+        print("No valid trades to summarize")
+        return
+    
+    # Clean data - check for valid timestamps
+    df = df[
+        pd.to_datetime(df['entry_time']).notna() & 
+        pd.to_datetime(df['exit_time']).notna() &
+        df['entry_price'].notna() &
+        df['exit_price'].notna()
+    ]
+    
+    # Convert to datetime
+    df['entry_time'] = pd.to_datetime(df['entry_time'])
+    df['exit_time'] = pd.to_datetime(df['exit_time'])
+    
+    # Filter valid time ranges
+    df = df[df['exit_time'] > df['entry_time']]
+    
+    # Calculate profit_pct safely
+    df['profit_pct'] = ((df['exit_price'] - df['entry_price']) / df['entry_price']) * 100
     df['profit_pct'] = df['profit_pct'].round(2)
     
+    # 1. Export to CSV
+    trades_dir = os.path.join(BASE_DIR, 'trades')
+    os.makedirs(trades_dir, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{symbol}_trades_{timestamp}.csv"
+    filepath = os.path.join(trades_dir, filename)
+    df.to_csv(filepath, index=False)
+    print(f"\nAll trades exported to: {filepath}")
+
+    # 2. Console Summary
     print("\n=== TRADE SUMMARY ===")
     print(f"Total Trades: {len(df)}")
     print(f"Time Period: {df['entry_time'].min()} to {df['entry_time'].max()}")
     
     # Win/Loss Analysis
+    df['outcome'] = np.where(
+        df['profit_pct'] > 0, 'WIN',
+        np.where(df['profit_pct'] < 0, 'LOSS', 'BREAKEVEN')
+    )
+    
+    # Profit Metrics with fallbacks
     wins = df[df['outcome'] == 'WIN']
     losses = df[df['outcome'] == 'LOSS']
-    print(f"\nWins: {len(wins)} ({len(wins)/len(df)*100:.1f}%)")
-    print(f"Losses: {len(losses)} ({len(losses)/len(df)*100:.1f}%)")
-    print(f"No Exits: {len(df) - len(wins) - len(losses)}")
     
-    # Profit Metrics
-    print("\nProfit Analysis:")
+    avg_win = wins['profit_pct'].mean() if not wins.empty else 0.0
+    avg_loss = losses['profit_pct'].mean() if not losses.empty else 0.0
+    risk_reward = abs(avg_win/avg_loss) if (avg_win > 0 and avg_loss < 0) else 0.0
+    
     print(f"Total Return: {df['profit_pct'].sum():.2f}%")
-    print(f"Average Win: {wins['profit_pct'].mean():.2f}%")
-    print(f"Average Loss: {losses['profit_pct'].mean():.2f}%")
-    print(f"Risk/Reward Ratio: {abs(wins['profit_pct'].mean()/losses['profit_pct'].mean()):.2f}:1")
+    print(f"Average Win: {avg_win:.2f}%")
+    print(f"Average Loss: {avg_loss:.2f}%")
+    print(f"Risk/Reward Ratio: {risk_reward:.1f}:1")
     
     # Duration Analysis
     print("\nDuration Analysis:")
@@ -798,9 +892,8 @@ def summarize_trades(trades):
     print(f"Longest Trade: {df['duration_hours'].max():.1f} hours")
     print(f"Shortest Trade: {df['duration_hours'].min():.1f} hours")
     
-    # Show sample trades
+    # Sample Trades
     print("\nSample Trades:")
-    # Add risk/reward ratio calculation
     df['risk_reward'] = abs((df['TP'] - df['entry_price']) / (df['entry_price'] - df['SL']))
     print(df[['entry_time', 'entry_price', 'SL', 'TP', 'exit_price', 
             'profit_pct', 'risk_reward', 'outcome', 'duration_hours']].head(5))
@@ -808,6 +901,13 @@ def summarize_trades(trades):
 def backtest_breakout_strategy(df_4h, df_15m=None, symbol="UNKNOWN"):
     trades = []
     df = df_4h.copy()
+    
+    # 1. Clean data before processing
+    df = df.dropna(subset=['open', 'high', 'low', 'close'])
+    df = df[(df['high'] > df['low']) & (df['close'] > 0)]
+    
+    # 2. Add debug logging
+    print(f"\nPreparing to process {len(df)} valid candles for {symbol}")
     
     # Calculate adaptive volume threshold
     df['vol_ma'] = df['volume'].rolling(VOL_MA_PERIOD).mean().bfill()
@@ -821,11 +921,35 @@ def backtest_breakout_strategy(df_4h, df_15m=None, symbol="UNKNOWN"):
     # Trend filter using EMA
     df['ema_50'] = df['close'].ewm(span=50, adjust=False).mean()
     
+    # Add ADX calculation after EMA
+    df = calculate_adx(df)
+    
+    # Enhanced EMA configuration
+    df['ema_21'] = df['close'].ewm(span=EMA_SHORT, adjust=False).mean()
+    
+    # Volatility-based ATR
+    df['atr'] = df['high'] - df['low']
+    
+    # Add momentum confirmation
+    def calculate_macd(df, fast=12, slow=26, signal=9):
+        df['macd'] = df['close'].ewm(span=fast).mean() - df['close'].ewm(span=slow).mean()
+        df['signal'] = df['macd'].ewm(span=signal).mean()
+        return df
+
     for i in range(MIN_CONSOL_BARS+1, len(df)):
         try:
-            # Current market conditions
+            # 3. Validate current candle data
+            if any(pd.isnull(df.iloc[i][['high', 'low', 'close']])):
+                continue
+                
             current_high = df['high'].iloc[i]
+            current_low = df['low'].iloc[i]
             current_close = df['close'].iloc[i]
+            
+            # 4. Validate numeric values
+            if not all(isinstance(v, (int, float)) for v in [current_high, current_low, current_close]):
+                continue
+                
             vol_ratio = df['vol_ratio'].iloc[i]
             consol_high = df['consol_high'].iloc[i]
             ema = df['ema_50'].iloc[i]
@@ -833,105 +957,240 @@ def backtest_breakout_strategy(df_4h, df_15m=None, symbol="UNKNOWN"):
             # Entry conditions
             price_condition = current_high > consol_high * (1 + BUFFER_PCT)
             volume_condition = vol_ratio >= VOL_SPIKE_MULTIPLIER
-            trend_condition = current_close > ema  # Bullish filter
             
-            if price_condition and volume_condition and trend_condition:
+            # 1. Enhanced Trend Filter
+            ema_short = df['ema_21'].iloc[i]
+            ema_long = df['ema_50'].iloc[i]
+            trend_strength = ((current_close - ema_long) / ema_long) * 100
+            adx = df['adx'].iloc[i]
+            
+            trend_condition = all([
+                current_close > ema_long,
+                ema_short > ema_long,
+                trend_strength > 1.0,
+                adx > MIN_ADX
+            ])
+            
+            # 2. Momentum Filter with Larger Window
+            if i >= MOMENTUM_WINDOW*2:
+                prev_close = df['close'].iloc[i-MOMENTUM_WINDOW]
+                prev_prev_close = df['close'].iloc[i-(MOMENTUM_WINDOW*2)]
+                prev_momentum = abs(prev_close - prev_prev_close)
+                current_momentum = abs(current_close - prev_close)
+                momentum_condition = current_momentum > prev_momentum * MIN_MOMENTUM_RATIO
+            else:
+                momentum_condition = False
+            
+            # 3. Session Volatility Filter
+            current_atr = df['atr'].iloc[i]
+            session_vol_condition = current_atr > (df['atr'].rolling(50).mean().iloc[i] * 0.7)
+            
+            # In entry conditions
+            df = calculate_macd(df)
+            momentum_condition = df['macd'].iloc[i] > df['signal'].iloc[i]
+            
+            # Add 50-period EMA trend filter
+            df['ema50'] = df['close'].ewm(span=50).mean()
+            trend_condition = df['close'].iloc[i] > df['ema50'].iloc[i]
+            
+            if all([price_condition, volume_condition, trend_condition, 
+                   momentum_condition, session_vol_condition]):
                 # Calculate risk parameters
-                atr = df['high'].iloc[i] - df['low'].iloc[i]
-                entry_price = consol_high * (1 + BUFFER_PCT)
-                stop_loss = entry_price - (atr * 1.5)
-                take_profit = entry_price + (entry_price - stop_loss) * 2
+                current_atr = df['atr'].iloc[i]
+                entry_price = df['close'].iloc[i]
+                atr_pct = (current_atr / entry_price) * 100
+                risk_reward, risk_percent = calculate_risk_params(atr_pct)
                 
-                # Track trade outcome
+                # Calculate volatility-based hold time FIRST
+                volatility_factor = max(0.75, min(2.5, (atr_pct / 0.4)))
+                max_hold_bars = int(BASE_HOLD_BARS * (2.2 - volatility_factor))
+                max_hold_bars = max(6, min(48, max_hold_bars))  # 6-48 bars (24-192 hours)
+                
+                # THEN calculate stop loss and take profit
+                stop_loss = entry_price - (current_atr * ATR_MULTIPLIER)
+                take_profit = entry_price + (entry_price - stop_loss) * risk_reward
+                
+                # Calculate position size first
+                risk_amount = CAPITAL * RISK_PER_TRADE * min(2.0, (atr_pct/0.5))
+                position_size = risk_amount / (entry_price - stop_loss)
+                
+                # Then initialize trade dictionary
                 trade = {
                     'entry_time': df.index[i],
+                    'exit_time': None,  # Initialize as None
                     'entry_price': entry_price,
                     'SL': stop_loss,
                     'TP': take_profit,
-                    'exit_time': None,
-                    'exit_price': None,
-                    'duration_hours': 0,
-                    'outcome': 'OPEN',
-                    'profit_pct': 0,
-                    'consol_range_pct': ((consol_high - df['consol_low'].iloc[i])/df['consol_low'].iloc[i] * 100),
-                    'vol_ratio': vol_ratio,
-                    'atr': atr
+                    'position_size': position_size,  # Now properly initialized
+                    'partial_closes': []
                 }
-                
+
                 # Simulate trade outcome
                 for j in range(i+1, len(df)):
                     current_low = df['low'].iloc[j]
                     current_high = df['high'].iloc[j]
                     
-                    # Check for stop loss hit
+                    # SL check first
                     if current_low <= stop_loss:
+                        profit_pct = ((stop_loss - entry_price)/entry_price) * 100
+                    elif (j == len(df)-1) or ((df.index[j] - df.index[i]).total_seconds()/3600 >= MAX_HOLD_PERIOD):
+                        profit_pct = ((df['close'].iloc[j] - entry_price)/entry_price) * 100
+                    else:
+                        continue  # Trade still open
+                    
+                    # TP check and partial closing logic
+                    for level, close_pct in TAKE_PROFIT_LEVELS.items():
+                        if current_high >= entry_price + (take_profit - entry_price)*level:
+                            # Close portion and trail stop
+                            close_amount = position_size * close_pct
+                            position_size -= close_amount
+                            stop_loss = max(stop_loss, current_low * 0.999)
+                            
+                            # Update trade record
+                            trade['partial_closes'].append({  # Now safe to append
+                                'time': df.index[j],
+                                'price': entry_price + (take_profit - entry_price)*level,
+                                'amount': close_amount,
+                                'pct': close_pct
+                            })
+                            break
+                    
+                    # Modified time exit check
+                    if (j - i) >= max_hold_bars:
                         trade.update({
                             'exit_time': df.index[j],
-                            'exit_price': stop_loss,
-                            'outcome': 'LOSS',
-                            'duration_hours': (df.index[j] - df.index[i]).total_seconds()/3600
+                            'exit_price': df['close'].iloc[j],
+                            'duration_hours': (df.index[j] - df.index[i]).total_seconds()/3600,
+                            'outcome': 'TIME EXIT',
+                            'profit_pct': profit_pct,
+                            'consol_range_pct': ((consol_high - df['consol_low'].iloc[i])/df['consol_low'].iloc[i] * 100),
+                            'vol_ratio': vol_ratio,
+                            'atr': current_atr,
+                            'risk_percent': atr_pct,
                         })
                         break
-                        
-                    # Check for take profit hit
-                    if current_high >= take_profit:
-                        trade.update({
-                            'exit_time': df.index[j],
-                            'exit_price': take_profit,
-                            'outcome': 'WIN',
-                            'duration_hours': (df.index[j] - df.index[i]).total_seconds()/3600
-                        })
-                        break
-                else:
-                    # No exit triggered - close at final price
+                
+                # Handle trades that reach end of data without exit
+                if trade['exit_time'] is None:
+                    last_bar = min(i + max_hold_bars + 1, len(df)-1)
                     trade.update({
-                        'exit_time': df.index[-1],
-                        'exit_price': df['close'].iloc[-1],
+                        'exit_time': df.index[last_bar],
+                        'exit_price': df['close'].iloc[last_bar],
+                        'duration_hours': (df.index[last_bar] - df.index[i]).total_seconds()/3600,
                         'outcome': 'NO EXIT',
-                        'duration_hours': (df.index[-1] - df.index[i]).total_seconds()/3600
+                        'profit_pct': profit_pct,
+                        'consol_range_pct': ((consol_high - df['consol_low'].iloc[i])/df['consol_low'].iloc[i] * 100),
+                        'vol_ratio': vol_ratio,
+                        'atr': current_atr,
+                        'risk_percent': atr_pct,
                     })
                 
-                # Calculate final PNL
-                trade['profit_pct'] = ((trade['exit_price'] - trade['entry_price']) / trade['entry_price']) * 100
-                trades.append(trade)
+                if trade['exit_time'] is not None:  # Only append if trade was created
+                    # Validate and clean trade data
+                    trade.update({
+                        'entry_time': trade['entry_time'],
+                        'exit_time': trade['exit_time'],
+                        'profit_pct': round(float(trade['profit_pct']), 2),
+                        'entry_price': round(float(trade['entry_price']), 6),
+                        'exit_price': round(float(trade['exit_price']), 6)
+                    })
+                    if pd.isna(trade['entry_time']) or pd.isna(trade['exit_time']):
+                        continue  # Skip invalid time records
+                    trades.append(trade)
 
         except Exception as e:
             print(f"Error processing candle {i}: {str(e)}")
+            logging.error(f"Error processing {symbol} candle {i}: {str(e)}")
+            continue
     
     return trades
 
+def get_avg_volume(symbol, days=30):
+    """Get average daily volume over last 30 days"""
+    end_time = datetime.now(timezone.utc)
+    start_time = end_time - timedelta(days=days)
+    klines = client.get_historical_klines(symbol, '1d', 
+                                         start_time.strftime('%d %b %Y'), 
+                                         end_time.strftime('%d %b %Y'))
+    volumes = [float(k[5]) for k in klines]
+    return np.mean(volumes) if volumes else 0
+
+def get_random_symbols(count=5):
+    """Get random symbols from top 50 by volume"""
+    # Get all tickers with USDT pairs
+    all_tickers = client.get_ticker()
+    usdt_tickers = [t for t in all_tickers if t['symbol'].endswith('USDT')]  # Strict USDT pair check
+    
+    # Filter valid symbols
+    valid_symbols = [
+        t for t in usdt_tickers 
+        if float(t['lastPrice']) > 1.0 and
+        t['symbol'] not in BLACKLIST  # Use only the blacklist
+    ]
+    
+    # Sort by quote volume descending
+    valid_symbols.sort(key=lambda x: float(x['quoteVolume']), reverse=True)
+    
+    # Take top 50 and random sample
+    top_symbols = [t['symbol'] for t in valid_symbols[:50]]
+    return random.sample(top_symbols, min(count, len(top_symbols)))
+
+def calculate_adx(df, period=14):
+    """Calculate Average Directional Index (ADX)"""
+    # True Range
+    df['tr'] = df['high'] - df['low']
+    
+    # Directional Movement
+    df['dm_plus'] = np.where(
+        (df['high'] - df['high'].shift(1)) > (df['low'].shift(1) - df['low']),
+        df['high'] - df['high'].shift(1), 
+        0
+    )
+    df['dm_minus'] = np.where(
+        (df['low'].shift(1) - df['low']) > (df['high'] - df['high'].shift(1)),
+        df['low'].shift(1) - df['low'], 
+        0
+    )
+    
+    # Smooth with Wilder's MA
+    df['tr_sma'] = df['tr'].ewm(alpha=1/period, adjust=False).mean()
+    df['dm_plus_sma'] = df['dm_plus'].ewm(alpha=1/period, adjust=False).mean()
+    df['dm_minus_sma'] = df['dm_minus'].ewm(alpha=1/period, adjust=False).mean()
+    
+    # Directional Indicators
+    df['di_plus'] = (df['dm_plus_sma'] / df['tr_sma']) * 100
+    df['di_minus'] = (df['dm_minus_sma'] / df['tr_sma']) * 100
+    
+    # ADX Calculation
+    dx = (abs(df['di_plus'] - df['di_minus']) / (df['di_plus'] + df['di_minus'])) * 100
+    df['adx'] = dx.ewm(alpha=1/period, adjust=False).mean()
+    
+    return df
+
+def is_tradable(symbol):
+    ticker = client.get_ticker(symbol=symbol)
+    return float(ticker['quoteVolume']) > MIN_LIQUIDITY
+
 def main():
-    """Enhanced backtester with complete reporting"""
-    SYMBOLS = ['BTCUSDT']
+    """Simplified backtester with faster execution"""
+    SYMBOLS = get_random_symbols(5)
+    print(f"Testing symbols: {', '.join(SYMBOLS)}\n")
     
     for symbol in SYMBOLS:
-        print(f"\n=== BACKTESTING {symbol} ===")
+        print(f"\n=== TESTING {symbol} ===")
         try:
-            # Get fresh market data directly from Binance
             data = fetch_data(symbol)
             df_4h = data['4h'].copy()
-            
-            # Run backtest
             trades = backtest_breakout_strategy(df_4h, symbol=symbol)
             
-            # Generate report
             if trades:
-                print(f"\nFirst Trade:")
-                print(f"Entry: {trades[0]['entry_price']:.2f} at {trades[0]['entry_time']}")
-                print(f"Exit: {trades[0]['exit_price']:.2f} ({trades[0]['profit_pct']:.2f}%) after {trades[0]['duration_hours']:.1f}h")
-                
-                print(f"\nLast Trade:")
-                print(f"Entry: {trades[-1]['entry_price']:.2f} at {trades[-1]['entry_time']}")
-                print(f"Exit: {trades[-1]['exit_price']:.2f} ({trades[-1]['profit_pct']:.2f}%) after {trades[-1]['duration_hours']:.1f}h")
-                
-                summarize_trades(trades)
+                summarize_trades(trades, symbol)
             else:
                 print("No trades generated")
                 
         except Exception as e:
-            print(f"Error: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            print(f"Error with {symbol}: {str(e)}")
+            continue
 
 if __name__ == '__main__':
     main()
