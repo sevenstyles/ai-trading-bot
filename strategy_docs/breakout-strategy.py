@@ -1024,49 +1024,6 @@ def is_tradable(symbol):
     ticker = client.get_ticker(symbol=symbol)
     return float(ticker['quoteVolume']) > MIN_LIQUIDITY
 
-def backtest_breakout_strategy(df_4h, symbol="UNKNOWN"):
-    """Complete strategy implementation with error handling"""
-    try:
-        df = df_4h.copy()
-        
-        # 1. Calculate Indicators
-        df = calculate_emas(df)
-        df = calculate_macd(df)
-        df = calculate_adx(df)
-        df = calculate_rsi(df)
-        if df is None:
-            return []
-            
-        df = identify_consolidation(df)
-        
-        # 2. Apply Filters
-        if not passes_filters(df, symbol):
-            return []
-            
-        # 3. Generate signals
-        trades = []
-        for i in range(20, len(df)):  # Ensure enough history
-            if breakout_signal(df, i):
-                entry_price = df['close'].iloc[i]
-                trades.append({
-                    'symbol': symbol,
-                    'entry_time': df.index[i],
-                    'entry_price': entry_price,
-                    'SL': entry_price * 0.99,   # 1% risk below entry for long trades
-                    'TP': entry_price * 1.06    # Updated: 6% target above entry
-                })
-        return trades
-        
-    except Exception as e:
-        print(f"Strategy error for {symbol}: {str(e)}")
-        return []
-
-def calculate_emas(df):
-    """Calculate necessary EMAs"""
-    df['ema200'] = df['close'].ewm(span=200, adjust=False).mean()
-    df['ema50'] = df['close'].ewm(span=50, adjust=False).mean()
-    return df
-
 def calculate_market_structure(df):
     """Identify key market structure elements"""
     df['higher_high'] = df['high'] > df['high'].shift()
@@ -1075,41 +1032,34 @@ def calculate_market_structure(df):
     df['range'] = df['high'] - df['low']  # Compute bar range for signal analysis
     return df
 
-def detect_accumulation(df):
-    """Identify accumulation patterns using volume and price contraction"""
-    df['range'] = df['high'] - df['low']
-    df['volatility'] = df['range'].rolling(14).std()
-    df['volume_z'] = (df['volume'] - df['volume'].rolling(20).mean()) / df['volume'].rolling(20).std()
-    
-    cond_accumulation = (
-        (df['volatility'] < df['volatility'].quantile(0.3)) &
-        (df['volume_z'] > 1.5) &
-        (df['close'] > df['close'].rolling(20).mean())
-    )
-    return cond_accumulation
-
 def calculate_trend_strength(df):
     """Quantify trend strength using smoothed price derivatives"""
     df['momentum'] = df['close'].pct_change(3).rolling(14).mean()
-    df['trend_power'] = np.log(df['high']/df['low']).rolling(14).sum()
+    df['trend_power'] = np.log(df['high'] / df['low']).rolling(14).sum()
+    return df
+
+def calculate_emas(df):
+    """Calculate necessary EMAs"""
+    df['ema200'] = df['close'].ewm(span=200, adjust=False).mean()
+    df['ema50'] = df['close'].ewm(span=50, adjust=False).mean()
     return df
 
 def generate_signal(df, i):
     """Core trading logic based on market structure breaks"""
     if i < 40:
         return False
-    
+
     # Market structure conditions with relaxed volume confirmation
     structure_break = (
         df['higher_high'].iloc[i] and 
         (df['volume'].iloc[i] > df['volume'].iloc[i-1] * 1.85)
     )
-    
+
     # Volatility expansion (relaxed multiplier)
     volatility_expansion = (
         df['range'].iloc[i] > df['range'].rolling(14).mean().iloc[i] * 1.4
     )
-    
+
     # Smart money confirmation: require a bullish confirmation candle with a sizable body (>60% of the range)
     smart_money_confirm = (
         (df['low'].iloc[i] > df['low'].iloc[i-1]) and
@@ -1123,10 +1073,10 @@ def generate_signal(df, i):
         (df['momentum'].iloc[i] > 0) and
         (df['trend_power'].iloc[i] > df['trend_power'].quantile(0.5))
     )
-    
+
     # ADX filter: require ADX greater than 30 for trending conditions
     adx_condition = (df['adx'].iloc[i] > 28)
-    
+
     # RSI filter: require RSI above 50 and below 75 to confirm bullish momentum
     rsi_condition = (df['rsi'].iloc[i] > 50) and (df['rsi'].iloc[i] < 78)
 
@@ -1147,9 +1097,16 @@ def generate_signal(df, i):
                 adx_condition, rsi_condition, trend_confirm, ema_slope, bullish_trend, ema_crossover, macd_confirm])
 
 def backtest_strategy(symbol, timeframe='4h', days=180):
-    """Complete backtesting engine with proper exit handling"""
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=days)
+    """Complete backtesting engine with proper exit handling using a random backtest window."""
+    # Old code:
+    # end_date = datetime.now()
+    # start_date = end_date - timedelta(days=days)
+    
+    # New random window logic:
+    max_historical_days = 1000  # Maximum days in the past from which to start the backtest (adjust as needed)
+    random_offset = random.randint(days, max_historical_days)  # Ensure the random offset is at least 'days'
+    start_date = datetime.now() - timedelta(days=random_offset)
+    end_date = start_date + timedelta(days=days)
     
     # Fetch and clean data
     klines = client.get_historical_klines(
