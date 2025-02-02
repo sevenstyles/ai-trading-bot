@@ -1,0 +1,2 @@
+entry_time,entry_price,SL,TP,exit_price,exit_time,profit,status,drawdown,profit_pct
+2024-07-27 04:00:00+00:00,7.25,7.21375,7.3950000000000005,7.21375,2024-07-27 16:00:00+00:00,-0.004999999999999985,stopped,-0.028965517241379305,-0.5

@@ -1,0 +1,2 @@
+entry_time,entry_price,SL,TP,exit_price,exit_time,profit,status,drawdown,profit_pct
+2024-02-26 16:00:00+00:00,3.641,3.622795,3.71382,3.622795,2024-02-27 04:00:00+00:00,-0.005000000000000007,stopped,-0.055204614117000846,-0.5
