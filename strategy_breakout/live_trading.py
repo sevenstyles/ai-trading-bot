@@ -1,4 +1,5 @@
 import time
+import os
 # NOTE: Live trading now mimics backtester signal logic using 4h data. However, live orders are executed on Binance Futures Testnet as real market orders and do NOT apply the fee (FUTURES_FEE) and slippage (SLIPPAGE_RATE) adjustments used in the backtester simulation.
 import pandas as pd
 from datetime import datetime
@@ -18,14 +19,27 @@ from indicators import (
     generate_short_signal
 )
 
+DEBUG_MODE = True
+DEBUG_LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'debug_live_trading.log')
+
+def log_debug(message):
+    if DEBUG_MODE:
+        from datetime import datetime
+        with open(DEBUG_LOG_FILE, 'a') as f:
+            f.write(f"{datetime.now()} - {message}\n")
+
 # Global dictionary to hold candle data for each symbol
 candles_dict = {}
 
-# Set interval for live data (using same timeframe as backtesting, e.g., 4h candles)
-interval = "4h"
+# Add global active trades dictionary at the top
+active_trades = {}  # key: symbol, value: trade dict
 
-# Get the top 50 coins by volume using our data_fetch function
-symbols = get_top_volume_pairs(limit=50)
+# Set interval for live data (now using 5 minute candles)
+interval = "5m"
+
+# Get the top 100 coins by volume using our data_fetch function
+# Pair selection criteria: Pairs are selected via get_top_volume_pairs(limit=100) which returns the top-volume USDT pairs (excluding blacklisted pairs) based on 24hr ticker data. This selection is done once at startup and is not rechecked for each candlestick update.
+symbols = get_top_volume_pairs(limit=100)
 if not symbols:
     # Fallback to a default symbol if none found
     symbols = ["BTCUSDT"]
@@ -84,8 +98,54 @@ def process_candle(msg):
         
         print(f"Candle for {coin_symbol} closed at {candle_time}: close = {close}")
         
-        # Check trade signals for this symbol
+        # Call check_for_trade for the symbol
         check_for_trade(coin_symbol)
+
+def update_active_trade(symbol, df):
+    trade = active_trades.get(symbol)
+    if not trade:
+        return
+    trailing_stop_pct = 0.0025
+    latest_candle = df.iloc[-1]
+    if trade['direction'] == 'long':
+        # Initialize new_high if not set
+        if 'new_high' not in trade:
+            trade['new_high'] = trade['entry_price']
+        # Update new high if current candle's high is greater
+        if latest_candle['high'] > trade['new_high']:
+            trade['new_high'] = latest_candle['high']
+            potential_stop = trade['new_high'] * (1 - trailing_stop_pct)
+            if potential_stop > trade['stop_loss']:
+                trade['stop_loss'] = potential_stop
+                print(f"Updated trailing stop for {symbol} long to {trade['stop_loss']}")
+        # Check if current candle's low breaches stop loss
+        if latest_candle['low'] <= trade['stop_loss']:
+            print(f"Long trade stop hit for {symbol}")
+            close_trade(symbol, trade, trade['stop_loss'], df.index[-1])
+    elif trade['direction'] == 'short':
+        if 'new_low' not in trade:
+            trade['new_low'] = trade['entry_price']
+        if latest_candle['low'] < trade['new_low']:
+            trade['new_low'] = latest_candle['low']
+            potential_stop = trade['new_low'] * (1 + trailing_stop_pct)
+            if potential_stop < trade['stop_loss']:
+                trade['stop_loss'] = potential_stop
+                print(f"Updated trailing stop for {symbol} short to {trade['stop_loss']}")
+        if latest_candle['high'] >= trade['stop_loss']:
+            print(f"Short trade stop hit for {symbol}")
+            close_trade(symbol, trade, trade['stop_loss'], df.index[-1])
+
+def close_trade(symbol, trade, exit_price, exit_time):
+    side = "SELL" if trade['direction'] == 'long' else "BUY"
+    print(f"Closing {trade['direction']} trade for {symbol} at {exit_price} on {exit_time} by placing {side} order")
+    # For now, we simulate closing trade. In real implementation, you would call client.futures_create_order() to exit order.
+    trade['exit_price'] = exit_price
+    trade['exit_time'] = exit_time
+    trade['status'] = 'closed'
+    print(f"Trade closed for {symbol}: {trade}")
+    # Remove trade from active_trades
+    if symbol in active_trades:
+        del active_trades[symbol]
 
 def check_for_trade(symbol):
     """
@@ -95,6 +155,11 @@ def check_for_trade(symbol):
         return
     df = candles_dict[symbol].copy().sort_index()
     
+    # If there's an active trade, update its trailing stop
+    if symbol in active_trades:
+        update_active_trade(symbol, df)
+        return
+
     # Calculate indicators using existing functions
     df = calculate_market_structure(df)
     df = calculate_trend_strength(df)
@@ -102,17 +167,46 @@ def check_for_trade(symbol):
     df = calculate_macd(df)
     df = calculate_adx(df)
     df = calculate_rsi(df)
+    if DEBUG_MODE:
+        ds = f"DEBUG: For {symbol} - Latest Candle Time: {df.index[-1]}, Open: {df['open'].iloc[-1]}, High: {df['high'].iloc[-1]}, Low: {df['low'].iloc[-1]}, Close: {df['close'].iloc[-1]}"
+        print(ds)
+        log_debug(ds)
     
     latest_idx = len(df) - 1
+    long_signal = generate_signal(df, latest_idx)
+    short_signal = generate_short_signal(df, latest_idx)
+    if DEBUG_MODE:
+        ds2 = f"DEBUG: For {symbol} at candle index {latest_idx} - long_signal: {long_signal}, short_signal: {short_signal}"
+        print(ds2)
+        log_debug(ds2)
     
     # Check for long signal
-    if generate_signal(df, latest_idx):
+    if long_signal:
         print(f"Long signal detected for {symbol}!")
-        place_order(symbol, "BUY", df["close"].iloc[-1])
+        price = df["close"].iloc[-1]
+        place_order(symbol, "BUY", price)
+        # Track the active trade
+        active_trades[symbol] = {
+            'entry_time': df.index[-1],
+            'entry_price': price,
+            'stop_loss': price * 0.995,
+            'take_profit': price * 1.06,  # using LONG_TAKE_PROFIT_MULTIPLIER from backtesting, adjust as needed
+            'direction': 'long',
+            'status': 'open'
+        }
     # Check for short signal
-    elif generate_short_signal(df, latest_idx):
+    elif short_signal:
         print(f"Short signal detected for {symbol}!")
-        place_order(symbol, "SELL", df["close"].iloc[-1])
+        price = df["close"].iloc[-1]
+        place_order(symbol, "SELL", price)
+        active_trades[symbol] = {
+            'entry_time': df.index[-1],
+            'entry_price': price,
+            'stop_loss': price * 1.005,
+            'take_profit': price * 0.94,  # using SHORT_TAKE_PROFIT_MULTIPLIER, adjust as needed
+            'direction': 'short',
+            'status': 'open'
+        }
     else:
         print(f"No trade signal for {symbol}.")
 

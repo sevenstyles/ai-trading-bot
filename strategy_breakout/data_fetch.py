@@ -65,8 +65,7 @@ def is_tradable(symbol):
     ticker = client.get_ticker(symbol=symbol)
     return float(ticker['quoteVolume']) > MIN_LIQUIDITY
 
-def get_top_volume_pairs(limit=50):
-    """Retrieve the top-volume USDT pairs from Binance 24hr ticker."""
+def get_top_volume_pairs(limit=100):
     try:
         if hasattr(client, "get_ticker_24hr"):
             tickers = client.get_ticker_24hr()

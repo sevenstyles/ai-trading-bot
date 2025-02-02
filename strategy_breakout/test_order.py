@@ -7,9 +7,9 @@ client = Client(BINANCE_API_KEY, BINANCE_API_SECRET, testnet=True)
 
 def test_order():
     # Set the trading pair and order parameters
-    symbol = "BTCUSDT"  # You can change this to any desired symbol
+    symbol = "ETHUSDT"  # You can change this to any desired symbol
     side = "BUY"        # "BUY" for a long order; change to "SELL" to test a short order
-    quantity = 0.001      # Example fixed quantity; adjust as needed
+    quantity = 0.01      # Example fixed quantity; adjust as needed
     try:
         order = client.futures_create_order(
             symbol=symbol,

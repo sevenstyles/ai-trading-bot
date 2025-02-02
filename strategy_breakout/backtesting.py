@@ -5,12 +5,10 @@ from datetime import datetime, timedelta
 import random
 from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, LONG_TAKE_PROFIT_MULTIPLIER, SHORT_TAKE_PROFIT_MULTIPLIER, FUTURES_FEE, SLIPPAGE_RATE
 
-def backtest_strategy(symbol, timeframe='1h', days=180, client=None):
+def backtest_strategy(symbol, timeframe='1h', days=7, client=None):
     from datetime import datetime, timedelta
-    max_historical_days = 1000
-    random_offset = random.randint(days, max_historical_days)
-    start_date = datetime.now() - timedelta(days=random_offset)
-    end_date = start_date + timedelta(days=days)
+    start_date = datetime.now() - timedelta(days=days)
+    end_date = datetime.now()
     klines = client.get_historical_klines(
         symbol, timeframe,
         start_date.strftime("%d %b %Y"),
@@ -45,7 +43,8 @@ def backtest_strategy(symbol, timeframe='1h', days=180, client=None):
                 'profit': 0,
                 'status': 'open',
                 'drawdown': 0,
-                'direction': 'long'
+                'direction': 'long',
+                'symbol': symbol
             }
             signals.append(entry)
         elif generate_short_signal(df, i):
@@ -59,7 +58,8 @@ def backtest_strategy(symbol, timeframe='1h', days=180, client=None):
                 'profit': 0,
                 'status': 'open',
                 'drawdown': 0,
-                'direction': 'short'
+                'direction': 'short',
+                'symbol': symbol
             }
             signals.append(entry)
     trailing_stop_pct = 0.0025
@@ -155,7 +155,7 @@ def backtest_strategy(symbol, timeframe='1h', days=180, client=None):
             trade['drawdown'] = (trade['entry_price'] - highest_point) / trade['entry_price']
     return signals
 
-def simulate_capital(signals, initial_capital=10000):
+def simulate_capital(signals, initial_capital=1000):
     sorted_signals = sorted(signals, key=lambda t: t['entry_time'])
     capital = initial_capital
     for trade in sorted_signals:
@@ -207,7 +207,7 @@ def analyze_results(signals, symbol):
     except Exception as e:
         print(f"Analysis error: {str(e)}")
 
-def analyze_aggregated_results(all_signals, initial_capital=10000):
+def analyze_aggregated_results(all_signals, initial_capital=1000):
     if not all_signals:
         print("No aggregated trades generated")
         return
@@ -238,6 +238,24 @@ def analyze_aggregated_results(all_signals, initial_capital=10000):
         print(f"Max Drawdown: {max_drawdown * 100:.2f}%")
         print(f"\nStarting Capital: ${initial_capital}")
         print(f"Final Capital: ${final_capital:.2f}")
+        wins_count = len(df[df['outcome'] == 'WIN'])
+        losses_count = len(df[df['outcome'] == 'LOSS'])
+        print(f"Total Wins: {wins_count}")
+        print(f"Total Losses: {losses_count}")
+        
+        best_trade = df.loc[df['profit_pct'].idxmax()]
+        print(f"Best Trade: {best_trade['symbol']} trade on {best_trade['entry_time']} with profit {best_trade['profit_pct']:.2f}% (entry: {best_trade['entry_price']}, exit: {best_trade['exit_price']})")
+        
+        pair_profit = df.groupby('symbol')['profit'].sum()
+        best_pair = pair_profit.idxmax()
+        best_pair_profit = pair_profit.max() * 100
+        print(f"Best Performing Pair: {best_pair} with aggregated profit of {best_pair_profit:.2f}%")
+        
+        long_count = len(df[df['direction'] == 'long'])
+        short_count = len(df[df['direction'] == 'short'])
+        print(f"Total Long Trades: {long_count}")
+        print(f"Total Short Trades: {short_count}")
+        
         print("\nSample Aggregated Trades:")
         print(df[['entry_time', 'entry_price', 'SL', 'TP', 'exit_price', 'profit_pct', 'outcome']].head(5))
     except Exception as e:
