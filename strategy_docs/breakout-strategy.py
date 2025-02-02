@@ -398,6 +398,9 @@ def run_screener():
                 'Timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'Status': 'NO TRADE',
                 'Direction': 'NO TRADE',
+                'Entry': None,
+                'SL': None,
+                'TP1': None,
                 'Analysis': []
             }
 
@@ -1242,6 +1245,25 @@ def backtest_strategy(symbol, timeframe='4h', days=180):
     
     return signals
 
+def compute_risk_reward(row):
+    """
+    Compute the risk/reward ratio for a trade.
+    For a long trade, risk = entry_price - SL, reward = TP - entry_price.
+    For a short trade, risk = SL - entry_price, reward = entry_price - TP.
+    """
+    entry = row.get("entry_price", np.nan)
+    SL = row.get("SL", np.nan)
+    TP = row.get("TP", np.nan)
+    if np.isnan(entry) or np.isnan(SL) or np.isnan(TP):
+        return np.nan
+    if entry > SL:  # Long trade: SL is below entry
+        risk = entry - SL
+        reward = TP - entry
+    else:  # Short trade: SL is above entry
+        risk = SL - entry
+        reward = entry - TP
+    return reward / risk if risk != 0 else np.nan
+
 def analyze_results(signals):
     """Robust performance analysis with error handling and capital simulation"""
     if not signals:
@@ -1249,12 +1271,20 @@ def analyze_results(signals):
         return
 
     try:
-        # Convert to DataFrame for easier analysis
         df = pd.DataFrame(signals)
         df['profit_pct'] = df['profit'] * 100
+        # Rename keys for consistency if trades use stop_loss and take_profit instead of SL and TP
+        if 'stop_loss' in df.columns:
+            df.rename(columns={'stop_loss': 'SL'}, inplace=True)
+        if 'take_profit' in df.columns:
+            df.rename(columns={'take_profit': 'TP'}, inplace=True)
+        # Compute outcome column if it doesn't already exist
+        if 'outcome' not in df.columns:
+            df['outcome'] = np.where(df['profit'] > 0, 'WIN', np.where(df['profit'] < 0, 'LOSS', 'BREAKEVEN'))
 
-        # Calculate outcomes with properly closed np.where() calls
-        df['outcome'] = np.where(df['profit'] > 0, 'WIN', np.where(df['profit'] < 0, 'LOSS', 'BREAKEVEN'))
+        # Compute risk_reward for each trade
+        df['risk_reward'] = df.apply(compute_risk_reward, axis=1)
+
         # Basic metrics
         total_trades = len(df)
         win_rate = len(df[df['outcome'] == 'WIN']) / total_trades
@@ -1266,26 +1296,22 @@ def analyze_results(signals):
             avg_loss = 0.0
         profit_factor = abs(avg_win / avg_loss) if avg_loss != 0 else np.inf
 
-        print(f"Total Trades: {total_trades}")
-        print(f"Win Rate: {win_rate:.1%}")
-        print(f"Avg Win: {avg_win:.2f}% | Avg Loss: {avg_loss:.2f}%")
-        print(f"Profit Factor: {profit_factor:.2f}")
-        print(f"Max Drawdown: {df['drawdown'].min() * 100:.2f}%")
-
-        # Simulate capital evolution from a $1000 starting capital
-        final_capital = simulate_capital(signals, initial_capital=1000)
-        print(f"\nStarting Capital: $1000")
+        print(f"Starting Capital: $5000")
+        final_capital = simulate_capital(signals, initial_capital=5000)
         print(f"Final Capital: ${final_capital:.2f}")
 
-        # Show sample trades
+        # Ensure duration_hours column exists (compute it as the hours between entry and exit)
+        if 'duration_hours' not in df.columns and 'exit_time' in df.columns and 'entry_time' in df.columns:
+            df['duration_hours'] = (df['exit_time'] - df['entry_time']).dt.total_seconds() / 3600
+
         print("\nSample Trades:")
-        print(df[['entry_time', 'entry_price', 'stop_loss', 'take_profit',
-                  'exit_price', 'profit_pct', 'outcome']].head(3))
+        print(df[['entry_time', 'entry_price', 'SL', 'TP', 'exit_price', 
+                  'profit_pct', 'risk_reward', 'outcome', 'duration_hours']].head(5))
 
     except Exception as e:
         print(f"Analysis error: {str(e)}")
 
-def simulate_capital(signals, initial_capital=1000):
+def simulate_capital(signals, initial_capital=5000):
     """Simulate capital evolution given sequential trade returns.
     
     Assumes trades are executed sequentially.
@@ -1324,7 +1350,7 @@ def get_top_volume_pairs(limit=50):
     top_volume_pairs = [t['symbol'] for t in usdt_pairs_sorted[:limit]]
     return top_volume_pairs
 
-def analyze_aggregated_results(all_signals, initial_capital=1000):
+def analyze_aggregated_results(all_signals, initial_capital=5000):
     """Aggregate performance analysis across all symbols traded."""
     if not all_signals:
         print("No aggregated trades generated")
@@ -1332,7 +1358,14 @@ def analyze_aggregated_results(all_signals, initial_capital=1000):
     try:
         df = pd.DataFrame(all_signals)
         df['profit_pct'] = df['profit'] * 100
+        # Rename keys for consistency if trades use stop_loss and take_profit instead of SL and TP
+        if 'stop_loss' in df.columns:
+            df.rename(columns={'stop_loss': 'SL'}, inplace=True)
+        if 'take_profit' in df.columns:
+            df.rename(columns={'take_profit': 'TP'}, inplace=True)
         df['outcome'] = np.where(df['profit'] > 0, 'WIN', np.where(df['profit'] < 0, 'LOSS', 'BREAKEVEN'))
+        # Compute risk_reward for each trade
+        df['risk_reward'] = df.apply(compute_risk_reward, axis=1)
         total_trades = len(df)
         win_rate = len(df[df['outcome'] == 'WIN']) / total_trades
         avg_win = df[df['outcome'] == 'WIN']['profit_pct'].mean()
@@ -1354,11 +1387,11 @@ def analyze_aggregated_results(all_signals, initial_capital=1000):
         print(f"\nStarting Capital: ${initial_capital}")
         print(f"Final Capital: ${final_capital:.2f}")
         print("\nSample Aggregated Trades:")
-        print(df[['entry_time', 'entry_price', 'stop_loss', 'take_profit', 'exit_price', 'profit_pct', 'outcome']].head(5))
+        print(df[['entry_time', 'entry_price', 'SL', 'TP', 'exit_price', 'profit_pct', 'risk_reward', 'outcome']].head(5))
     except Exception as e:
         print(f"Aggregated analysis error: {str(e)}")
 
-def run_sequential_backtest(trades, initial_capital=1000):
+def run_sequential_backtest(trades, initial_capital=5000):
     """
     Runs trades sequentially updating the current capital after each trade,
     so that each trade's sizing is based on the updated capital.
