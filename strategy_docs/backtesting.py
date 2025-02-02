@@ -171,8 +171,8 @@ def backtest_strategy(symbol, timeframe='4h', days=180, client=None):
             entry = {
                 'entry_time': df['timestamp'].iloc[i],
                 'entry_price': df['close'].iloc[i],
-                'stop_loss': df['close'].iloc[i] * 0.99,
-                'take_profit': df['close'].iloc[i] * 1.06,
+                'stop_loss': df['close'].iloc[i] * 0.995,
+                'take_profit': df['close'].iloc[i] * 1.02,
                 'exit_price': 0,
                 'exit_time': None,
                 'profit': 0,
@@ -180,7 +180,7 @@ def backtest_strategy(symbol, timeframe='4h', days=180, client=None):
                 'drawdown': 0
             }
             signals.append(entry)
-    trailing_stop_pct = 0.005
+    trailing_stop_pct = 0.0025
     min_bars_before_stop = 3
     for trade in signals:
         entry_idx = df[df['timestamp'] == trade['entry_time']].index[0]
@@ -220,7 +220,7 @@ def backtest_strategy(symbol, timeframe='4h', days=180, client=None):
         trade['drawdown'] = (lowest_point - trade['entry_price']) / trade['entry_price']
     return signals
 
-def simulate_capital(signals, initial_capital=5000):
+def simulate_capital(signals, initial_capital=10000):
     sorted_signals = sorted(signals, key=lambda t: t['entry_time'])
     capital = initial_capital
     for trade in sorted_signals:
@@ -278,7 +278,7 @@ def analyze_results(signals, symbol):
     except Exception as e:
         print(f"Analysis error: {str(e)}")
 
-def analyze_aggregated_results(all_signals, initial_capital=5000):
+def analyze_aggregated_results(all_signals, initial_capital=10000):
     if not all_signals:
         print("No aggregated trades generated")
         return
@@ -314,7 +314,7 @@ def analyze_aggregated_results(all_signals, initial_capital=5000):
     except Exception as e:
         print(f"Aggregated analysis error: {str(e)}")
 
-def run_sequential_backtest(trades, initial_capital=5000):
+def run_sequential_backtest(trades, initial_capital=10000):
     current_capital = initial_capital
     trades_sorted = sorted(trades, key=lambda t: t['entry_time'])
     for trade in trades_sorted:

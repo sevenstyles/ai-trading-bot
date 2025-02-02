@@ -87,21 +87,21 @@ def calculate_emas(df):
 
 def generate_signal(df, i):
     """Generate a trade signal based on market structure breaks and indicators."""
-    if i < 40:
+    if i < 20:
         return False
     structure_break = (df['higher_high'].iloc[i] and 
-                       (df['volume'].iloc[i] > df['volume'].iloc[i-1] * 1.85))
-    volatility_expansion = (df['range'].iloc[i] > df['range'].rolling(14).mean().iloc[i] * 1.4)
+                       (df['volume'].iloc[i] > df['volume'].iloc[i-1] * 1.5))
+    volatility_expansion = (df['range'].iloc[i] > df['range'].rolling(14).mean().iloc[i] * 1.2)
     smart_money_confirm = (
         (df['low'].iloc[i] > df['low'].iloc[i-1]) and
         (df['close'].iloc[i] > df['open'].iloc[i]) and
-        (((df['close'].iloc[i] - df['open'].iloc[i]) / ((df['high'].iloc[i] - df['low'].iloc[i]) + 1e-5)) > 0.55) and
+        (((df['close'].iloc[i] - df['open'].iloc[i]) / ((df['high'].iloc[i] - df['low'].iloc[i]) + 1e-5)) > 0.45) and
         (df['volume'].iloc[i] > df['volume'].iloc[i-1])
     )
     trend_aligned = ((df['momentum'].iloc[i] > 0) and
-                     (df['trend_power'].iloc[i] > df['trend_power'].quantile(0.5)))
-    adx_condition = (df['adx'].iloc[i] > 28)
-    rsi_condition = (df['rsi'].iloc[i] > 50) and (df['rsi'].iloc[i] < 78)
+                     (df['trend_power'].iloc[i] > df['trend_power'].quantile(0.4)))
+    adx_condition = (df['adx'].iloc[i] > 25)
+    rsi_condition = (df['rsi'].iloc[i] > 45) and (df['rsi'].iloc[i] < 80)
     trend_confirm = (df['close'].iloc[i] > df['ema200'].iloc[i])
     ema_slope = (df['ema200'].iloc[i] > df['ema200'].iloc[i-1])
     bullish_trend = (df['close'].iloc[i] > df['ema50'].iloc[i])
