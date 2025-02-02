@@ -63,5 +63,5 @@ TAKE_PROFIT_LEVELS = {
 MIN_LIQUIDITY = 500000
 
 # Profit target multipliers adjusted to target an average win of about 4%
-LONG_TAKE_PROFIT_MULTIPLIER = 1.04   # 4% profit target for long trades (risk 0.5% yields an 8:1 ratio)
-SHORT_TAKE_PROFIT_MULTIPLIER = 0.96    # 4% profit target for short trades (risk 0.5% yields an 8:1 ratio) 
+LONG_TAKE_PROFIT_MULTIPLIER = 1.06   # 4% profit target for long trades (risk 0.5% yields an 8:1 ratio)
+SHORT_TAKE_PROFIT_MULTIPLIER = 0.94    # 4% profit target for short trades (risk 0.5% yields an 8:1 ratio) 
