@@ -1,5 +1,5 @@
 import time
-# NOTE: Live trading now mimics the backtester by using 4h candle data and the identical indicator logic for trade signals.
+# NOTE: Live trading now mimics backtester signal logic using 4h data. However, live orders are executed on Binance Futures Testnet as real market orders and do NOT apply the fee (FUTURES_FEE) and slippage (SLIPPAGE_RATE) adjustments used in the backtester simulation.
 import pandas as pd
 from datetime import datetime
 from binance.client import Client

@@ -64,4 +64,8 @@ MIN_LIQUIDITY = 500000
 
 # Profit target multipliers adjusted to target an average win of about 4%
 LONG_TAKE_PROFIT_MULTIPLIER = 1.06   # 4% profit target for long trades (risk 0.5% yields an 8:1 ratio)
-SHORT_TAKE_PROFIT_MULTIPLIER = 0.94    # 4% profit target for short trades (risk 0.5% yields an 8:1 ratio) 
+SHORT_TAKE_PROFIT_MULTIPLIER = 0.94    # 4% profit target for short trades (risk 0.5% yields an 8:1 ratio)
+
+# New parameters to simulate live futures trading conditions:
+FUTURES_FEE = 0.0004    # Binance Futures taker fee (0.04%)
+SLIPPAGE_RATE = 0.0005  # Assumed slippage rate for order execution (0.05%) 

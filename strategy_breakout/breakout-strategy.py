@@ -1,4 +1,5 @@
 from binance.client import Client
+# NOTE: Backtesting now incorporates fee (FUTURES_FEE) and slippage (SLIPPAGE_RATE) adjustments as configured in config.py for more realistic simulation of live futures trading.
 import random
 from config import BINANCE_API_KEY, BINANCE_API_SECRET
 from data_fetch import get_top_volume_pairs
