@@ -138,7 +138,7 @@ def backtest_asian_fakeout(df):
     print(f"Total sessions: {total_sessions}, Setup opportunities: {potential_setups}, Actual trades: {len(trades)}")
     return trades
 
-def backtest_strategy(symbol, timeframe='4h', days=180, client=None):
+def backtest_strategy(symbol, timeframe='1h', days=180, client=None):
     from datetime import datetime, timedelta
     max_historical_days = 1000
     random_offset = random.randint(days, max_historical_days)
