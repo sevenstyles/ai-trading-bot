@@ -116,7 +116,7 @@ def backtest_asian_fakeout(df):
                 print(f"\nPotential LONG setup at {session_df.index[i]}")
                 for j in range(1, min(confirmation_window, len(session_df) - i)):
                     future = session_df.iloc[i + j]
-                    price_move = (future['close'] - current['low']) / current['low']
+                    price_move = ((future['close'] - current['low']) / current['low']) if current['low'] != 0 else 0
                     required_move = max(0.015, 0.0005)
                     if price_move >= required_move:
                         trade = simulate_trade(session_df.iloc[i+j:], session_df.index[i+j],
@@ -235,16 +235,16 @@ def backtest_strategy(symbol, timeframe='4h', days=180, client=None):
             lowest_point = df['low'].iloc[entry_idx:j+1].min()
             trade['drawdown'] = (lowest_point - trade['entry_price']) / trade['entry_price']
         elif trade['direction'] == 'short':
-            # For short trades, adverse moves are upward, so we track the new high
-            new_high = trade['entry_price']
+            # For short trades, favorable movement is price declining.
+            # So we track the new low to tighten the trailing stop.
+            new_low = trade['entry_price']
             for j in range(entry_idx, max_hold + 1):
-                if df['high'].iloc[j] > trade['entry_price'] * 1.03:
-                    if df['high'].iloc[j] > new_high:
-                        new_high = df['high'].iloc[j]
-                        potential_stop = new_high * (1 + trailing_stop_pct)
+                if df['low'].iloc[j] < trade['entry_price'] * 0.97:
+                    if df['low'].iloc[j] < new_low:
+                        new_low = df['low'].iloc[j]
+                        potential_stop = new_low * (1 + trailing_stop_pct)
                         if potential_stop < trade['stop_loss']:
                             trade['stop_loss'] = potential_stop
-                # For short trades, a favorable move is a lower price. Exit if price touches the take profit.
                 if (j - entry_idx) >= min_bars_before_stop and df['low'].iloc[j] <= trade['take_profit']:
                     trade.update({
                         'exit_price': trade['take_profit'],
@@ -253,7 +253,6 @@ def backtest_strategy(symbol, timeframe='4h', days=180, client=None):
                         'profit': (trade['entry_price'] - trade['take_profit']) / trade['entry_price']
                     })
                     break
-                # Exit if price rises to (or above) the trailing stop level.
                 if df['high'].iloc[j] >= trade['stop_loss']:
                     trade.update({
                         'exit_price': trade['stop_loss'],
@@ -308,13 +307,6 @@ def analyze_results(signals, symbol):
         df['exit_time'] = pd.to_datetime(df['exit_time'])
         df['profit_pct'] = ((df['exit_price'] - df['entry_price']) / df['entry_price']) * 100
         df['profit_pct'] = df['profit_pct'].round(2)
-        trades_dir = os.path.join(os.getcwd(), 'trades')
-        os.makedirs(trades_dir, exist_ok=True)
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{symbol}_trades_{timestamp}.csv"
-        filepath = os.path.join(trades_dir, filename)
-        df.to_csv(filepath, index=False)
-        print(f"\nAll trades exported to: {filepath}")
         print("\n=== TRADE SUMMARY ===")
         print(f"Total Trades: {len(df)}")
         print(f"Time Period: {df['entry_time'].min()} to {df['entry_time'].max()}")
