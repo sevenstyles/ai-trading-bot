@@ -1,0 +1,2 @@
+entry_time,entry_price,SL,TP,exit_price,exit_time,profit,status,drawdown,direction,profit_pct
+2023-06-25 20:00:00+00:00,5.43,5.40285,5.5386,5.5386,2023-06-26 00:00:00+00:00,0.020000000000000007,target,-0.030202578268876557,long,2.0

@@ -1,0 +1,2 @@
+entry_time,entry_price,SL,TP,exit_price,exit_time,profit,status,drawdown,direction,profit_pct
+2024-03-02 04:00:00+00:00,21.215,21.108925,21.6393,21.6393,2024-03-02 16:00:00+00:00,0.01999999999999994,target,-0.02898892293188774,long,2.0

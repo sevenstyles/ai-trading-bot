@@ -1,0 +1,2 @@
+entry_time,entry_price,SL,TP,exit_price,exit_time,profit,status,drawdown,direction,profit_pct
+2022-08-12 04:00:00+00:00,0.01665,0.017955,0.016983,0.016983,2022-08-12 08:00:00+00:00,0.019999999999999997,target,-0.03063063063063063,long,2.0

@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import random
-from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE
+from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, LONG_TAKE_PROFIT_MULTIPLIER, SHORT_TAKE_PROFIT_MULTIPLIER
 
 def simulate_trade(data, entry_time, direction, tp_multiplier, sl_multiplier, current_capital):
     entry_price = round(data.iloc[0]['close'], 8)
@@ -158,7 +158,7 @@ def backtest_strategy(symbol, timeframe='4h', days=180, client=None):
     df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors='coerce')
     df = df.dropna(subset=numeric_cols)
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-    from indicators import calculate_market_structure, calculate_trend_strength, calculate_emas, calculate_macd, calculate_adx, calculate_rsi, generate_signal
+    from indicators import calculate_market_structure, calculate_trend_strength, calculate_emas, calculate_macd, calculate_adx, calculate_rsi, generate_signal, generate_short_signal
     df = calculate_market_structure(df)
     df = calculate_trend_strength(df)
     df = calculate_emas(df)
@@ -172,12 +172,27 @@ def backtest_strategy(symbol, timeframe='4h', days=180, client=None):
                 'entry_time': df['timestamp'].iloc[i],
                 'entry_price': df['close'].iloc[i],
                 'stop_loss': df['close'].iloc[i] * 0.995,
-                'take_profit': df['close'].iloc[i] * 1.02,
+                'take_profit': df['close'].iloc[i] * LONG_TAKE_PROFIT_MULTIPLIER,
                 'exit_price': 0,
                 'exit_time': None,
                 'profit': 0,
                 'status': 'open',
-                'drawdown': 0
+                'drawdown': 0,
+                'direction': 'long'
+            }
+            signals.append(entry)
+        elif generate_short_signal(df, i):
+            entry = {
+                'entry_time': df['timestamp'].iloc[i],
+                'entry_price': df['close'].iloc[i],
+                'stop_loss': df['close'].iloc[i] * 1.005,
+                'take_profit': df['close'].iloc[i] * SHORT_TAKE_PROFIT_MULTIPLIER,
+                'exit_price': 0,
+                'exit_time': None,
+                'profit': 0,
+                'status': 'open',
+                'drawdown': 0,
+                'direction': 'short'
             }
             signals.append(entry)
     trailing_stop_pct = 0.0025
@@ -185,39 +200,77 @@ def backtest_strategy(symbol, timeframe='4h', days=180, client=None):
     for trade in signals:
         entry_idx = df[df['timestamp'] == trade['entry_time']].index[0]
         max_hold = min(entry_idx + MAX_HOLD_BARS, len(df) - 1)
-        new_high = trade['entry_price']
-        for j in range(entry_idx, max_hold + 1):
-            if df['high'].iloc[j] > trade['entry_price'] * 1.03:
-                if df['high'].iloc[j] > new_high:
-                    new_high = df['high'].iloc[j]
-                    potential_stop = new_high * (1 - trailing_stop_pct)
-                    if potential_stop > trade['stop_loss']:
-                        trade['stop_loss'] = potential_stop
-            if (j - entry_idx) >= min_bars_before_stop and df['low'].iloc[j] <= trade['stop_loss']:
+        if trade['direction'] == 'long':
+            new_high = trade['entry_price']
+            for j in range(entry_idx, max_hold + 1):
+                if df['high'].iloc[j] > trade['entry_price'] * 1.03:
+                    if df['high'].iloc[j] > new_high:
+                        new_high = df['high'].iloc[j]
+                        potential_stop = new_high * (1 - trailing_stop_pct)
+                        if potential_stop > trade['stop_loss']:
+                            trade['stop_loss'] = potential_stop
+                if (j - entry_idx) >= min_bars_before_stop and df['low'].iloc[j] <= trade['stop_loss']:
+                    trade.update({
+                        'exit_price': trade['stop_loss'],
+                        'exit_time': df['timestamp'].iloc[j],
+                        'status': 'stopped',
+                        'profit': (trade['stop_loss'] - trade['entry_price']) / trade['entry_price']
+                    })
+                    break
+                if df['high'].iloc[j] >= trade['take_profit']:
+                    trade.update({
+                        'exit_price': trade['take_profit'],
+                        'exit_time': df['timestamp'].iloc[j],
+                        'status': 'target',
+                        'profit': (trade['take_profit'] - trade['entry_price']) / trade['entry_price']
+                    })
+                    break
+            if trade['status'] == 'open':
                 trade.update({
-                    'exit_price': trade['stop_loss'],
-                    'exit_time': df['timestamp'].iloc[j],
-                    'status': 'stopped',
-                    'profit': (trade['stop_loss'] - trade['entry_price']) / trade['entry_price']
+                    'exit_price': df['close'].iloc[max_hold],
+                    'exit_time': df['timestamp'].iloc[max_hold],
+                    'status': 'expired',
+                    'profit': (df['close'].iloc[max_hold] - trade['entry_price']) / trade['entry_price']
                 })
-                break
-            if df['high'].iloc[j] >= trade['take_profit']:
+            lowest_point = df['low'].iloc[entry_idx:j+1].min()
+            trade['drawdown'] = (lowest_point - trade['entry_price']) / trade['entry_price']
+        elif trade['direction'] == 'short':
+            # For short trades, adverse moves are upward, so we track the new high
+            new_high = trade['entry_price']
+            for j in range(entry_idx, max_hold + 1):
+                if df['high'].iloc[j] > trade['entry_price'] * 1.03:
+                    if df['high'].iloc[j] > new_high:
+                        new_high = df['high'].iloc[j]
+                        potential_stop = new_high * (1 + trailing_stop_pct)
+                        if potential_stop < trade['stop_loss']:
+                            trade['stop_loss'] = potential_stop
+                # For short trades, a favorable move is a lower price. Exit if price touches the take profit.
+                if (j - entry_idx) >= min_bars_before_stop and df['low'].iloc[j] <= trade['take_profit']:
+                    trade.update({
+                        'exit_price': trade['take_profit'],
+                        'exit_time': df['timestamp'].iloc[j],
+                        'status': 'target',
+                        'profit': (trade['entry_price'] - trade['take_profit']) / trade['entry_price']
+                    })
+                    break
+                # Exit if price rises to (or above) the trailing stop level.
+                if df['high'].iloc[j] >= trade['stop_loss']:
+                    trade.update({
+                        'exit_price': trade['stop_loss'],
+                        'exit_time': df['timestamp'].iloc[j],
+                        'status': 'stopped',
+                        'profit': (trade['entry_price'] - trade['stop_loss']) / trade['entry_price']
+                    })
+                    break
+            if trade['status'] == 'open':
                 trade.update({
-                    'exit_price': trade['take_profit'],
-                    'exit_time': df['timestamp'].iloc[j],
-                    'status': 'target',
-                    'profit': (trade['take_profit'] - trade['entry_price']) / trade['entry_price']
+                    'exit_price': df['close'].iloc[max_hold],
+                    'exit_time': df['timestamp'].iloc[max_hold],
+                    'status': 'expired',
+                    'profit': (trade['entry_price'] - df['close'].iloc[max_hold]) / trade['entry_price']
                 })
-                break
-        if trade['status'] == 'open':
-            trade.update({
-                'exit_price': df['close'].iloc[max_hold],
-                'exit_time': df['timestamp'].iloc[max_hold],
-                'status': 'expired',
-                'profit': (df['close'].iloc[max_hold] - trade['entry_price']) / trade['entry_price']
-            })
-        lowest_point = df['low'].iloc[entry_idx:j+1].min()
-        trade['drawdown'] = (lowest_point - trade['entry_price']) / trade['entry_price']
+            highest_point = df['high'].iloc[entry_idx:j+1].max()
+            trade['drawdown'] = (trade['entry_price'] - highest_point) / trade['entry_price']
     return signals
 
 def simulate_capital(signals, initial_capital=10000):

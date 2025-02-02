@@ -1,0 +1,2 @@
+entry_time,entry_price,SL,TP,exit_price,exit_time,profit,status,drawdown,direction,profit_pct
+2022-07-27 16:00:00+00:00,0.9998,1.004799,0.979804,0.9998,2022-08-08 16:00:00+00:00,0.0,expired,-0.00040008001600315657,short,0.0

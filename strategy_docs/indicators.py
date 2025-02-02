@@ -108,4 +108,44 @@ def generate_signal(df, i):
     ema_crossover = (df['ema50'].iloc[i] > df['ema200'].iloc[i])
     macd_confirm = (df['macd'].iloc[i] > df['signal'].iloc[i])
     return all([structure_break, volatility_expansion, smart_money_confirm, trend_aligned,
-                adx_condition, rsi_condition, trend_confirm, ema_slope, bullish_trend, ema_crossover, macd_confirm]) 
+                adx_condition, rsi_condition, trend_confirm, ema_slope, bullish_trend, ema_crossover, macd_confirm])
+
+def generate_short_signal(df, i):
+    """Generate a short trade signal based on inverted market structure and technical indicators."""
+    if i < 20:
+        return False
+    # Inverted structure: check for lower low with a volume spike
+    structure_break = (df['lower_low'].iloc[i] and 
+                       (df['volume'].iloc[i] > df['volume'].iloc[i-1] * 1.5))
+
+    # Volatility expansion remains the same
+    volatility_expansion = (df['range'].iloc[i] > df['range'].rolling(14).mean().iloc[i] * 1.2)
+
+    # Inverted smart money confirmation: bearish candle with a proper body-to-range ratio
+    smart_money_confirm = (
+        (df['high'].iloc[i] < df['high'].iloc[i-1]) and
+        (df['close'].iloc[i] < df['open'].iloc[i]) and
+        (((df['open'].iloc[i] - df['close'].iloc[i]) / ((df['high'].iloc[i] - df['low'].iloc[i]) + 1e-5)) > 0.45) and
+        (df['volume'].iloc[i] > df['volume'].iloc[i-1])
+    )
+
+    # For shorts: require negative momentum and mirror the trend power check
+    trend_aligned = ((df['momentum'].iloc[i] < 0) and
+                     (df['trend_power'].iloc[i] < df['trend_power'].quantile(0.6)))
+
+    adx_condition = (df['adx'].iloc[i] > 25)
+
+    # Mirror RSI condition for shorts (avoid extreme oversold)
+    rsi_condition = (df['rsi'].iloc[i] > 20) and (df['rsi'].iloc[i] < 55)
+
+    # Inverted moving average conditions: price below EMAs instead of above
+    trend_confirm = (df['close'].iloc[i] < df['ema200'].iloc[i])
+    ema_slope = (df['ema200'].iloc[i] < df['ema200'].iloc[i-1])
+    bearish_trend = (df['close'].iloc[i] < df['ema50'].iloc[i])
+    ema_crossover = (df['ema50'].iloc[i] < df['ema200'].iloc[i])
+
+    # For MACD, require the MACD be below its signal line for bearish bias
+    macd_confirm = (df['macd'].iloc[i] < df['signal'].iloc[i])
+
+    return all([structure_break, volatility_expansion, smart_money_confirm, trend_aligned,
+                adx_condition, rsi_condition, trend_confirm, ema_slope, bearish_trend, ema_crossover, macd_confirm]) 
