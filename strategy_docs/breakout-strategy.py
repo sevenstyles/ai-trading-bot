@@ -65,7 +65,8 @@ def calculate_stop_loss(entry_price, atr, volatility_ratio):
     return entry_price - (atr * 1.5)  # Default
 
 CAPITAL = 100000  # $100,000 demo capital
-RISK_PER_TRADE = 0.01  # 1% per trade
+RISK_PER_TRADE = 0.02  # 2% per trade
+LEVERAGE = 5         # 5x leverage to amplify exposure
 
 MIN_ATR_PCT = 0.5  # Minimum 0.5% daily volatility
 
@@ -470,24 +471,29 @@ def get_position_cap(entry_price):
 def simulate_trade(data, entry_time, direction, tp_multiplier, sl_multiplier):
     entry_price = round(data.iloc[0]['close'], 8)
     
-    # Dynamic position cap
-    position_cap = get_position_cap(entry_price)
-    min_units = max(MIN_TRADE_VALUE / entry_price, 100)  # Absolute minimum 100 units
-    position_size = min(1000000 / entry_price, position_cap)
-    
-    # Final validation
-    position_size = max(position_size, min_units)
-    if position_size > position_cap:
-        print(f"Position cap exceeded: {position_size:.2f} > {position_cap}")
-        return None
-
-    # Calculate targets
+    # Calculate trade targets based on direction
     if direction == 'long':
         tp_price = entry_price * (1 + tp_multiplier)
         sl_price = entry_price * (1 - sl_multiplier)
     else:
         tp_price = entry_price * (1 - tp_multiplier)
         sl_price = entry_price * (1 + sl_multiplier)
+    
+    # Determine risk per unit
+    risk_per_unit = abs(entry_price - sl_price)
+    if risk_per_unit == 0:
+        print("Risk per unit is zero, cannot size position")
+        return None
+
+    # Calculate risk capital for this trade (2% of CAPITAL)
+    risk_capital = CAPITAL * RISK_PER_TRADE
+    # With 5x leverage, determine allowable position size
+    position_size = (risk_capital * LEVERAGE) / risk_per_unit
+    # Optionally, round to an integer number of units
+    position_size = int(position_size)
+    if position_size <= 0:
+        print("Computed position size is zero, trade aborted")
+        return None
     
     # Find exit conditions
     for idx, row in data.iterrows():
