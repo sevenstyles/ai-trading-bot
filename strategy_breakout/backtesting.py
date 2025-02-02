@@ -5,139 +5,6 @@ from datetime import datetime, timedelta
 import random
 from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, LONG_TAKE_PROFIT_MULTIPLIER, SHORT_TAKE_PROFIT_MULTIPLIER
 
-def simulate_trade(data, entry_time, direction, tp_multiplier, sl_multiplier, current_capital):
-    entry_price = round(data.iloc[0]['close'], 8)
-    if direction == 'long':
-        tp_price = entry_price * (1 + tp_multiplier)
-        sl_price = entry_price * (1 - sl_multiplier)
-    else:
-        tp_price = entry_price * (1 - tp_multiplier)
-        sl_price = entry_price * (1 + sl_multiplier)
-    risk_per_unit = abs(entry_price - sl_price)
-    if risk_per_unit == 0:
-        print("Risk per unit is zero, cannot size position")
-        return None
-    risk_capital = current_capital * RISK_PER_TRADE
-    position_size = (risk_capital * LEVERAGE) / risk_per_unit
-    position_size = int(position_size)
-    if position_size <= 0:
-        print("Computed position size is zero, trade aborted")
-        return None
-    for idx, row in data.iterrows():
-        if direction == 'long':
-            if row['high'] >= tp_price:
-                return {
-                    'exit_time': idx,
-                    'exit_price': tp_price,
-                    'profit': tp_multiplier,
-                    'position_size': position_size,
-                    'duration': (idx - entry_time).total_seconds()/60
-                }
-            elif row['low'] <= sl_price:
-                return {
-                    'exit_time': idx,
-                    'exit_price': sl_price,
-                    'profit': -sl_multiplier,
-                    'position_size': position_size,
-                    'duration': (idx - entry_time).total_seconds()/60
-                }
-        else:
-            if row['low'] <= tp_price:
-                return {
-                    'exit_time': idx,
-                    'exit_price': tp_price,
-                    'profit': tp_multiplier,
-                    'position_size': position_size,
-                    'duration': (idx - entry_time).total_seconds()/60
-                }
-            elif row['high'] >= sl_price:
-                return {
-                    'exit_time': idx,
-                    'exit_price': sl_price,
-                    'profit': -sl_multiplier,
-                    'position_size': position_size,
-                    'duration': (idx - entry_time).total_seconds()/60
-                }
-    print(f"No exit found within {len(data)} candles")
-    return None
-
-def backtest_asian_fakeout(df):
-    trades = []
-    df['ATR'] = (df['high'] - df['low']).rolling(14).mean()
-    df['vol_ma20'] = df['volume'].rolling(20).mean()
-    df['sma50'] = df['close'].rolling(50).mean()
-    df['date'] = df.index.date
-    total_sessions = 0
-    sessions_with_range = 0
-    sessions_with_volume = 0
-    potential_setups = 0
-    for day, day_df in df.groupby('date'):
-        session_df = day_df.between_time("00:00", "08:00")
-        if len(session_df) < 3:
-            continue
-        total_sessions += 1
-        session_high = session_df['high'].max()
-        session_low = session_df['low'].min()
-        session_range = session_high - session_low
-        session_range_pct = (session_range / session_df['close'].mean()) * 100
-        print(f"\nAnalyzing session {day}: Range: {session_range_pct:.2f}%")
-        daily_range = day_df['high'].max() - day_df['low'].min()
-        avg_daily_range = df['high'].rolling(20).max() - df['low'].rolling(20).min()
-        if daily_range < (0.3 * avg_daily_range.mean()):
-            print("Failed daily range filter")
-            continue
-        sessions_with_range += 1
-        for i in range(2, len(session_df) - 5):
-            current = session_df.iloc[i]
-            current_vol_ratio = current['volume'] / current['vol_ma20']
-            if not (0 < current_vol_ratio < 10):
-                continue
-            potential_setups += 1
-            confirmation_window = 5
-            if current['high'] > session_high:
-                print(f"\nPotential SHORT setup at {session_df.index[i]}")
-                for j in range(1, min(confirmation_window, len(session_df) - i)):
-                    future = session_df.iloc[i + j]
-                    price_move = (current['high'] - future['close']) / current['high']
-                    required_move = max(0.015, 0.0005)
-                    if price_move >= required_move:
-                        trade = simulate_trade(session_df.iloc[i+j:], session_df.index[i+j],
-                                               'short', 0.06, 0.01, session_df['close'].iloc[-1])
-                        if trade:
-                            trade.update({
-                                'entry_time': session_df.index[i+j],
-                                'setup_time': session_df.index[i],
-                                'direction': 'short',
-                                'entry_price': future['close']
-                            })
-                            trades.append(trade)
-                        break
-            if current['low'] < session_low:
-                print(f"\nPotential LONG setup at {session_df.index[i]}")
-                for j in range(1, min(confirmation_window, len(session_df) - i)):
-                    future = session_df.iloc[i + j]
-                    price_move = ((future['close'] - current['low']) / current['low']) if current['low'] != 0 else 0
-                    required_move = max(0.015, 0.0005)
-                    if price_move >= required_move:
-                        trade = simulate_trade(session_df.iloc[i+j:], session_df.index[i+j],
-                                               'long', 0.06, 0.01, session_df['close'].iloc[-1])
-                        if trade:
-                            trade.update({
-                                'entry_time': session_df.index[i+j],
-                                'setup_time': session_df.index[i],
-                                'direction': 'long',
-                                'entry_price': future['close']
-                            })
-                            trades.append(trade)
-                        break
-        quote_volume = session_df['volume'].sum() * session_df['close'].mean()
-        if quote_volume < MIN_QUOTE_VOLUME:
-            print(f"Insufficient liquidity (${quote_volume:.2f} < ${MIN_QUOTE_VOLUME})")
-            continue
-    print("\nBacktest Statistics:")
-    print(f"Total sessions: {total_sessions}, Setup opportunities: {potential_setups}, Actual trades: {len(trades)}")
-    return trades
-
 def backtest_strategy(symbol, timeframe='1h', days=180, client=None):
     from datetime import datetime, timedelta
     max_historical_days = 1000
@@ -235,8 +102,6 @@ def backtest_strategy(symbol, timeframe='1h', days=180, client=None):
             lowest_point = df['low'].iloc[entry_idx:j+1].min()
             trade['drawdown'] = (lowest_point - trade['entry_price']) / trade['entry_price']
         elif trade['direction'] == 'short':
-            # For short trades, favorable movement is price declining.
-            # So we track the new low to tighten the trailing stop.
             new_low = trade['entry_price']
             for j in range(entry_idx, max_hold + 1):
                 if df['low'].iloc[j] < trade['entry_price'] * 0.97:
@@ -276,8 +141,9 @@ def simulate_capital(signals, initial_capital=10000):
     sorted_signals = sorted(signals, key=lambda t: t['entry_time'])
     capital = initial_capital
     for trade in sorted_signals:
-        capital *= (1 + trade['profit'])
-        trade['capital_after'] = capital
+        if 'profit' in trade:
+            capital *= (1 + trade['profit'])
+            trade['capital_after'] = capital
     return capital
 
 def analyze_results(signals, symbol):
