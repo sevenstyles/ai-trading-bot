@@ -133,13 +133,13 @@ def check_entry_conditions(data, zones, trend):
 
 def breakout_signal(df, i):
     """Simplified breakout signal logic for increased trade frequency."""
-    if i < 20:
+    if i < 10:
         return False
-    price_buffer = 1.01
+    price_buffer = 1.005
     cond_price = df['close'].iloc[i] > df['consol_high'].iloc[i] * price_buffer
     cond_volume = (df['volume'].iloc[i] / df['volume'].rolling(20).mean().iloc[i]) >= 1.0
     cond_trend = df['close'].iloc[i] > df['ema50'].iloc[i]
-    cond_consolidation = (df['consol_high'].iloc[i] - df['consol_low'].iloc[i]) < df['consol_high'].iloc[i] * 0.6
+    cond_consolidation = (df['consol_high'].iloc[i] - df['consol_low'].iloc[i]) < df['consol_high'].iloc[i] * 0.8
     return all([cond_price, cond_volume, cond_trend, cond_consolidation])
 
 def identify_consolidation(df, period=7):
