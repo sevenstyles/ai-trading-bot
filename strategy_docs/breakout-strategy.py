@@ -49,10 +49,10 @@ VOL_MA_PERIOD = 20           # 20-bar volume average
 
 # Add time-based exit to prevent holding through reversions
 MAX_HOLD_PERIOD = 72  # 3 days (72 hours)
-MAX_HOLD_BARS = 36   # 6 days (36*4h)
+MAX_HOLD_BARS = 72   # Updated: 12 days (72*4h) to accommodate a 6% profit target
 
 # Improved risk management parameters
-RISK_REWARD_RATIO = 2.0      # More achievable 2:1 ratio
+RISK_REWARD_RATIO = 3.0      # Minimum profit factor of 1:3
 ATR_PERIOD = 14        # For volatility-based stops
 
 # Improve stop loss calculation
@@ -65,8 +65,8 @@ def calculate_stop_loss(entry_price, atr, volatility_ratio):
     return entry_price - (atr * 1.5)  # Default
 
 CAPITAL = 100000  # $100,000 demo capital
-RISK_PER_TRADE = 0.02  # 2% per trade
-LEVERAGE = 5         # 5x leverage to amplify exposure
+RISK_PER_TRADE = 0.10  # 10% per trade
+LEVERAGE = 20         # 20x leverage to amplify exposure
 
 MIN_ATR_PCT = 0.5  # Minimum 0.5% daily volatility
 
@@ -314,7 +314,7 @@ def check_entry_conditions(data, zones, trend):
             'Direction': direction,
             'Entry': last_close,
             'SL': last_close * 0.99,
-            'TP1': last_close * 1.03,
+            'TP1': last_close * 1.04,
             'Analysis': ['Volume confirmed zone activation']
         })
         
@@ -468,7 +468,7 @@ def get_position_cap(entry_price):
     else:                     
         return 10000     # Double standard cap
 
-def simulate_trade(data, entry_time, direction, tp_multiplier, sl_multiplier):
+def simulate_trade(data, entry_time, direction, tp_multiplier, sl_multiplier, current_capital):
     entry_price = round(data.iloc[0]['close'], 8)
     
     # Calculate trade targets based on direction
@@ -485,9 +485,9 @@ def simulate_trade(data, entry_time, direction, tp_multiplier, sl_multiplier):
         print("Risk per unit is zero, cannot size position")
         return None
 
-    # Calculate risk capital for this trade (2% of CAPITAL)
-    risk_capital = CAPITAL * RISK_PER_TRADE
-    # With 5x leverage, determine allowable position size
+    # Calculate risk capital for this trade based on current_capital
+    risk_capital = current_capital * RISK_PER_TRADE
+    # With leverage, determine allowable position size
     position_size = (risk_capital * LEVERAGE) / risk_per_unit
     # Optionally, round to an integer number of units
     position_size = int(position_size)
@@ -693,18 +693,13 @@ def backtest_asian_fakeout(df):
                 for j in range(1, min(confirmation_window, len(session_df)-i)):
                     future = session_df.iloc[i+j]
                     
-                    # Round prices to 8 decimals for valid move calculation
-                    future_close = round(future['close'], 8)
-                    current_high = round(current['high'], 8)
-                    current_low = round(current['low'], 8)
-                    
                     # Compute price move for SHORT setup
-                    price_move = (current_high - future_close) / current_high
+                    price_move = (current['high'] - future['close']) / current['high']
                     required_move = max(
-                        (buffer_pct/100) * (0.015 if tier == 'high' else 0.005),  # Reduce multiplier
-                        0.0005  # More lenient minimum
+                        (buffer_pct/100) * (0.015 if tier == 'high' else 0.005),
+                        0.0005
                     )
-                    print(f"(DEBUG) Candle {j}: Close={future_close:.8f}, Required Move={required_move:.6f}")
+                    print(f"(DEBUG) Candle {j}: Close={future['close']:.8f}, Required Move={required_move:.6f}")
                     if price_move >= required_move:
                         print(f"Setup confirmed! (SHORT) Price move: {price_move*100:.2f}% (Required: {required_move*100:.2f}%)")
                         
@@ -712,8 +707,9 @@ def backtest_asian_fakeout(df):
                             session_df.iloc[i+j:],
                             session_df.index[i+j],
                             'short',
-                            params['tp'],
-                            params['sl']
+                            0.06,   # Updated: 6% target profit for shorts
+                            0.01,   # 1% stop loss for shorts
+                            session_df['close'].iloc[-1]
                         )
                         if trade:
                             trade.update({
@@ -728,15 +724,8 @@ def backtest_asian_fakeout(df):
                                 'entry_price': future['close']
                             })
                             trades.append(trade)
-                            # Debug trade parameters
                             print(f"Trade params - TP: {params['tp']}x, SL: {params['sl']}x, Size: {trade['position_size']}")
                             print(f"Trade executed at {future['close']:.8f}")
-                            print(f"Price: {future['close']:.8f}, Size: {trade['position_size']:.2f}, Valid: {trade['position_size'] > 0}")
-
-                            # Add price-tiered debug logging
-                            print(f"Price Tier: {'Micro' if future['close'] < 0.01 else 'Low' if future['close'] < 0.1 else 'Standard'} | "
-                                  f"Cap: {get_position_cap(future['close']):,} | "
-                                  f"Size: {trade['position_size']:.2f} units")
                         break
             
             # LONG setup
@@ -747,24 +736,20 @@ def backtest_asian_fakeout(df):
                 
                 for j in range(1, min(confirmation_window, len(session_df)-i)):
                     future = session_df.iloc[i+j]
-                    
-                    # Round prices to 8 decimals for valid move calculation
                     future_close = round(future['close'], 8)
                     current_low = round(current['low'], 8)
                     
-                    # Compute price move for LONG setup
                     price_move = (future_close - current_low) / current_low
                     required_move = max(
-                        (buffer_pct/100) * (0.015 if tier == 'high' else 0.005),  # Reduce multiplier
-                        0.0005  # More lenient minimum
+                        (buffer_pct/100) * (0.015 if tier == 'high' else 0.005),
+                        0.0005
                     )
-                    print(f"\n[DEBUG] Checking {direction.upper()} setup at {session_df.index[i]}")
+                    print(f"\n[DEBUG] Checking LONG setup at {session_df.index[i]}")
                     print(f"Buffer: {buffer_pct:.2f}% ({buffer:.8f})")
                     print(f"Required move: {required_move*100:.4f}%")
                     print(f"Trend direction: {trend} | Vol tier: {tier}")
                     print(f"Session range: {session_range_pct:.2f}% | Volume ratio: {current_vol_ratio:.2f}x")
-
-                    # Inside the confirmation window loop
+    
                     print(f"  Candle {j}: Close={future_close:.8f} (Move: {price_move*100:.4f}%)")
                     if price_move >= required_move:
                         print(f"  !! VALID MOVE !! Needed {required_move*100:.4f}% got {price_move*100:.4f}%")
@@ -775,8 +760,9 @@ def backtest_asian_fakeout(df):
                             session_df.iloc[i+j:],
                             session_df.index[i+j],
                             'long',
-                            params['tp'],
-                            params['sl']
+                            0.06,   # Updated: 6% target profit for longs
+                            0.01,   # 1% stop loss for longs
+                            session_df['close'].iloc[-1]
                         )
                         if trade:
                             trade.update({
@@ -791,15 +777,8 @@ def backtest_asian_fakeout(df):
                                 'entry_price': future['close']
                             })
                             trades.append(trade)
-                            # Debug trade parameters
                             print(f"Trade params - TP: {params['tp']}x, SL: {params['sl']}x, Size: {trade['position_size']}")
                             print(f"Trade executed at {future['close']:.8f}")
-                            print(f"Price: {future['close']:.8f}, Size: {trade['position_size']:.2f}, Valid: {trade['position_size'] > 0}")
-
-                            # Add price-tiered debug logging
-                            print(f"Price Tier: {'Micro' if future['close'] < 0.01 else 'Low' if future['close'] < 0.1 else 'Standard'} | "
-                                  f"Cap: {get_position_cap(future['close']):,} | "
-                                  f"Size: {trade['position_size']:.2f} units")
                         break
             
             session_volume = session_df['volume'].sum()
@@ -875,15 +854,12 @@ def summarize_trades(trades, symbol):
     print(f"Time Period: {df['entry_time'].min()} to {df['entry_time'].max()}")
 
     # Win/Loss Analysis
-    df['outcome'] = np.where(
-        df['profit'] > 0, 'WIN',
-        np.where(df['profit'] < 0, 'LOSS', 'BREAKEVEN')
-    )
-
-    wins = df[df['outcome'] == 'WIN']
-    losses = df[df['outcome'] == 'LOSS']
-    avg_win = wins['profit_pct'].mean() if not wins.empty else 0.0
-    avg_loss = losses['profit_pct'].mean() if not losses.empty else 0.0
+    df['outcome'] = np.where(df['profit_pct'] > 0, 'WIN', np.where(df['profit_pct'] < 0, 'LOSS', 'BREAKEVEN'))
+    # Basic metrics
+    total_trades = len(df)
+    win_rate = len(df[df['outcome'] == 'WIN']) / total_trades
+    avg_win = df[df['outcome'] == 'WIN']['profit_pct'].mean() if not df[df['outcome'] == 'WIN'].empty else 0.0
+    avg_loss = df[df['outcome'] == 'LOSS']['profit_pct'].mean() if not df[df['outcome'] == 'LOSS'].empty else 0.0
     risk_reward = abs(avg_win/avg_loss) if (avg_win > 0 and avg_loss < 0) else 0.0
     
     print(f"Total Return: {df['profit_pct'].sum():.2f}%")
@@ -900,7 +876,7 @@ def summarize_trades(trades, symbol):
     print(df[['entry_time', 'entry_price', 'SL', 'TP', 'exit_price', 
               'profit_pct', 'risk_reward', 'outcome', 'duration_hours']].head(5))
 
-    win_rate = len(wins) / len(df) * 100 if not df.empty else 0
+    win_rate = len(df[df['outcome'] == 'WIN']) / total_trades * 100 if not df.empty else 0
     print(f"Win Rate: {win_rate:.1f}%")
 
 def calculate_macd(df, fast=12, slow=26, signal=9):
@@ -1068,12 +1044,13 @@ def backtest_breakout_strategy(df_4h, symbol="UNKNOWN"):
         trades = []
         for i in range(20, len(df)):  # Ensure enough history
             if breakout_signal(df, i):
+                entry_price = df['close'].iloc[i]
                 trades.append({
                     'symbol': symbol,
                     'entry_time': df.index[i],
-                    'entry_price': df['close'].iloc[i],
-                    'SL': df['consol_low'].iloc[i],
-                    'TP': df['consol_high'].iloc[i] * 1.2  # tightened take profit target
+                    'entry_price': entry_price,
+                    'SL': entry_price * 0.99,   # 1% risk below entry for long trades
+                    'TP': entry_price * 1.06    # Updated: 6% target above entry
                 })
         return trades
         
@@ -1137,7 +1114,7 @@ def generate_signal(df, i):
         (((df['close'].iloc[i] - df['open'].iloc[i]) / ((df['high'].iloc[i] - df['low'].iloc[i]) + 1e-5)) > 0.55) and
         (df['volume'].iloc[i] > df['volume'].iloc[i-1])
     )
-    
+
     # Trend alignment: require positive momentum and reasonable trend strength
     trend_aligned = (
         (df['momentum'].iloc[i] > 0) and
@@ -1149,7 +1126,7 @@ def generate_signal(df, i):
     
     # RSI filter: require RSI above 50 and below 75 to confirm bullish momentum
     rsi_condition = (df['rsi'].iloc[i] > 50) and (df['rsi'].iloc[i] < 78)
-    
+
     # Multi-timeframe EMA confirmation: require current price above EMA200 and an uptrend
     trend_confirm = (df['close'].iloc[i] > df['ema200'].iloc[i])
     ema_slope = (df['ema200'].iloc[i] > df['ema200'].iloc[i-1])
@@ -1184,7 +1161,6 @@ def backtest_strategy(symbol, timeframe='4h', days=180):
         'taker_buy_base', 'taker_buy_quote', 'ignore'
     ])
     
-    # Convert and clean data types
     numeric_cols = ['open', 'high', 'low', 'close', 'volume']
     df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors='coerce')
     df = df.dropna(subset=numeric_cols)
@@ -1198,15 +1174,15 @@ def backtest_strategy(symbol, timeframe='4h', days=180):
     df = calculate_adx(df)
     df = calculate_rsi(df)
     
-    # Generate and process signals
+    # Generate and process signals with updated fixed targets
     signals = []
     for i in range(len(df)):
         if generate_signal(df, i):
             entry = {
                 'entry_time': df['timestamp'].iloc[i],
                 'entry_price': df['close'].iloc[i],
-                'stop_loss': df['close'].iloc[i] - (df['atr'].iloc[i] * 0.5),
-                'take_profit': df['close'].iloc[i] + (df['atr'].iloc[i] * 0.35),
+                'stop_loss': df['close'].iloc[i] * 0.99,   # Updated: 1% risk below entry
+                'take_profit': df['close'].iloc[i] * 1.06,    # Updated: 6% target above entry
                 'exit_price': 0,
                 'exit_time': None,
                 'profit': 0,
@@ -1215,26 +1191,25 @@ def backtest_strategy(symbol, timeframe='4h', days=180):
             }
             signals.append(entry)
 
-    # Simulate exits with trailing stop feature
-    trailing_stop_pct = 0.01  # 1% trailing stop for faster lock-ins
+    # Simulate exits with trailing stop feature with delayed activation until 3% gain
+    trailing_stop_pct = 0.005  # 0.5% trailing stop
+    min_bars_before_stop = 3   # Wait at least 3 bars after entry before checking stop loss
     for trade in signals:
         entry_idx = df[df['timestamp'] == trade['entry_time']].index[0]
         max_hold = min(entry_idx + MAX_HOLD_BARS, len(df) - 1)
         new_high = trade['entry_price']
         
         for j in range(entry_idx, max_hold + 1):
-            # Update trailing stop if new high is reached
-            if df['high'].iloc[j] > new_high:
-                new_high = df['high'].iloc[j]
-                potential_stop = new_high * (1 - trailing_stop_pct)
-                if potential_stop > trade['stop_loss']:
-                    trade['stop_loss'] = potential_stop
+            # Only update trailing stop if price has moved at least 3% above entry
+            if df['high'].iloc[j] > trade['entry_price'] * 1.03:
+                if df['high'].iloc[j] > new_high:
+                    new_high = df['high'].iloc[j]
+                    potential_stop = new_high * (1 - trailing_stop_pct)
+                    if potential_stop > trade['stop_loss']:
+                        trade['stop_loss'] = potential_stop
 
-            current_low = df['low'].iloc[j]
-            current_high = df['high'].iloc[j]
-
-            # Check for stop loss hit (trailing stop)
-            if current_low <= trade['stop_loss']:
+            # Check for stop loss hit (trailing stop) only after the minimum number of bars
+            if (j - entry_idx) >= min_bars_before_stop and df['low'].iloc[j] <= trade['stop_loss']:
                 trade.update({
                     'exit_price': trade['stop_loss'],
                     'exit_time': df['timestamp'].iloc[j],
@@ -1244,7 +1219,7 @@ def backtest_strategy(symbol, timeframe='4h', days=180):
                 break
 
             # Check for take profit hit
-            if current_high >= trade['take_profit']:
+            if df['high'].iloc[j] >= trade['take_profit']:
                 trade.update({
                     'exit_price': trade['take_profit'],
                     'exit_time': df['timestamp'].iloc[j],
@@ -1252,7 +1227,7 @@ def backtest_strategy(symbol, timeframe='4h', days=180):
                     'profit': (trade['take_profit'] - trade['entry_price']) / trade['entry_price']
                 })
                 break
-
+        
         # Handle trades that didn't hit targets
         if trade['status'] == 'open':
             trade.update({
@@ -1262,7 +1237,6 @@ def backtest_strategy(symbol, timeframe='4h', days=180):
                 'profit': (df['close'].iloc[max_hold] - trade['entry_price']) / trade['entry_price']
             })
         
-        # Calculate drawdown
         lowest_point = df['low'].iloc[entry_idx:j+1].min()
         trade['drawdown'] = (lowest_point - trade['entry_price']) / trade['entry_price']
     
@@ -1280,16 +1254,16 @@ def analyze_results(signals):
         df['profit_pct'] = df['profit'] * 100
 
         # Calculate outcomes with properly closed np.where() calls
-        df['outcome'] = np.where(
-            df['profit'] > 0, 'WIN',
-            np.where(df['profit'] < 0, 'LOSS', 'BREAKEVEN')
-        )
-
+        df['outcome'] = np.where(df['profit'] > 0, 'WIN', np.where(df['profit'] < 0, 'LOSS', 'BREAKEVEN'))
         # Basic metrics
         total_trades = len(df)
         win_rate = len(df[df['outcome'] == 'WIN']) / total_trades
         avg_win = df[df['outcome'] == 'WIN']['profit_pct'].mean()
+        if np.isnan(avg_win):
+            avg_win = 0.0
         avg_loss = df[df['outcome'] == 'LOSS']['profit_pct'].mean()
+        if np.isnan(avg_loss):
+            avg_loss = 0.0
         profit_factor = abs(avg_win / avg_loss) if avg_loss != 0 else np.inf
 
         print(f"Total Trades: {total_trades}")
@@ -1358,14 +1332,15 @@ def analyze_aggregated_results(all_signals, initial_capital=1000):
     try:
         df = pd.DataFrame(all_signals)
         df['profit_pct'] = df['profit'] * 100
-        df['outcome'] = np.where(
-            df['profit'] > 0, 'WIN',
-            np.where(df['profit'] < 0, 'LOSS', 'BREAKEVEN')
-        )
+        df['outcome'] = np.where(df['profit'] > 0, 'WIN', np.where(df['profit'] < 0, 'LOSS', 'BREAKEVEN'))
         total_trades = len(df)
         win_rate = len(df[df['outcome'] == 'WIN']) / total_trades
         avg_win = df[df['outcome'] == 'WIN']['profit_pct'].mean()
+        if np.isnan(avg_win):
+            avg_win = 0.0
         avg_loss = df[df['outcome'] == 'LOSS']['profit_pct'].mean()
+        if np.isnan(avg_loss):
+            avg_loss = 0.0
         profit_factor = abs(avg_win / avg_loss) if avg_loss != 0 else np.inf
         max_drawdown = df['drawdown'].min()
         final_capital = simulate_capital(all_signals, initial_capital=initial_capital)
@@ -1383,13 +1358,27 @@ def analyze_aggregated_results(all_signals, initial_capital=1000):
     except Exception as e:
         print(f"Aggregated analysis error: {str(e)}")
 
+def run_sequential_backtest(trades, initial_capital=1000):
+    """
+    Runs trades sequentially updating the current capital after each trade,
+    so that each trade's sizing is based on the updated capital.
+    """
+    current_capital = initial_capital
+    trades_sorted = sorted(trades, key=lambda t: t['entry_time'])
+    for trade in trades_sorted:
+        if 'profit' in trade:
+            # Update the capital based on the trade's profit (e.g., 0.015 for a 1.5% gain)
+            current_capital *= (1 + trade['profit'])
+            trade['capital_after'] = current_capital
+    return current_capital
+
 def main():
-    """Main execution flow with random selection from top 50 volume pairs and aggregated report"""
-    top_volume_pairs = get_top_volume_pairs(limit=50)
+    """Main execution flow with random selection from top 100 volume pairs and aggregated report"""
+    top_volume_pairs = get_top_volume_pairs(limit=100)
     if not top_volume_pairs:
         print("No top volume pairs found.")
         return
-    symbols = random.sample(top_volume_pairs, 10)
+    symbols = random.sample(top_volume_pairs, 20)
     print(f"Testing symbols: {', '.join(symbols)}\n")
     
     all_trades = []
