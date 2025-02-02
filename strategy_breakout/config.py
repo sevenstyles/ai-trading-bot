@@ -8,8 +8,8 @@ DEBUG_LOG_DIR.mkdir(exist_ok=True)
 STRATEGY_FILE = os.path.join(BASE_DIR, '..', 'strategy_3_prompt.txt')
 
 # Binance API credentials (update with your keys)
-BINANCE_API_KEY = 'YOUR_API_KEY'
-BINANCE_API_SECRET = 'YOUR_API_SECRET'
+BINANCE_API_KEY = '65dbbd66d67732a4c601a0031eeb152b37ce9532de11edc857accf41e6087659'
+BINANCE_API_SECRET = 'f851e4347572938d9f945c67c8904cece84175d6210d8400b04e3cd44d67e666'
 
 # Trade and risk parameters
 CONFIRMATION_WINDOW = 24  # 6 hours (24*15min)

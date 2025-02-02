@@ -1,4 +1,5 @@
 import time
+# NOTE: Live trading now mimics the backtester by using 4h candle data and the identical indicator logic for trade signals.
 import pandas as pd
 from datetime import datetime
 from binance.client import Client
@@ -20,8 +21,8 @@ from indicators import (
 # Global dictionary to hold candle data for each symbol
 candles_dict = {}
 
-# Set interval for live data (e.g., 1m candles)
-interval = "1m"
+# Set interval for live data (using same timeframe as backtesting, e.g., 4h candles)
+interval = "4h"
 
 # Get the top 50 coins by volume using our data_fetch function
 symbols = get_top_volume_pairs(limit=50)
