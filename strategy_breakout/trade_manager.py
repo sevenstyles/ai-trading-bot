@@ -3,7 +3,7 @@ from datetime import datetime
 import state
 from logger import log_debug
 from binance_client import client
-from config import RISK_PER_TRADE, FUTURES_FEE, SLIPPAGE_RATE, LEVERAGE
+from config import RISK_PER_TRADE, FUTURES_FEE, SLIPPAGE_RATE, LEVERAGE, CANDLESTICK_INTERVAL
 from indicators import (
     calculate_market_structure,
     calculate_trend_strength,
@@ -212,8 +212,9 @@ def save_executed_trades_csv():
                 except Exception as e:
                     return None
             df['profit_pct'] = df.apply(calc_profit, axis=1)
-        df.to_csv("executed_trades.csv", index=False)
-        log_debug("Executed trades saved to executed_trades.csv")
+        filename = f"executed_trades_{CANDLESTICK_INTERVAL}.csv"
+        df.to_csv(filename, index=False)
+        log_debug(f"Executed trades saved to {filename}")
 
 
 def save_active_trades_csv():
