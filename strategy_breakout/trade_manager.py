@@ -201,6 +201,17 @@ def simulate_fill_price(side, market_price):
 def save_executed_trades_csv():
     if state.executed_trades:
         df = pd.DataFrame(state.executed_trades)
+        # Calculate profit percentage if trade details exist
+        if all(col in df.columns for col in ['entry_price', 'exit_price', 'direction']):
+            def calc_profit(row):
+                try:
+                    if row['direction'] == 'long':
+                        return ((row['exit_price'] - row['entry_price']) / row['entry_price']) * 100
+                    elif row['direction'] == 'short':
+                        return ((row['entry_price'] - row['exit_price']) / row['entry_price']) * 100
+                except Exception as e:
+                    return None
+            df['profit_pct'] = df.apply(calc_profit, axis=1)
         df.to_csv("executed_trades.csv", index=False)
         log_debug("Executed trades saved to executed_trades.csv")
 
