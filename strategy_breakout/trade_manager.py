@@ -154,7 +154,7 @@ def place_order(symbol, side, price):
         else:
             order_value = usdt_balance * RISK_PER_TRADE
             quantity = order_value / price
-            quantity = round(quantity, 6)
+            quantity = round(quantity, 3)
         order = client.futures_create_order(
             symbol=symbol,
             side=side,
