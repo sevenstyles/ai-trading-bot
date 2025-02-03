@@ -34,7 +34,7 @@ def update_active_trade(symbol, df):
                 update_stop_order(symbol, trade)
         if latest_candle['low'] <= trade['stop_loss']:
             print(f"Long trade stop hit for {symbol}")
-            close_trade(symbol, trade, trade['stop_loss'], df.index[-1])
+            close_trade(symbol, trade, trade['stop_loss'], df.index[-1], close_reason="stop loss hit")
     elif trade['direction'] == 'short':
         if 'new_low' not in trade:
             trade['new_low'] = trade['entry_price']
@@ -48,10 +48,10 @@ def update_active_trade(symbol, df):
                 update_stop_order(symbol, trade)
         if latest_candle['high'] >= trade['stop_loss']:
             print(f"Short trade stop hit for {symbol}")
-            close_trade(symbol, trade, trade['stop_loss'], df.index[-1])
+            close_trade(symbol, trade, trade['stop_loss'], df.index[-1], close_reason="stop loss hit")
 
 
-def close_trade(symbol, trade, exit_price, exit_time):
+def close_trade(symbol, trade, exit_price, exit_time, close_reason=""):
     if "stop_order_id" in trade:
         try:
             cancel_result = client.futures_cancel_order(symbol=symbol, orderId=trade["stop_order_id"])
@@ -79,6 +79,7 @@ def close_trade(symbol, trade, exit_price, exit_time):
     trade['exit_price'] = effective_exit
     trade['exit_time'] = exit_time
     trade['status'] = 'closed'
+    trade['close_reason'] = close_reason
     print(f"Trade closed for {symbol}: {trade}")
     trade_record = trade.copy()
     trade_record['symbol'] = symbol
