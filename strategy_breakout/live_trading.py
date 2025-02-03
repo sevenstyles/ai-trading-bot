@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime
 from binance.client import Client
 from binance import ThreadedWebsocketManager
-from config import BINANCE_API_KEY, BINANCE_API_SECRET, FUTURES_FEE, SLIPPAGE_RATE
+from config import BINANCE_API_KEY, BINANCE_API_SECRET, FUTURES_FEE, SLIPPAGE_RATE, RISK_PER_TRADE
 from data_fetch import get_top_volume_pairs
 # Import your signal and indicator functions
 from indicators import (
@@ -287,7 +287,7 @@ def check_for_trade(symbol):
         print(f"Long signal detected for {symbol}!")
         market_price = df["close"].iloc[-1]
         simulated_entry = simulate_fill_price("BUY", market_price)
-        place_order(symbol, "BUY", market_price)
+        quantity = place_order(symbol, "BUY", market_price)
         active_trades[symbol] = {
             'entry_time': df.index[-1],
             'entry_price': simulated_entry,
@@ -295,7 +295,7 @@ def check_for_trade(symbol):
             'take_profit': simulated_entry * 1.03,  # LONG_TAKE_PROFIT_MULTIPLIER
             'direction': 'long',
             'status': 'open',
-            'quantity': 0.001
+            'quantity': quantity if quantity is not None else 0.001
         }
         update_stop_order(symbol, active_trades[symbol])
     # Check for short signal
@@ -303,7 +303,7 @@ def check_for_trade(symbol):
         print(f"Short signal detected for {symbol}!")
         market_price = df["close"].iloc[-1]
         simulated_entry = simulate_fill_price("SELL", market_price)
-        place_order(symbol, "SELL", market_price)
+        quantity = place_order(symbol, "SELL", market_price)
         active_trades[symbol] = {
             'entry_time': df.index[-1],
             'entry_price': simulated_entry,
@@ -311,7 +311,7 @@ def check_for_trade(symbol):
             'take_profit': simulated_entry * 0.97,  # SHORT_TAKE_PROFIT_MULTIPLIER
             'direction': 'short',
             'status': 'open',
-            'quantity': 0.001
+            'quantity': quantity if quantity is not None else 0.001
         }
         update_stop_order(symbol, active_trades[symbol])
     else:
@@ -322,22 +322,38 @@ def check_for_trade(symbol):
 
 def place_order(symbol, side, price):
     """
-    Places a market order for the given symbol on Binance Futures Testnet.
+    Places a market order for the given symbol on Binance Futures Testnet using risk percent from config.
     :param symbol: The trading pair symbol (e.g., BTCUSDT)
     :param side: "BUY" for long, "SELL" for short
-    :param price: The current close price (for logging purposes)
+    :param price: The current close price (for calculating position size and logging purposes)
     """
-    quantity = 0.001  # Example fixed quantity for demonstration
     try:
+        # Retrieve futures account balance and calculate risk percent of available USDT capital
+        balance_info = client.futures_account_balance()
+        usdt_balance = None
+        for b in balance_info:
+            if b.get('asset') == 'USDT':
+                usdt_balance = float(b.get('balance', 0))
+                break
+        if usdt_balance is None or usdt_balance <= 0:
+            print(f"Unable to retrieve USDT balance or balance is zero. Using default quantity 0.001")
+            quantity = 0.001
+        else:
+            order_value = usdt_balance * RISK_PER_TRADE  # use risk percent from config
+            quantity = order_value / price
+            # Round quantity to 6 decimal places for demonstration purposes
+            quantity = round(quantity, 6)
         order = client.futures_create_order(
             symbol=symbol,
             side=side,
             type="MARKET",
             quantity=quantity
         )
-        print(f"Order placed for {symbol}: {order}")
+        print(f"Order placed for {symbol} at calculated quantity {quantity}: {order}")
+        return quantity
     except Exception as e:
         print(f"Error placing order for {symbol}: {e}")
+        return None
 
 def simulate_fill_price(side, market_price):
     # For BUY orders, effective fill price is increased by slippage and fee
