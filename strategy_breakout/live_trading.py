@@ -34,6 +34,29 @@ candles_dict = {}
 # Add global active trades dictionary at the top
 active_trades = {}  # key: symbol, value: trade dict
 
+def preload_candles():
+    """Preloads the most recent 50 candles (using the current interval) for each symbol, so that technical indicators have sufficient historical data immediately upon starting live trading."""
+    print("Preloading historical candles for symbols...")
+    log_debug("Preloading historical candles for symbols...")
+    for symbol in symbols:
+        try:
+            klines = client.futures_klines(symbol=symbol, interval=interval, limit=50)
+            df = pd.DataFrame(klines, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume',
+                                                 'close_time', 'quote_asset_volume', 'trades',
+                                                 'taker_buy_base', 'taker_buy_quote', 'ignore'])
+            numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+            df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors='coerce')
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df.set_index('timestamp', inplace=True)
+            candles_dict[symbol] = df[numeric_cols]
+            msg = f"Preloaded {len(df)} candles for {symbol}"
+            print(msg)
+            log_debug(msg)
+        except Exception as e:
+            err_msg = f"Error preloading candles for {symbol}: {e}"
+            print(err_msg)
+            log_debug(err_msg)
+
 # Set interval for live data (now using 5 minute candles)
 interval = "5m"
 
@@ -97,6 +120,7 @@ def process_candle(msg):
         candles_dict[coin_symbol] = candles_dict[coin_symbol].tail(100)
         
         print(f"Candle for {coin_symbol} closed at {candle_time}: close = {close}")
+        log_debug(f"Candle for {coin_symbol} closed at {candle_time}: close = {close}")
         
         # Call check_for_trade for the symbol
         check_for_trade(coin_symbol)
@@ -151,8 +175,20 @@ def check_for_trade(symbol):
     """
     Checks if a trade signal is generated for the given symbol based on its candle data.
     """
-    if symbol not in candles_dict or len(candles_dict[symbol]) < 50:
+    candle_count = len(candles_dict.get(symbol, []))
+    log_debug(f"check_for_trade called for {symbol}, candle count: {candle_count}")
+    print(f"check_for_trade called for {symbol}, candle count: {candle_count}")
+
+    if symbol not in candles_dict:
+        log_debug(f"No candles available yet for {symbol}")
+        print(f"No candles available yet for {symbol}")
         return
+
+    if candle_count < 50:
+        log_debug(f"Not enough candles for {symbol}. Only {candle_count} available, waiting for at least 50.")
+        print(f"Not enough candles for {symbol}. Only {candle_count} available, waiting for at least 50.")
+        return
+
     df = candles_dict[symbol].copy().sort_index()
     
     # If there's an active trade, update its trailing stop
@@ -230,6 +266,7 @@ def place_order(symbol, side, price):
         print(f"Error placing order for {symbol}: {e}")
 
 def main():
+    preload_candles()
     twm = ThreadedWebsocketManager(api_key=BINANCE_API_KEY, api_secret=BINANCE_API_SECRET, testnet=True)
     twm.start()
     
