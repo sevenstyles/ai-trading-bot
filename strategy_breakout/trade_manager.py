@@ -118,7 +118,7 @@ def check_for_trade(symbol):
         state.active_trades[symbol] = {
             'entry_time': df.index[-1],
             'entry_price': simulated_entry,
-            'stop_loss': simulated_entry * 0.99,
+            'stop_loss': simulated_entry * 0.995,
             'take_profit': simulated_entry * 1.03,
             'direction': 'long',
             'status': 'open',
@@ -132,7 +132,7 @@ def check_for_trade(symbol):
         state.active_trades[symbol] = {
             'entry_time': df.index[-1],
             'entry_price': simulated_entry,
-            'stop_loss': simulated_entry * 1.01,
+            'stop_loss': simulated_entry * 1.005,
             'take_profit': simulated_entry * 0.97,
             'direction': 'short',
             'status': 'open',
@@ -192,9 +192,9 @@ def place_order(symbol, side, price):
 
 def simulate_fill_price(side, market_price):
     if side == "BUY":
-        return market_price * (1 + SLIPPAGE_RATE + FUTURES_FEE)
+        return market_price * (1 + SLIPPAGE_RATE)
     elif side == "SELL":
-        return market_price * (1 - SLIPPAGE_RATE - FUTURES_FEE)
+        return market_price * (1 - SLIPPAGE_RATE)
     return market_price
 
 

@@ -3,9 +3,9 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import random
-from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, LONG_TAKE_PROFIT_MULTIPLIER, SHORT_TAKE_PROFIT_MULTIPLIER, FUTURES_FEE, SLIPPAGE_RATE, LONG_STOP_LOSS_MULTIPLIER, SHORT_STOP_LOSS_MULTIPLIER, TRAILING_STOP_PCT, TRAILING_START_LONG, TRAILING_START_SHORT, MIN_BARS_BEFORE_STOP, ATR_PERIOD, LONG_STOP_LOSS_ATR_MULTIPLIER, SHORT_STOP_LOSS_ATR_MULTIPLIER
+from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, LONG_TAKE_PROFIT_MULTIPLIER, SHORT_TAKE_PROFIT_MULTIPLIER, SLIPPAGE_RATE, LONG_STOP_LOSS_MULTIPLIER, SHORT_STOP_LOSS_MULTIPLIER, TRAILING_STOP_PCT, TRAILING_START_LONG, TRAILING_START_SHORT, MIN_BARS_BEFORE_STOP, ATR_PERIOD, LONG_STOP_LOSS_ATR_MULTIPLIER, SHORT_STOP_LOSS_ATR_MULTIPLIER, FUTURES_MAKER_FEE, FUTURES_TAKER_FEE
 
-def backtest_strategy(symbol, timeframe='1h', days=7, client=None, use_random_date=False):
+def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_date=False):
     from datetime import datetime, timedelta
     if use_random_date:
         start_random = datetime(2021, 1, 1)
@@ -89,8 +89,8 @@ def backtest_strategy(symbol, timeframe='1h', days=7, client=None, use_random_da
                             trade['stop_loss'] = potential_stop
                 if (j - entry_idx) >= min_bars_before_stop and df['low'].iloc[j] <= trade['stop_loss']:
                     exit_price = trade['stop_loss']
-                    adjusted_entry = trade['entry_price'] * (1 + FUTURES_FEE + SLIPPAGE_RATE)
-                    adjusted_exit = exit_price * (1 - FUTURES_FEE - SLIPPAGE_RATE)
+                    adjusted_entry = trade['entry_price'] * (1 + FUTURES_MAKER_FEE + SLIPPAGE_RATE)
+                    adjusted_exit = exit_price * (1 - FUTURES_TAKER_FEE - SLIPPAGE_RATE)
                     trade.update({
                         'exit_price': exit_price,
                         'exit_time': df['timestamp'].iloc[j],
@@ -101,8 +101,8 @@ def backtest_strategy(symbol, timeframe='1h', days=7, client=None, use_random_da
                     break
                 if df['high'].iloc[j] >= trade['take_profit']:
                     exit_price = trade['take_profit']
-                    adjusted_entry = trade['entry_price'] * (1 + FUTURES_FEE + SLIPPAGE_RATE)
-                    adjusted_exit = exit_price * (1 - FUTURES_FEE - SLIPPAGE_RATE)
+                    adjusted_entry = trade['entry_price'] * (1 + FUTURES_MAKER_FEE + SLIPPAGE_RATE)
+                    adjusted_exit = exit_price * (1 - FUTURES_TAKER_FEE - SLIPPAGE_RATE)
                     trade.update({
                         'exit_price': exit_price,
                         'exit_time': df['timestamp'].iloc[j],
@@ -113,8 +113,8 @@ def backtest_strategy(symbol, timeframe='1h', days=7, client=None, use_random_da
                     break
             if trade['status'] == 'open':
                 exit_price = df['close'].iloc[max_hold]
-                adjusted_entry = trade['entry_price'] * (1 + FUTURES_FEE + SLIPPAGE_RATE)
-                adjusted_exit = exit_price * (1 - FUTURES_FEE - SLIPPAGE_RATE)
+                adjusted_entry = trade['entry_price'] * (1 + FUTURES_MAKER_FEE + SLIPPAGE_RATE)
+                adjusted_exit = exit_price * (1 - FUTURES_TAKER_FEE - SLIPPAGE_RATE)
                 let_profit = (adjusted_exit - adjusted_entry) / adjusted_entry
                 trade.update({
                     'exit_price': exit_price,
@@ -136,8 +136,8 @@ def backtest_strategy(symbol, timeframe='1h', days=7, client=None, use_random_da
                             trade['stop_loss'] = potential_stop
                 if (j - entry_idx) >= min_bars_before_stop and df['low'].iloc[j] <= trade['take_profit']:
                     exit_price = trade['take_profit']
-                    adjusted_entry = trade['entry_price'] * (1 - FUTURES_FEE - SLIPPAGE_RATE)
-                    adjusted_exit = exit_price * (1 + FUTURES_FEE + SLIPPAGE_RATE)
+                    adjusted_entry = trade['entry_price'] * (1 - FUTURES_MAKER_FEE - SLIPPAGE_RATE)
+                    adjusted_exit = exit_price * (1 + FUTURES_TAKER_FEE + SLIPPAGE_RATE)
                     trade.update({
                         'exit_price': exit_price,
                         'exit_time': df['timestamp'].iloc[j],
@@ -148,8 +148,8 @@ def backtest_strategy(symbol, timeframe='1h', days=7, client=None, use_random_da
                     break
                 if df['high'].iloc[j] >= trade['stop_loss']:
                     exit_price = trade['stop_loss']
-                    adjusted_entry = trade['entry_price'] * (1 - FUTURES_FEE - SLIPPAGE_RATE)
-                    adjusted_exit = exit_price * (1 + FUTURES_FEE + SLIPPAGE_RATE)
+                    adjusted_entry = trade['entry_price'] * (1 - FUTURES_MAKER_FEE - SLIPPAGE_RATE)
+                    adjusted_exit = exit_price * (1 + FUTURES_TAKER_FEE + SLIPPAGE_RATE)
                     trade.update({
                         'exit_price': exit_price,
                         'exit_time': df['timestamp'].iloc[j],
@@ -160,8 +160,8 @@ def backtest_strategy(symbol, timeframe='1h', days=7, client=None, use_random_da
                     break
             if trade['status'] == 'open':
                 exit_price = df['close'].iloc[max_hold]
-                adjusted_entry = trade['entry_price'] * (1 - FUTURES_FEE - SLIPPAGE_RATE)
-                adjusted_exit = exit_price * (1 + FUTURES_FEE + SLIPPAGE_RATE)
+                adjusted_entry = trade['entry_price'] * (1 - FUTURES_MAKER_FEE - SLIPPAGE_RATE)
+                adjusted_exit = exit_price * (1 + FUTURES_TAKER_FEE + SLIPPAGE_RATE)
                 sh_profit = (adjusted_entry - adjusted_exit) / adjusted_entry
                 trade.update({
                     'exit_price': exit_price,
@@ -234,7 +234,8 @@ def analyze_aggregated_results(all_signals, initial_capital=1000):
         print(f"Short Take Profit Target   : {config.SHORT_TAKE_PROFIT_MULTIPLIER}")
         print(f"Long Stop Loss Multiplier  : {config.LONG_STOP_LOSS_MULTIPLIER}")
         print(f"Short Stop Loss Multiplier : {config.SHORT_STOP_LOSS_MULTIPLIER}")
-        print(f"Futures Fee                : {config.FUTURES_FEE}")
+        print(f"Futures Maker Fee         : {config.FUTURES_MAKER_FEE}")
+        print(f"Futures Taker Fee         : {config.FUTURES_TAKER_FEE}")
         print(f"Slippage Rate              : {config.SLIPPAGE_RATE}")
         print("="*30)
         print("=== TECHNICAL SETTINGS ===")
