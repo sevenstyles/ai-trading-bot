@@ -3,7 +3,7 @@ from datetime import datetime
 import state
 from logger import log_debug
 from binance_client import client
-from config import RISK_PER_TRADE, FUTURES_FEE, SLIPPAGE_RATE
+from config import RISK_PER_TRADE, FUTURES_FEE, SLIPPAGE_RATE, LEVERAGE
 from indicators import (
     calculate_market_structure,
     calculate_trend_strength,
@@ -15,6 +15,7 @@ from indicators import (
     generate_short_signal
 )
 from trade_logger import log_trade
+import math
 
 def update_active_trade(symbol, df):
     trade = state.active_trades.get(symbol)
@@ -141,7 +142,27 @@ def check_for_trade(symbol):
     save_active_trades_csv()
 
 
+def dynamic_round_quantity(symbol, quantity):
+    try:
+        info = client.get_symbol_info(symbol)
+        for f in info.get('filters', []):
+            if f.get('filterType') == 'LOT_SIZE':
+                step_size = float(f.get('stepSize'))
+                # Calculate precision based on step_size
+                if step_size > 0:
+                    precision = int(round(-math.log10(step_size)))
+                    return round(quantity, precision)
+        return round(quantity, 3)
+    except Exception as e:
+        return round(quantity, 3)
+
+
 def place_order(symbol, side, price):
+    try:
+        # Set the desired leverage for the symbol
+        client.futures_change_leverage(symbol=symbol, leverage=LEVERAGE)
+    except Exception as e:
+        log_trade(f"Error setting leverage for {symbol}: {e}")
     try:
         balance_info = client.futures_account_balance()
         usdt_balance = None
@@ -154,7 +175,7 @@ def place_order(symbol, side, price):
         else:
             order_value = usdt_balance * RISK_PER_TRADE
             quantity = order_value / price
-            quantity = round(quantity, 3)
+            quantity = dynamic_round_quantity(symbol, quantity)
         order = client.futures_create_order(
             symbol=symbol,
             side=side,
