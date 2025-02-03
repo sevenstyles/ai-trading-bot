@@ -183,8 +183,7 @@ def close_trade(symbol, trade, exit_price, exit_time):
             symbol=symbol,
             side=side,
             type="MARKET",
-            closePosition=True,
-            reduceOnly=True
+            closePosition=True
         )
         print(f"Exit order placed for {symbol}: {order}")
         if 'avgPrice' in order and float(order['avgPrice']) > 0:
@@ -394,15 +393,37 @@ def update_stop_order(symbol, trade):
 
     # Place a new STOP_MARKET order with the updated stop loss
     try:
+        # Determine a simple rounding based on stop_loss value (adjust as needed per asset)
+        stop_loss = trade["stop_loss"]
+        stop_price_str = ""
+        if stop_loss >= 10:
+            stop_price_str = f"{stop_loss:.2f}"
+        else:
+            stop_price_str = f"{stop_loss:.4f}"
+
+        # New check: get the current market price from candles_dict if available
+        current_price = None
+        if symbol in candles_dict and not candles_dict[symbol].empty:
+            current_price = candles_dict[symbol].iloc[-1]["close"]
+        
+        if current_price is not None:
+            stop_price = float(stop_price_str)
+            if trade["direction"] == "short" and stop_price <= current_price:
+                print(f"Skipping update for {symbol} short: new stop price {stop_price} is not above current price {current_price}")
+                return
+            if trade["direction"] == "long" and stop_price >= current_price:
+                print(f"Skipping update for {symbol} long: new stop price {stop_price} is not below current price {current_price}")
+                return
+
         new_order = client.futures_create_order(
             symbol=symbol,
             side=side,
             type="STOP_MARKET",
-            stopPrice=str(trade["stop_loss"]),
+            stopPrice=stop_price_str,
             closePosition=True
         )
         trade["stop_order_id"] = new_order.get("orderId")
-        print(f"Placed new stop order for {symbol} at {trade['stop_loss']}: {new_order}")
+        print(f"Placed new stop order for {symbol} at {stop_price_str}: {new_order}")
     except Exception as e:
         print(f"Error placing new stop order for {symbol}: {e}")
 
