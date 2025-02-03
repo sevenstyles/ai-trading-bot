@@ -1,2 +1,2 @@
-entry_time,entry_price,stop_loss,take_profit,direction,status,quantity,symbol
-2025-02-03 16:28:16.322113,98408.1,99392.18100000001,95455.857,short,open,0.005,BTCUSDT
+entry_time,entry_price,stop_loss,take_profit,direction,status,quantity,new_low,symbol
+2025-02-03 18:31:37.642939,97215.64,94499.95072499999,94299.17079999999,short,open,0.01,94264.29,BTCUSDT

@@ -1,5 +1,5 @@
 @echo off
 cd /d %~dp0
-echo "Starting live trading with 5m timeframe..."
+echo "Starting live trading"
 python live_trading.py
 pause
