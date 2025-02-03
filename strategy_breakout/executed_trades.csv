@@ -1,2 +1,0 @@
-entry_time,entry_price,stop_loss,take_profit,direction,status,quantity,new_low,exit_price,exit_time,close_reason,symbol
-2025-02-03 20:21:18.596256,98055.4,95581.187075,95113.738,short,closed,0.005,95342.83,95667.21014336748,2025-02-03 20:21:00,stop loss hit,BTCUSDT
