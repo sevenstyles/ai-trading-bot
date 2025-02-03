@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import random
-from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, LONG_TAKE_PROFIT_MULTIPLIER, SHORT_TAKE_PROFIT_MULTIPLIER, FUTURES_FEE, SLIPPAGE_RATE
+from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, LONG_TAKE_PROFIT_MULTIPLIER, SHORT_TAKE_PROFIT_MULTIPLIER, FUTURES_FEE, SLIPPAGE_RATE, LONG_STOP_LOSS_MULTIPLIER, SHORT_STOP_LOSS_MULTIPLIER
 
 def backtest_strategy(symbol, timeframe='1h', days=7, client=None):
     from datetime import datetime, timedelta
@@ -36,7 +36,7 @@ def backtest_strategy(symbol, timeframe='1h', days=7, client=None):
             entry = {
                 'entry_time': df['timestamp'].iloc[i],
                 'entry_price': df['close'].iloc[i],
-                'stop_loss': df['close'].iloc[i] * 0.995,
+                'stop_loss': df['close'].iloc[i] * LONG_STOP_LOSS_MULTIPLIER,
                 'take_profit': df['close'].iloc[i] * LONG_TAKE_PROFIT_MULTIPLIER,
                 'exit_price': 0,
                 'exit_time': None,
@@ -51,7 +51,7 @@ def backtest_strategy(symbol, timeframe='1h', days=7, client=None):
             entry = {
                 'entry_time': df['timestamp'].iloc[i],
                 'entry_price': df['close'].iloc[i],
-                'stop_loss': df['close'].iloc[i] * 1.005,
+                'stop_loss': df['close'].iloc[i] * SHORT_STOP_LOSS_MULTIPLIER,
                 'take_profit': df['close'].iloc[i] * SHORT_TAKE_PROFIT_MULTIPLIER,
                 'exit_price': 0,
                 'exit_time': None,
@@ -63,14 +63,14 @@ def backtest_strategy(symbol, timeframe='1h', days=7, client=None):
             }
             signals.append(entry)
     trailing_stop_pct = 0.0025
-    min_bars_before_stop = 3
+    min_bars_before_stop = 10
     for trade in signals:
         entry_idx = df[df['timestamp'] == trade['entry_time']].index[0]
         max_hold = min(entry_idx + MAX_HOLD_BARS, len(df) - 1)
         if trade['direction'] == 'long':
             new_high = trade['entry_price']
             for j in range(entry_idx, max_hold + 1):
-                if df['high'].iloc[j] > trade['entry_price'] * 1.03:
+                if df['high'].iloc[j] > trade['entry_price'] * 1.02:
                     if df['high'].iloc[j] > new_high:
                         new_high = df['high'].iloc[j]
                         potential_stop = new_high * (1 - trailing_stop_pct)
@@ -84,7 +84,8 @@ def backtest_strategy(symbol, timeframe='1h', days=7, client=None):
                         'exit_price': exit_price,
                         'exit_time': df['timestamp'].iloc[j],
                         'status': 'stopped',
-                        'profit': (adjusted_exit - adjusted_entry) / adjusted_entry
+                        'profit': (adjusted_exit - adjusted_entry) / adjusted_entry,
+                        'outcome': 'LOSS'
                     })
                     break
                 if df['high'].iloc[j] >= trade['take_profit']:
@@ -95,25 +96,28 @@ def backtest_strategy(symbol, timeframe='1h', days=7, client=None):
                         'exit_price': exit_price,
                         'exit_time': df['timestamp'].iloc[j],
                         'status': 'target',
-                        'profit': (adjusted_exit - adjusted_entry) / adjusted_entry
+                        'profit': (adjusted_exit - adjusted_entry) / adjusted_entry,
+                        'outcome': 'WIN'
                     })
                     break
             if trade['status'] == 'open':
                 exit_price = df['close'].iloc[max_hold]
                 adjusted_entry = trade['entry_price'] * (1 + FUTURES_FEE + SLIPPAGE_RATE)
                 adjusted_exit = exit_price * (1 - FUTURES_FEE - SLIPPAGE_RATE)
+                let_profit = (adjusted_exit - adjusted_entry) / adjusted_entry
                 trade.update({
                     'exit_price': exit_price,
                     'exit_time': df['timestamp'].iloc[max_hold],
                     'status': 'expired',
-                    'profit': (adjusted_exit - adjusted_entry) / adjusted_entry
+                    'profit': let_profit,
+                    'outcome': 'WIN' if let_profit >= 0 else 'LOSS'
                 })
             lowest_point = df['low'].iloc[entry_idx:j+1].min()
             trade['drawdown'] = (lowest_point - trade['entry_price']) / trade['entry_price']
         elif trade['direction'] == 'short':
             new_low = trade['entry_price']
             for j in range(entry_idx, max_hold + 1):
-                if df['low'].iloc[j] < trade['entry_price'] * 0.97:
+                if df['low'].iloc[j] < trade['entry_price'] * 0.98:
                     if df['low'].iloc[j] < new_low:
                         new_low = df['low'].iloc[j]
                         potential_stop = new_low * (1 + trailing_stop_pct)
@@ -127,7 +131,8 @@ def backtest_strategy(symbol, timeframe='1h', days=7, client=None):
                         'exit_price': exit_price,
                         'exit_time': df['timestamp'].iloc[j],
                         'status': 'target',
-                        'profit': (adjusted_entry - adjusted_exit) / adjusted_entry
+                        'profit': (adjusted_entry - adjusted_exit) / adjusted_entry,
+                        'outcome': 'WIN'
                     })
                     break
                 if df['high'].iloc[j] >= trade['stop_loss']:
@@ -138,18 +143,21 @@ def backtest_strategy(symbol, timeframe='1h', days=7, client=None):
                         'exit_price': exit_price,
                         'exit_time': df['timestamp'].iloc[j],
                         'status': 'stopped',
-                        'profit': (adjusted_entry - adjusted_exit) / adjusted_entry
+                        'profit': (adjusted_entry - adjusted_exit) / adjusted_entry,
+                        'outcome': 'LOSS'
                     })
                     break
             if trade['status'] == 'open':
                 exit_price = df['close'].iloc[max_hold]
                 adjusted_entry = trade['entry_price'] * (1 - FUTURES_FEE - SLIPPAGE_RATE)
                 adjusted_exit = exit_price * (1 + FUTURES_FEE + SLIPPAGE_RATE)
+                sh_profit = (adjusted_entry - adjusted_exit) / adjusted_entry
                 trade.update({
                     'exit_price': exit_price,
                     'exit_time': df['timestamp'].iloc[max_hold],
                     'status': 'expired',
-                    'profit': (adjusted_entry - adjusted_exit) / adjusted_entry
+                    'profit': sh_profit,
+                    'outcome': 'WIN' if sh_profit >= 0 else 'LOSS'
                 })
             highest_point = df['high'].iloc[entry_idx:j+1].max()
             trade['drawdown'] = (trade['entry_price'] - highest_point) / trade['entry_price']
@@ -170,7 +178,7 @@ def analyze_results(signals, symbol):
         return
     try:
         df = pd.DataFrame(signals)
-        df['profit_pct'] = df['profit'] * 100
+        df['profit_pct'] = (df['profit'] * 100).round(2)
         if 'stop_loss' in df.columns:
             df.rename(columns={'stop_loss': 'SL'}, inplace=True)
         if 'take_profit' in df.columns:
@@ -189,11 +197,7 @@ def analyze_results(signals, symbol):
             return
         df['entry_time'] = pd.to_datetime(df['entry_time'])
         df['exit_time'] = pd.to_datetime(df['exit_time'])
-        df['profit_pct'] = ((df['exit_price'] - df['entry_price']) / df['entry_price']) * 100
-        df['profit_pct'] = df['profit_pct'].round(2)
-        print("\n=== TRADE SUMMARY ===")
-        print(f"Total Trades: {len(df)}")
-        print(f"Time Period: {df['entry_time'].min()} to {df['entry_time'].max()}")
+        df['profit_pct'] = (df['profit'] * 100).round(2)
         df['outcome'] = np.where(df['profit'] > 0, 'WIN', np.where(df['profit'] < 0, 'LOSS', 'BREAKEVEN'))
         total_trades = len(df)
         win_rate = len(df[df['outcome'] == 'WIN']) / total_trades
@@ -212,8 +216,27 @@ def analyze_aggregated_results(all_signals, initial_capital=1000):
         print("No aggregated trades generated")
         return
     try:
+        import config
+        print("=== BACKTESTER SETTINGS ===")
+        print(f"Timeframe used             : {config.OHLCV_TIMEFRAME}")
+        print(f"Long Take Profit Target    : {config.LONG_TAKE_PROFIT_MULTIPLIER}")
+        print(f"Short Take Profit Target   : {config.SHORT_TAKE_PROFIT_MULTIPLIER}")
+        print(f"Long Stop Loss Multiplier  : {config.LONG_STOP_LOSS_MULTIPLIER}")
+        print(f"Short Stop Loss Multiplier : {config.SHORT_STOP_LOSS_MULTIPLIER}")
+        print(f"Futures Fee                : {config.FUTURES_FEE}")
+        print(f"Slippage Rate              : {config.SLIPPAGE_RATE}")
+        print("="*30)
+        print("=== TECHNICAL SETTINGS ===")
+        print(f"EMA Short Period   : {config.EMA_SHORT}")
+        print(f"EMA Long Period    : {config.EMA_LONG}")
+        print(f"ATR Period         : {config.ATR_PERIOD}")
+        print(f"Minimum ATR %      : {config.MIN_ATR_PCT}")
+        print(f"Trend Strength Th. : {config.TREND_STRENGTH_THRESHOLD}")
+        print(f"Minimum ADX        : {config.MIN_ADX}")
+        print(f"Momentum Window    : {config.MOMENTUM_WINDOW}")
+        print("="*30)
         df = pd.DataFrame(all_signals)
-        df['profit_pct'] = df['profit'] * 100
+        df['profit_pct'] = (df['profit'] * 100).round(2)
         if 'stop_loss' in df.columns:
             df.rename(columns={'stop_loss': 'SL'}, inplace=True)
         if 'take_profit' in df.columns:
@@ -242,20 +265,29 @@ def analyze_aggregated_results(all_signals, initial_capital=1000):
         losses_count = len(df[df['outcome'] == 'LOSS'])
         print(f"Total Wins: {wins_count}")
         print(f"Total Losses: {losses_count}")
-        
         best_trade = df.loc[df['profit_pct'].idxmax()]
         print(f"Best Trade: {best_trade['symbol']} trade on {best_trade['entry_time']} with profit {best_trade['profit_pct']:.2f}% (entry: {best_trade['entry_price']}, exit: {best_trade['exit_price']})")
-        
         pair_profit = df.groupby('symbol')['profit'].sum()
         best_pair = pair_profit.idxmax()
         best_pair_profit = pair_profit.max() * 100
         print(f"Best Performing Pair: {best_pair} with aggregated profit of {best_pair_profit:.2f}%")
-        
         long_count = len(df[df['direction'] == 'long'])
         short_count = len(df[df['direction'] == 'short'])
         print(f"Total Long Trades: {long_count}")
         print(f"Total Short Trades: {short_count}")
-        
+        df['entry_time'] = pd.to_datetime(df['entry_time'])
+        df['exit_time'] = pd.to_datetime(df['exit_time'])
+        df['trade_duration'] = (df['exit_time'] - df['entry_time']).dt.total_seconds() / 60  # trade duration in minutes
+        avg_duration = df['trade_duration'].mean()
+        max_duration = df['trade_duration'].max()
+        min_duration = df['trade_duration'].min()
+        duration_std = df['trade_duration'].std()
+        avg_risk_reward = df['risk_reward'].mean()
+        print(f"Average Trade Duration: {avg_duration:.2f} minutes")
+        print(f"Max Trade Duration: {max_duration:.2f} minutes")
+        print(f"Min Trade Duration: {min_duration:.2f} minutes")
+        print(f"Trade Duration Std Dev: {duration_std:.2f} minutes")
+        print(f"Average Risk/Reward Ratio: {avg_risk_reward:.2f}")
         print("\nSample Aggregated Trades:")
         print(df[['entry_time', 'entry_price', 'SL', 'TP', 'exit_price', 'profit_pct', 'outcome']].head(5))
     except Exception as e:

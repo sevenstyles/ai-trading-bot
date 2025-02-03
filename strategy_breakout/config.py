@@ -44,9 +44,9 @@ BLACKLIST = [
     'USDCUSDT', 'DAIUSDT'
 ]
 
-TREND_STRENGTH_THRESHOLD = 0.3
+TREND_STRENGTH_THRESHOLD = 0.8
 MIN_MOMENTUM_RATIO = 1.3
-MIN_ADX = 25
+MIN_ADX = 40
 MOMENTUM_WINDOW = 3
 BASE_HOLD_BARS = 18
 
@@ -63,10 +63,15 @@ TAKE_PROFIT_LEVELS = {
 
 MIN_LIQUIDITY = 500000
 
-# Profit target multipliers adjusted to target an average win of about 4%
-LONG_TAKE_PROFIT_MULTIPLIER = 1.06   # 4% profit target for long trades (risk 0.5% yields an 8:1 ratio)
-SHORT_TAKE_PROFIT_MULTIPLIER = 0.94    # 4% profit target for short trades (risk 0.5% yields an 8:1 ratio)
+# Backtester Settings
+OHLCV_TIMEFRAME = "1h"
+LONG_TAKE_PROFIT_MULTIPLIER = 1.05
+SHORT_TAKE_PROFIT_MULTIPLIER = 0.95
+LONG_STOP_LOSS_MULTIPLIER = 0.995
+SHORT_STOP_LOSS_MULTIPLIER = 1.005
+
+# Removed duplicate profit target multipliers. Previous definitions of 1.06 and 0.94 have been removed.
 
 # New parameters to simulate live futures trading conditions:
-FUTURES_FEE = 0.0004    # Binance Futures taker fee (0.04%)
+FUTURES_FEE = 0.0005    # Binance USDⓈ-M Futures taker fee (0.05%)
 SLIPPAGE_RATE = 0.0005  # Assumed slippage rate for order execution (0.05%) 

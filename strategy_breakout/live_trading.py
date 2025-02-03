@@ -221,12 +221,12 @@ def check_for_trade(symbol):
         print(f"Long signal detected for {symbol}!")
         price = df["close"].iloc[-1]
         place_order(symbol, "BUY", price)
-        # Track the active trade
+        # Track the active trade with updated multipliers from config
         active_trades[symbol] = {
             'entry_time': df.index[-1],
             'entry_price': price,
-            'stop_loss': price * 0.995,
-            'take_profit': price * 1.06,  # using LONG_TAKE_PROFIT_MULTIPLIER from backtesting, adjust as needed
+            'stop_loss': price * 0.99,  # LONG_STOP_LOSS_MULTIPLIER
+            'take_profit': price * 1.03,  # LONG_TAKE_PROFIT_MULTIPLIER
             'direction': 'long',
             'status': 'open'
         }
@@ -238,8 +238,8 @@ def check_for_trade(symbol):
         active_trades[symbol] = {
             'entry_time': df.index[-1],
             'entry_price': price,
-            'stop_loss': price * 1.005,
-            'take_profit': price * 0.94,  # using SHORT_TAKE_PROFIT_MULTIPLIER, adjust as needed
+            'stop_loss': price * 1.01,  # SHORT_STOP_LOSS_MULTIPLIER
+            'take_profit': price * 0.97,  # SHORT_TAKE_PROFIT_MULTIPLIER
             'direction': 'short',
             'status': 'open'
         }

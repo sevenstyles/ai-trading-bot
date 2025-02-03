@@ -1,4 +1,5 @@
 from binance.client import Client
+# Updated for backtester settings: OHLCV_TIMEFRAME = 1h, TP target = 4%, SL adjusted accordingly
 # NOTE: Backtesting now incorporates fee (FUTURES_FEE) and slippage (SLIPPAGE_RATE) adjustments as configured in config.py for more realistic simulation of live futures trading.
 import random
 from config import BINANCE_API_KEY, BINANCE_API_SECRET
