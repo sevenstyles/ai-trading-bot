@@ -137,10 +137,12 @@ def breakout_signal(df, i):
         return False
     price_buffer = 1.001
     cond_price = df['close'].iloc[i] > df['consol_high'].iloc[i] * price_buffer
-    cond_volume = (df['volume'].iloc[i] / df['volume'].rolling(20).mean().iloc[i]) >= 0.75
+    cond_volume = (df['volume'].iloc[i] / df['volume'].rolling(20).mean().iloc[i]) >= 1.0
+    cond_consolidation = (df['consol_high'].iloc[i] - df['consol_low'].iloc[i]) < df['consol_high'].iloc[i] * 1.05
     cond_trend = df['close'].iloc[i] > df['ema50'].iloc[i]
-    cond_consolidation = (df['consol_high'].iloc[i] - df['consol_low'].iloc[i]) < df['consol_high'].iloc[i] * 1.1
-    return all([cond_price, cond_volume, cond_trend, cond_consolidation])
+    cond_macd = df['macd'].iloc[i] > df['signal'].iloc[i]
+    cond_rsi = ((df['rsi'].iloc[i] > 30) and (df['rsi'].iloc[i] < 70)) if 'rsi' in df.columns else True
+    return all([cond_price, cond_volume, cond_trend, cond_consolidation, cond_macd, cond_rsi])
 
 def identify_consolidation(df, period=7):
     """Identify consolidation zones adaptively."""

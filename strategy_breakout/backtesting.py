@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import random
-from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, LONG_TAKE_PROFIT_MULTIPLIER, SHORT_TAKE_PROFIT_MULTIPLIER, FUTURES_FEE, SLIPPAGE_RATE, LONG_STOP_LOSS_MULTIPLIER, SHORT_STOP_LOSS_MULTIPLIER
+from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, LONG_TAKE_PROFIT_MULTIPLIER, SHORT_TAKE_PROFIT_MULTIPLIER, FUTURES_FEE, SLIPPAGE_RATE, LONG_STOP_LOSS_MULTIPLIER, SHORT_STOP_LOSS_MULTIPLIER, TRAILING_STOP_PCT, TRAILING_START_LONG, TRAILING_START_SHORT, MIN_BARS_BEFORE_STOP, ATR_PERIOD, LONG_STOP_LOSS_ATR_MULTIPLIER, SHORT_STOP_LOSS_ATR_MULTIPLIER
 
 def backtest_strategy(symbol, timeframe='1h', days=7, client=None):
     from datetime import datetime, timedelta
@@ -23,20 +23,22 @@ def backtest_strategy(symbol, timeframe='1h', days=7, client=None):
     df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors='coerce')
     df = df.dropna(subset=numeric_cols)
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-    from indicators import calculate_market_structure, calculate_trend_strength, calculate_emas, calculate_macd, calculate_adx, calculate_rsi, generate_signal, generate_short_signal
+    from indicators import calculate_market_structure, calculate_trend_strength, calculate_emas, calculate_macd, calculate_adx, calculate_rsi, generate_signal, generate_short_signal, calculate_atr
     df = calculate_market_structure(df)
     df = calculate_trend_strength(df)
     df = calculate_emas(df)
     df = calculate_macd(df)
     df = calculate_adx(df)
     df = calculate_rsi(df)
+    df['atr'] = calculate_atr(df, period=ATR_PERIOD)
     signals = []
     for i in range(len(df)):
         if generate_signal(df, i):
             entry = {
                 'entry_time': df['timestamp'].iloc[i],
                 'entry_price': df['close'].iloc[i],
-                'stop_loss': df['close'].iloc[i] * LONG_STOP_LOSS_MULTIPLIER,
+                'initial_stop_loss': df['close'].iloc[i] - df['atr'].iloc[i] * LONG_STOP_LOSS_ATR_MULTIPLIER,
+                'stop_loss': df['close'].iloc[i] - df['atr'].iloc[i] * LONG_STOP_LOSS_ATR_MULTIPLIER,
                 'take_profit': df['close'].iloc[i] * LONG_TAKE_PROFIT_MULTIPLIER,
                 'exit_price': 0,
                 'exit_time': None,
@@ -51,7 +53,8 @@ def backtest_strategy(symbol, timeframe='1h', days=7, client=None):
             entry = {
                 'entry_time': df['timestamp'].iloc[i],
                 'entry_price': df['close'].iloc[i],
-                'stop_loss': df['close'].iloc[i] * SHORT_STOP_LOSS_MULTIPLIER,
+                'initial_stop_loss': df['close'].iloc[i] + df['atr'].iloc[i] * SHORT_STOP_LOSS_ATR_MULTIPLIER,
+                'stop_loss': df['close'].iloc[i] + df['atr'].iloc[i] * SHORT_STOP_LOSS_ATR_MULTIPLIER,
                 'take_profit': df['close'].iloc[i] * SHORT_TAKE_PROFIT_MULTIPLIER,
                 'exit_price': 0,
                 'exit_time': None,
@@ -62,15 +65,15 @@ def backtest_strategy(symbol, timeframe='1h', days=7, client=None):
                 'symbol': symbol
             }
             signals.append(entry)
-    trailing_stop_pct = 0.0025
-    min_bars_before_stop = 10
+    trailing_stop_pct = TRAILING_STOP_PCT
+    min_bars_before_stop = MIN_BARS_BEFORE_STOP
     for trade in signals:
         entry_idx = df[df['timestamp'] == trade['entry_time']].index[0]
         max_hold = min(entry_idx + MAX_HOLD_BARS, len(df) - 1)
         if trade['direction'] == 'long':
             new_high = trade['entry_price']
             for j in range(entry_idx, max_hold + 1):
-                if df['high'].iloc[j] > trade['entry_price'] * 1.02:
+                if df['high'].iloc[j] > trade['entry_price'] * TRAILING_START_LONG:
                     if df['high'].iloc[j] > new_high:
                         new_high = df['high'].iloc[j]
                         potential_stop = new_high * (1 - trailing_stop_pct)
@@ -117,7 +120,7 @@ def backtest_strategy(symbol, timeframe='1h', days=7, client=None):
         elif trade['direction'] == 'short':
             new_low = trade['entry_price']
             for j in range(entry_idx, max_hold + 1):
-                if df['low'].iloc[j] < trade['entry_price'] * 0.98:
+                if df['low'].iloc[j] < trade['entry_price'] * TRAILING_START_SHORT:
                     if df['low'].iloc[j] < new_low:
                         new_low = df['low'].iloc[j]
                         potential_stop = new_low * (1 + trailing_stop_pct)
@@ -237,7 +240,9 @@ def analyze_aggregated_results(all_signals, initial_capital=1000):
         print("="*30)
         df = pd.DataFrame(all_signals)
         df['profit_pct'] = (df['profit'] * 100).round(2)
-        if 'stop_loss' in df.columns:
+        if 'initial_stop_loss' in df.columns:
+            df.rename(columns={'initial_stop_loss': 'SL'}, inplace=True)
+        elif 'stop_loss' in df.columns:
             df.rename(columns={'stop_loss': 'SL'}, inplace=True)
         if 'take_profit' in df.columns:
             df.rename(columns={'take_profit': 'TP'}, inplace=True)

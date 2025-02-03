@@ -65,8 +65,8 @@ MIN_LIQUIDITY = 500000
 
 # Backtester Settings
 OHLCV_TIMEFRAME = "1h"
-LONG_TAKE_PROFIT_MULTIPLIER = 1.05
-SHORT_TAKE_PROFIT_MULTIPLIER = 0.95
+LONG_TAKE_PROFIT_MULTIPLIER = 1.04
+SHORT_TAKE_PROFIT_MULTIPLIER = 0.96
 LONG_STOP_LOSS_MULTIPLIER = 0.995
 SHORT_STOP_LOSS_MULTIPLIER = 1.005
 
@@ -74,4 +74,15 @@ SHORT_STOP_LOSS_MULTIPLIER = 1.005
 
 # New parameters to simulate live futures trading conditions:
 FUTURES_FEE = 0.0005    # Binance USDⓈ-M Futures taker fee (0.05%)
-SLIPPAGE_RATE = 0.0005  # Assumed slippage rate for order execution (0.05%) 
+SLIPPAGE_RATE = 0.0005  # Assumed slippage rate for order execution (0.05%)
+
+# Trailing Stop Settings for Backtesting Strategy
+TRAILING_STOP_PCT = 0.003
+TRAILING_START_LONG = 1.002
+TRAILING_START_SHORT = 0.998
+
+# ATR-based Stop Loss Multipliers
+LONG_STOP_LOSS_ATR_MULTIPLIER = 0.55
+SHORT_STOP_LOSS_ATR_MULTIPLIER = 0.55
+
+MIN_BARS_BEFORE_STOP = 5 
