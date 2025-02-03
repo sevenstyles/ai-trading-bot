@@ -33,6 +33,7 @@ candles_dict = {}
 
 # Add global active trades dictionary at the top
 active_trades = {}  # key: symbol, value: trade dict
+executed_trades = []  # List to store completed trades
 
 def preload_candles():
     """Preloads the most recent 50 candles (using the current interval) for each symbol, so that technical indicators have sufficient historical data immediately upon starting live trading."""
@@ -76,19 +77,20 @@ try:
 except ImportError:
     pass
 else:
-    if not hasattr(ClientConnection, 'fail_connection'):
-        ClientConnection.fail_connection = lambda self: None
+    ClientConnection.fail_connection = lambda self: None
 
 def process_candle(msg):
     """
     Callback function for each kline message from the multiplex stream.
     It processes the candlestick data, updates the corresponding DataFrame in candles_dict, and checks for trade signals.
     """
-    # Handle multiplex socket structure
+    # Handle multiplexed stream structure: extract data if present
     if "data" in msg:
-        kline = msg["data"]["k"]
-    else:
-        kline = msg["k"]
+        msg = msg["data"]
+    if msg.get('e') != 'kline':
+        print('Warning: Received non-kline message, skipping:', msg)
+        return
+    kline = msg["k"]
     is_candle_closed = kline["x"]
     candle_time = datetime.fromtimestamp(kline["t"] / 1000)
     coin_symbol = kline["s"]
@@ -142,6 +144,7 @@ def update_active_trade(symbol, df):
             if potential_stop > trade['stop_loss']:
                 trade['stop_loss'] = potential_stop
                 print(f"Updated trailing stop for {symbol} long to {trade['stop_loss']}")
+                update_stop_order(symbol, trade)
         # Check if current candle's low breaches stop loss
         if latest_candle['low'] <= trade['stop_loss']:
             print(f"Long trade stop hit for {symbol}")
@@ -155,24 +158,60 @@ def update_active_trade(symbol, df):
             if potential_stop < trade['stop_loss']:
                 trade['stop_loss'] = potential_stop
                 print(f"Updated trailing stop for {symbol} short to {trade['stop_loss']}")
+                update_stop_order(symbol, trade)
         if latest_candle['high'] >= trade['stop_loss']:
             print(f"Short trade stop hit for {symbol}")
             close_trade(symbol, trade, trade['stop_loss'], df.index[-1])
 
 def close_trade(symbol, trade, exit_price, exit_time):
+    # Cancel any existing stop order
+    if "stop_order_id" in trade:
+        try:
+            cancel_result = client.futures_cancel_order(symbol=symbol, orderId=trade["stop_order_id"])
+            print(f"Cancelled stop order for {symbol}: {cancel_result}")
+        except Exception as e:
+            print(f"Error cancelling stop order for {symbol} when closing trade: {e}")
+
     if trade['direction'] == 'long':
-        simulated_exit = simulate_fill_price("SELL", exit_price)
         side = "SELL"
     else:
-        simulated_exit = simulate_fill_price("BUY", exit_price)
         side = "BUY"
-    print(f"Closing {trade['direction']} trade for {symbol} at {simulated_exit} (simulated) on {exit_time} by placing {side} order")
-    trade['exit_price'] = simulated_exit
+
+    # Place a market order to close the position on Binance Futures Testnet using the stored quantity
+    try:
+        order = client.futures_create_order(
+            symbol=symbol,
+            side=side,
+            type="MARKET",
+            closePosition=True,
+            reduceOnly=True
+        )
+        print(f"Exit order placed for {symbol}: {order}")
+        if 'avgPrice' in order and float(order['avgPrice']) > 0:
+            effective_exit = float(order['avgPrice'])
+        else:
+            effective_exit = simulate_fill_price(side, exit_price)
+    except Exception as e:
+        print(f"Error closing trade for {symbol}: {e}")
+        effective_exit = simulate_fill_price(side, exit_price)
+
+    print(f"Closing {trade['direction']} trade for {symbol} at {effective_exit} (actual) on {exit_time} by placing {side} order")
+    trade['exit_price'] = effective_exit
     trade['exit_time'] = exit_time
     trade['status'] = 'closed'
     print(f"Trade closed for {symbol}: {trade}")
+    
+    # Append the closed trade to executed_trades for logging
+    trade_record = trade.copy()
+    trade_record['symbol'] = symbol
+    executed_trades.append(trade_record)
+    save_executed_trades_csv()
+
     if symbol in active_trades:
         del active_trades[symbol]
+    
+    # Save current active trades after closing one
+    save_active_trades_csv()
 
 def check_for_trade(symbol):
     """
@@ -197,6 +236,8 @@ def check_for_trade(symbol):
     # If there's an active trade, update its trailing stop
     if symbol in active_trades:
         update_active_trade(symbol, df)
+        # Save active trades after update
+        save_active_trades_csv()
         return
 
     # Calculate indicators using existing functions
@@ -231,8 +272,10 @@ def check_for_trade(symbol):
             'stop_loss': simulated_entry * 0.99,  # LONG_STOP_LOSS_MULTIPLIER
             'take_profit': simulated_entry * 1.03,  # LONG_TAKE_PROFIT_MULTIPLIER
             'direction': 'long',
-            'status': 'open'
+            'status': 'open',
+            'quantity': 0.001
         }
+        update_stop_order(symbol, active_trades[symbol])
     # Check for short signal
     elif short_signal:
         print(f"Short signal detected for {symbol}!")
@@ -243,12 +286,17 @@ def check_for_trade(symbol):
             'entry_time': df.index[-1],
             'entry_price': simulated_entry,
             'stop_loss': simulated_entry * 1.01,  # SHORT_STOP_LOSS_MULTIPLIER
-            'take_profit': simulated_entry * 0.97,  # SHORT_STOP_LOSS_MULTIPLIER
+            'take_profit': simulated_entry * 0.97,  # SHORT_TAKE_PROFIT_MULTIPLIER
             'direction': 'short',
-            'status': 'open'
+            'status': 'open',
+            'quantity': 0.001
         }
+        update_stop_order(symbol, active_trades[symbol])
     else:
         print(f"No trade signal for {symbol}.")
+
+    # Save active trades at the end of trade check
+    save_active_trades_csv()
 
 def place_order(symbol, side, price):
     """
@@ -278,8 +326,89 @@ def simulate_fill_price(side, market_price):
         return market_price * (1 - SLIPPAGE_RATE - FUTURES_FEE)
     return market_price
 
+def save_executed_trades_csv():
+    if executed_trades:
+        df = pd.DataFrame(executed_trades)
+        df.to_csv("executed_trades.csv", index=False)
+        print("Executed trades saved to executed_trades.csv")
+
+def save_active_trades_csv():
+    if active_trades:
+        active_trade_list = []
+        for symbol, trade in active_trades.items():
+            trade_copy = trade.copy()
+            trade_copy['symbol'] = symbol
+            active_trade_list.append(trade_copy)
+        df = pd.DataFrame(active_trade_list)
+        df.to_csv("active_trades.csv", index=False)
+        print("Active trades saved to active_trades.csv")
+
+def load_active_positions():
+    """Loads currently active positions from Binance Futures Testnet and populates active_trades."""
+    try:
+        positions = client.futures_position_information()
+        for pos in positions:
+            position_amt = float(pos.get("positionAmt", 0))
+            # Only consider positions that are non-zero (use a small threshold if needed)
+            if abs(position_amt) > 0:
+                symbol = pos.get("symbol")
+                entry_price = float(pos.get("entryPrice", 0))
+                # Skip if no valid entry price
+                if entry_price == 0:
+                    continue
+                if position_amt > 0:
+                    trade = {
+                        'entry_time': datetime.now(),
+                        'entry_price': entry_price,
+                        'stop_loss': entry_price * 0.99,  # default for long
+                        'take_profit': entry_price * 1.03,  # default for long
+                        'direction': 'long',
+                        'status': 'open',
+                        'quantity': abs(position_amt)
+                    }
+                else:
+                    trade = {
+                        'entry_time': datetime.now(),
+                        'entry_price': entry_price,
+                        'stop_loss': entry_price * 1.01,  # default for short
+                        'take_profit': entry_price * 0.97,  # default for short
+                        'direction': 'short',
+                        'status': 'open',
+                        'quantity': abs(position_amt)
+                    }
+                active_trades[symbol] = trade
+                print(f"Loaded active position for {symbol}: {trade}")
+        save_active_trades_csv()
+    except Exception as e:
+        print(f"Error loading active positions: {e}")
+
+def update_stop_order(symbol, trade):
+    side = "SELL" if trade["direction"] == "long" else "BUY"
+    # If there's an existing stop order, cancel it
+    if "stop_order_id" in trade:
+        try:
+            cancel_result = client.futures_cancel_order(symbol=symbol, orderId=trade["stop_order_id"])
+            print(f"Cancelled previous stop order for {symbol}: {cancel_result}")
+        except Exception as e:
+            print(f"Could not cancel previous stop order for {symbol}: {e}")
+
+    # Place a new STOP_MARKET order with the updated stop loss
+    try:
+        new_order = client.futures_create_order(
+            symbol=symbol,
+            side=side,
+            type="STOP_MARKET",
+            stopPrice=str(trade["stop_loss"]),
+            closePosition=True
+        )
+        trade["stop_order_id"] = new_order.get("orderId")
+        print(f"Placed new stop order for {symbol} at {trade['stop_loss']}: {new_order}")
+    except Exception as e:
+        print(f"Error placing new stop order for {symbol}: {e}")
+
 def main():
     preload_candles()
+    load_active_positions()
     twm = ThreadedWebsocketManager(api_key=BINANCE_API_KEY, api_secret=BINANCE_API_SECRET, testnet=True)
     twm.start()
     
