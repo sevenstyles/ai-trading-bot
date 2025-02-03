@@ -3,8 +3,6 @@ from pathlib import Path
 
 # Basic directories and files
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DEBUG_LOG_DIR = Path(BASE_DIR) / 'debug_logs'
-DEBUG_LOG_DIR.mkdir(exist_ok=True)
 STRATEGY_FILE = os.path.join(BASE_DIR, '..', 'strategy_3_prompt.txt')
 
 # Binance API credentials (update with your keys)

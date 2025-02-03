@@ -1,0 +1,2 @@
+entry_time,entry_price,stop_loss,take_profit,direction,status,quantity,new_high,exit_price,exit_time,close_reason,symbol,profit_pct
+2025-02-04 10:18:00,0.88044,0.8787975,0.9068532,long,closed,0.001,0.881,0.87835810125,2025-02-04 10:19:00,stop loss hit,LITUSDT,-0.236461172822677
