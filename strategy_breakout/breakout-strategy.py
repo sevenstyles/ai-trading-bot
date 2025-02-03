@@ -19,7 +19,7 @@ def main():
     all_trades = []
     for symbol in symbols:
         print(f"\n=== TESTING {symbol} ===")
-        signals = backtest_strategy(symbol, client=client)
+        signals = backtest_strategy(symbol, client=client, use_random_date=True)
         
         if signals:
             analyze_results(signals, symbol)

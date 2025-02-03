@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime
 from binance.client import Client
 from binance import ThreadedWebsocketManager
-from config import BINANCE_API_KEY, BINANCE_API_SECRET
+from config import BINANCE_API_KEY, BINANCE_API_SECRET, FUTURES_FEE, SLIPPAGE_RATE
 from data_fetch import get_top_volume_pairs
 # Import your signal and indicator functions
 from indicators import (
@@ -160,14 +160,17 @@ def update_active_trade(symbol, df):
             close_trade(symbol, trade, trade['stop_loss'], df.index[-1])
 
 def close_trade(symbol, trade, exit_price, exit_time):
-    side = "SELL" if trade['direction'] == 'long' else "BUY"
-    print(f"Closing {trade['direction']} trade for {symbol} at {exit_price} on {exit_time} by placing {side} order")
-    # For now, we simulate closing trade. In real implementation, you would call client.futures_create_order() to exit order.
-    trade['exit_price'] = exit_price
+    if trade['direction'] == 'long':
+        simulated_exit = simulate_fill_price("SELL", exit_price)
+        side = "SELL"
+    else:
+        simulated_exit = simulate_fill_price("BUY", exit_price)
+        side = "BUY"
+    print(f"Closing {trade['direction']} trade for {symbol} at {simulated_exit} (simulated) on {exit_time} by placing {side} order")
+    trade['exit_price'] = simulated_exit
     trade['exit_time'] = exit_time
     trade['status'] = 'closed'
     print(f"Trade closed for {symbol}: {trade}")
-    # Remove trade from active_trades
     if symbol in active_trades:
         del active_trades[symbol]
 
@@ -219,27 +222,28 @@ def check_for_trade(symbol):
     # Check for long signal
     if long_signal:
         print(f"Long signal detected for {symbol}!")
-        price = df["close"].iloc[-1]
-        place_order(symbol, "BUY", price)
-        # Track the active trade with updated multipliers from config
+        market_price = df["close"].iloc[-1]
+        simulated_entry = simulate_fill_price("BUY", market_price)
+        place_order(symbol, "BUY", market_price)
         active_trades[symbol] = {
             'entry_time': df.index[-1],
-            'entry_price': price,
-            'stop_loss': price * 0.99,  # LONG_STOP_LOSS_MULTIPLIER
-            'take_profit': price * 1.03,  # LONG_TAKE_PROFIT_MULTIPLIER
+            'entry_price': simulated_entry,
+            'stop_loss': simulated_entry * 0.99,  # LONG_STOP_LOSS_MULTIPLIER
+            'take_profit': simulated_entry * 1.03,  # LONG_TAKE_PROFIT_MULTIPLIER
             'direction': 'long',
             'status': 'open'
         }
     # Check for short signal
     elif short_signal:
         print(f"Short signal detected for {symbol}!")
-        price = df["close"].iloc[-1]
-        place_order(symbol, "SELL", price)
+        market_price = df["close"].iloc[-1]
+        simulated_entry = simulate_fill_price("SELL", market_price)
+        place_order(symbol, "SELL", market_price)
         active_trades[symbol] = {
             'entry_time': df.index[-1],
-            'entry_price': price,
-            'stop_loss': price * 1.01,  # SHORT_STOP_LOSS_MULTIPLIER
-            'take_profit': price * 0.97,  # SHORT_TAKE_PROFIT_MULTIPLIER
+            'entry_price': simulated_entry,
+            'stop_loss': simulated_entry * 1.01,  # SHORT_STOP_LOSS_MULTIPLIER
+            'take_profit': simulated_entry * 0.97,  # SHORT_STOP_LOSS_MULTIPLIER
             'direction': 'short',
             'status': 'open'
         }
@@ -264,6 +268,15 @@ def place_order(symbol, side, price):
         print(f"Order placed for {symbol}: {order}")
     except Exception as e:
         print(f"Error placing order for {symbol}: {e}")
+
+def simulate_fill_price(side, market_price):
+    # For BUY orders, effective fill price is increased by slippage and fee
+    # For SELL orders, effective fill price is decreased
+    if side == "BUY":
+        return market_price * (1 + SLIPPAGE_RATE + FUTURES_FEE)
+    elif side == "SELL":
+        return market_price * (1 - SLIPPAGE_RATE - FUTURES_FEE)
+    return market_price
 
 def main():
     preload_candles()

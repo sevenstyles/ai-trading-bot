@@ -5,10 +5,18 @@ from datetime import datetime, timedelta
 import random
 from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, LONG_TAKE_PROFIT_MULTIPLIER, SHORT_TAKE_PROFIT_MULTIPLIER, FUTURES_FEE, SLIPPAGE_RATE, LONG_STOP_LOSS_MULTIPLIER, SHORT_STOP_LOSS_MULTIPLIER, TRAILING_STOP_PCT, TRAILING_START_LONG, TRAILING_START_SHORT, MIN_BARS_BEFORE_STOP, ATR_PERIOD, LONG_STOP_LOSS_ATR_MULTIPLIER, SHORT_STOP_LOSS_ATR_MULTIPLIER
 
-def backtest_strategy(symbol, timeframe='1h', days=7, client=None):
+def backtest_strategy(symbol, timeframe='1h', days=7, client=None, use_random_date=False):
     from datetime import datetime, timedelta
-    start_date = datetime.now() - timedelta(days=days)
-    end_date = datetime.now()
+    if use_random_date:
+        start_random = datetime(2021, 1, 1)
+        end_random = datetime(2022, 1, 1)
+        random_seconds = random.randint(0, int((end_random - start_random).total_seconds()))
+        random_end = start_random + timedelta(seconds=random_seconds)
+        end_date = random_end
+        start_date = end_date - timedelta(days=days)
+    else:
+        start_date = datetime.now() - timedelta(days=days)
+        end_date = datetime.now()
     klines = client.get_historical_klines(
         symbol, timeframe,
         start_date.strftime("%d %b %Y"),

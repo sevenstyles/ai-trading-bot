@@ -73,8 +73,8 @@ SHORT_STOP_LOSS_MULTIPLIER = 1.005
 # Removed duplicate profit target multipliers. Previous definitions of 1.06 and 0.94 have been removed.
 
 # New parameters to simulate live futures trading conditions:
-FUTURES_FEE = 0.0005    # Binance USDⓈ-M Futures taker fee (0.05%)
-SLIPPAGE_RATE = 0.0005  # Assumed slippage rate for order execution (0.05%)
+FUTURES_FEE = 0.0004  # Fee rate (0.04%)
+SLIPPAGE_RATE = 0.0005  # Slippage rate (0.05%)
 
 # Trailing Stop Settings for Backtesting Strategy
 TRAILING_STOP_PCT = 0.003
