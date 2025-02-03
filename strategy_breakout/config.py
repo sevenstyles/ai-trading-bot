@@ -76,6 +76,7 @@ SHORT_STOP_LOSS_MULTIPLIER = 1.005
 FUTURES_MAKER_FEE = 0.0002  # Maker fee for entry (0.02%)
 FUTURES_TAKER_FEE = 0.0005  # Taker fee for exit (0.05%)
 SLIPPAGE_RATE = 0.0005      # Slippage rate (0.05%)
+FUNDING_RATE = 0.0001       # Funding rate per funding period (approx 0.01%), assuming funding applies every 8 hours
 
 # Trailing Stop Settings for Backtesting Strategy
 TRAILING_STOP_PCT = 0.003

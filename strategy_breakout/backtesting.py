@@ -3,7 +3,19 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import random
-from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, LONG_TAKE_PROFIT_MULTIPLIER, SHORT_TAKE_PROFIT_MULTIPLIER, SLIPPAGE_RATE, LONG_STOP_LOSS_MULTIPLIER, SHORT_STOP_LOSS_MULTIPLIER, TRAILING_STOP_PCT, TRAILING_START_LONG, TRAILING_START_SHORT, MIN_BARS_BEFORE_STOP, ATR_PERIOD, LONG_STOP_LOSS_ATR_MULTIPLIER, SHORT_STOP_LOSS_ATR_MULTIPLIER, FUTURES_MAKER_FEE, FUTURES_TAKER_FEE
+from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, LONG_TAKE_PROFIT_MULTIPLIER, SHORT_TAKE_PROFIT_MULTIPLIER, SLIPPAGE_RATE, LONG_STOP_LOSS_MULTIPLIER, SHORT_STOP_LOSS_MULTIPLIER, TRAILING_STOP_PCT, TRAILING_START_LONG, TRAILING_START_SHORT, MIN_BARS_BEFORE_STOP, ATR_PERIOD, LONG_STOP_LOSS_ATR_MULTIPLIER, SHORT_STOP_LOSS_ATR_MULTIPLIER, FUTURES_MAKER_FEE, FUTURES_TAKER_FEE, FUNDING_RATE
+
+def get_funding_fee(client, symbol, entry_time, exit_time):
+    # Convert entry and exit times (assumed to be datetime objects) to milliseconds
+    start_ms = int(entry_time.timestamp() * 1000)
+    end_ms = int(exit_time.timestamp() * 1000)
+    try:
+        funding_data = client.futures_funding_rate(symbol=symbol, startTime=start_ms, endTime=end_ms, limit=1000)
+        total_fee = sum([float(event['fundingRate']) for event in funding_data])
+        return total_fee
+    except Exception as e:
+        print(f"Error fetching funding rate for {symbol}: {e}")
+        return 0.0
 
 def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_date=False):
     from datetime import datetime, timedelta
@@ -91,11 +103,13 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
                     exit_price = trade['stop_loss']
                     adjusted_entry = trade['entry_price'] * (1 + FUTURES_MAKER_FEE + SLIPPAGE_RATE)
                     adjusted_exit = exit_price * (1 - FUTURES_TAKER_FEE - SLIPPAGE_RATE)
+                    funding_fee = get_funding_fee(client, symbol, trade['entry_time'], df['timestamp'].iloc[j])
+                    raw_profit = (adjusted_exit - adjusted_entry) / adjusted_entry
                     trade.update({
                         'exit_price': exit_price,
                         'exit_time': df['timestamp'].iloc[j],
                         'status': 'stopped',
-                        'profit': (adjusted_exit - adjusted_entry) / adjusted_entry,
+                        'profit': raw_profit - funding_fee,
                         'outcome': 'LOSS'
                     })
                     break
@@ -103,11 +117,13 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
                     exit_price = trade['take_profit']
                     adjusted_entry = trade['entry_price'] * (1 + FUTURES_MAKER_FEE + SLIPPAGE_RATE)
                     adjusted_exit = exit_price * (1 - FUTURES_TAKER_FEE - SLIPPAGE_RATE)
+                    funding_fee = get_funding_fee(client, symbol, trade['entry_time'], df['timestamp'].iloc[j])
+                    raw_profit = (adjusted_exit - adjusted_entry) / adjusted_entry
                     trade.update({
                         'exit_price': exit_price,
                         'exit_time': df['timestamp'].iloc[j],
                         'status': 'target',
-                        'profit': (adjusted_exit - adjusted_entry) / adjusted_entry,
+                        'profit': raw_profit - funding_fee,
                         'outcome': 'WIN'
                     })
                     break
@@ -116,12 +132,13 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
                 adjusted_entry = trade['entry_price'] * (1 + FUTURES_MAKER_FEE + SLIPPAGE_RATE)
                 adjusted_exit = exit_price * (1 - FUTURES_TAKER_FEE - SLIPPAGE_RATE)
                 let_profit = (adjusted_exit - adjusted_entry) / adjusted_entry
+                funding_fee = get_funding_fee(client, symbol, trade['entry_time'], df['timestamp'].iloc[max_hold])
                 trade.update({
                     'exit_price': exit_price,
                     'exit_time': df['timestamp'].iloc[max_hold],
                     'status': 'expired',
-                    'profit': let_profit,
-                    'outcome': 'WIN' if let_profit >= 0 else 'LOSS'
+                    'profit': let_profit - funding_fee,
+                    'outcome': 'WIN' if (let_profit - funding_fee) >= 0 else 'LOSS'
                 })
             lowest_point = df['low'].iloc[entry_idx:j+1].min()
             trade['drawdown'] = (lowest_point - trade['entry_price']) / trade['entry_price']
@@ -138,11 +155,13 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
                     exit_price = trade['take_profit']
                     adjusted_entry = trade['entry_price'] * (1 - FUTURES_MAKER_FEE - SLIPPAGE_RATE)
                     adjusted_exit = exit_price * (1 + FUTURES_TAKER_FEE + SLIPPAGE_RATE)
+                    funding_fee = get_funding_fee(client, symbol, trade['entry_time'], df['timestamp'].iloc[j])
+                    raw_profit = (adjusted_entry - adjusted_exit) / adjusted_entry
                     trade.update({
                         'exit_price': exit_price,
                         'exit_time': df['timestamp'].iloc[j],
                         'status': 'target',
-                        'profit': (adjusted_entry - adjusted_exit) / adjusted_entry,
+                        'profit': raw_profit - funding_fee,
                         'outcome': 'WIN'
                     })
                     break
@@ -150,11 +169,13 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
                     exit_price = trade['stop_loss']
                     adjusted_entry = trade['entry_price'] * (1 - FUTURES_MAKER_FEE - SLIPPAGE_RATE)
                     adjusted_exit = exit_price * (1 + FUTURES_TAKER_FEE + SLIPPAGE_RATE)
+                    funding_fee = get_funding_fee(client, symbol, trade['entry_time'], df['timestamp'].iloc[j])
+                    raw_profit = (adjusted_entry - adjusted_exit) / adjusted_entry
                     trade.update({
                         'exit_price': exit_price,
                         'exit_time': df['timestamp'].iloc[j],
                         'status': 'stopped',
-                        'profit': (adjusted_entry - adjusted_exit) / adjusted_entry,
+                        'profit': raw_profit - funding_fee,
                         'outcome': 'LOSS'
                     })
                     break
@@ -163,12 +184,13 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
                 adjusted_entry = trade['entry_price'] * (1 - FUTURES_MAKER_FEE - SLIPPAGE_RATE)
                 adjusted_exit = exit_price * (1 + FUTURES_TAKER_FEE + SLIPPAGE_RATE)
                 sh_profit = (adjusted_entry - adjusted_exit) / adjusted_entry
+                funding_fee = get_funding_fee(client, symbol, trade['entry_time'], df['timestamp'].iloc[max_hold])
                 trade.update({
                     'exit_price': exit_price,
                     'exit_time': df['timestamp'].iloc[max_hold],
                     'status': 'expired',
-                    'profit': sh_profit,
-                    'outcome': 'WIN' if sh_profit >= 0 else 'LOSS'
+                    'profit': sh_profit - funding_fee,
+                    'outcome': 'WIN' if (sh_profit - funding_fee) >= 0 else 'LOSS'
                 })
             highest_point = df['high'].iloc[entry_idx:j+1].max()
             trade['drawdown'] = (trade['entry_price'] - highest_point) / trade['entry_price']
