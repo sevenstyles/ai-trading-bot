@@ -3,7 +3,7 @@ from datetime import datetime
 import state
 from logger import log_debug
 from binance_client import client
-from config import RISK_PER_TRADE, FUTURES_FEE, SLIPPAGE_RATE, LEVERAGE, CANDLESTICK_INTERVAL
+from config import RISK_PER_TRADE, SLIPPAGE_RATE, LEVERAGE, CANDLESTICK_INTERVAL
 from indicators import (
     calculate_market_structure,
     calculate_trend_strength,
@@ -151,6 +151,7 @@ def dynamic_round_quantity(symbol, quantity):
                 # Calculate precision based on step_size
                 if step_size > 0:
                     precision = int(round(-math.log10(step_size)))
+                    precision = min(precision, 2)  # cap maximum precision to 2 decimals
                     return round(quantity, precision)
         return round(quantity, 3)
     except Exception as e:
