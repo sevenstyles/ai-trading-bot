@@ -3,6 +3,17 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import random
+import json
+import logging
+logger = logging.getLogger("backtester")
+logger.setLevel(logging.DEBUG)
+if not logger.handlers:
+    fh = logging.FileHandler("backtester_detailed.log")
+    fh.setLevel(logging.DEBUG)
+    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+logger.propagate = False
 from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, LONG_TAKE_PROFIT_MULTIPLIER, SHORT_TAKE_PROFIT_MULTIPLIER, SLIPPAGE_RATE, LONG_STOP_LOSS_MULTIPLIER, SHORT_STOP_LOSS_MULTIPLIER, TRAILING_STOP_PCT, TRAILING_START_LONG, TRAILING_START_SHORT, MIN_BARS_BEFORE_STOP, ATR_PERIOD, LONG_STOP_LOSS_ATR_MULTIPLIER, SHORT_STOP_LOSS_ATR_MULTIPLIER, FUTURES_MAKER_FEE, FUTURES_TAKER_FEE, FUNDING_RATE
 
 def get_funding_fee(client, symbol, entry_time, exit_time):
@@ -34,23 +45,34 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
         start_date.strftime("%d %b %Y"),
         end_date.strftime("%d %b %Y")
     )
+    logger.debug(f"Fetched {len(klines)} historical klines for symbol {symbol}")
     df = pd.DataFrame(klines, columns=[
         'timestamp', 'open', 'high', 'low', 'close', 'volume',
         'close_time', 'quote_asset_volume', 'trades',
         'taker_buy_base', 'taker_buy_quote', 'ignore'
     ])
+    logger.debug(f"DataFrame created with shape: {df.shape}")
     numeric_cols = ['open', 'high', 'low', 'close', 'volume']
     df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors='coerce')
     df = df.dropna(subset=numeric_cols)
+    logger.debug(f"DataFrame after dropping NA: shape {df.shape}")
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+    logger.debug(f"Timestamps converted. First timestamp: {df['timestamp'].iloc[0] if not df.empty else 'empty'}")
     from indicators import calculate_market_structure, calculate_trend_strength, calculate_emas, calculate_macd, calculate_adx, calculate_rsi, generate_signal, generate_short_signal, calculate_atr
     df = calculate_market_structure(df)
+    logger.debug(f"After calculate_market_structure: shape {df.shape}")
     df = calculate_trend_strength(df)
+    logger.debug(f"After calculate_trend_strength: shape {df.shape}")
     df = calculate_emas(df)
+    logger.debug(f"After calculate_emas: shape {df.shape}")
     df = calculate_macd(df)
+    logger.debug(f"After calculate_macd: shape {df.shape}")
     df = calculate_adx(df)
+    logger.debug(f"After calculate_adx: shape {df.shape}")
     df = calculate_rsi(df)
+    logger.debug(f"After calculate_rsi: shape {df.shape}")
     df['atr'] = calculate_atr(df, period=ATR_PERIOD)
+    logger.debug("ATR calculated and added to DataFrame")
     signals = []
     for i in range(len(df)):
         if generate_signal(df, i):
@@ -68,6 +90,7 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
                 'direction': 'long',
                 'symbol': symbol
             }
+            logger.debug(f"Long signal generated at index {i}: timestamp {df['timestamp'].iloc[i]}, close {df['close'].iloc[i]}, atr {df['atr'].iloc[i]}")
             signals.append(entry)
         elif generate_short_signal(df, i):
             entry = {
@@ -84,27 +107,33 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
                 'direction': 'short',
                 'symbol': symbol
             }
+            logger.debug(f"Short signal generated at index {i}: timestamp {df['timestamp'].iloc[i]}, close {df['close'].iloc[i]}, atr {df['atr'].iloc[i]}")
             signals.append(entry)
     trailing_stop_pct = TRAILING_STOP_PCT
     min_bars_before_stop = MIN_BARS_BEFORE_STOP
     for trade in signals:
         entry_idx = df[df['timestamp'] == trade['entry_time']].index[0]
         max_hold = min(entry_idx + MAX_HOLD_BARS, len(df) - 1)
+        logger.debug(f"Processing {trade['direction']} trade for {symbol} with entry index {entry_idx}, max_hold {max_hold} and entry price {trade['entry_price']}")
         if trade['direction'] == 'long':
             new_high = trade['entry_price']
             for j in range(entry_idx, max_hold + 1):
                 if df['high'].iloc[j] > trade['entry_price'] * TRAILING_START_LONG:
                     if df['high'].iloc[j] > new_high:
+                        old_high = new_high
                         new_high = df['high'].iloc[j]
                         potential_stop = new_high * (1 - trailing_stop_pct)
+                        logger.debug(f"Long trade update at index {j}: new high updated from {old_high} to {new_high}, potential_stop {potential_stop}, previous stop_loss {trade['stop_loss']}")
                         if potential_stop > trade['stop_loss']:
                             trade['stop_loss'] = potential_stop
                 if (j - entry_idx) >= min_bars_before_stop and df['low'].iloc[j] <= trade['stop_loss']:
+                    logger.debug(f"Long trade stop loss triggered at index {j}: low {df['low'].iloc[j]} <= stop_loss {trade['stop_loss']}")
                     exit_price = trade['stop_loss']
                     adjusted_entry = trade['entry_price'] * (1 + FUTURES_MAKER_FEE + SLIPPAGE_RATE)
                     adjusted_exit = exit_price * (1 - FUTURES_TAKER_FEE - SLIPPAGE_RATE)
                     funding_fee = get_funding_fee(client, symbol, trade['entry_time'], df['timestamp'].iloc[j])
                     raw_profit = (adjusted_exit - adjusted_entry) / adjusted_entry
+                    logger.debug(f"Long trade exit calculated at index {j}: exit_price {exit_price}, raw_profit {raw_profit}, funding_fee {funding_fee}")
                     trade.update({
                         'exit_price': exit_price,
                         'exit_time': df['timestamp'].iloc[j],
@@ -114,11 +143,13 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
                     })
                     break
                 if df['high'].iloc[j] >= trade['take_profit']:
+                    logger.debug(f"Long trade take profit hit at index {j}: high {df['high'].iloc[j]} >= take_profit {trade['take_profit']}")
                     exit_price = trade['take_profit']
                     adjusted_entry = trade['entry_price'] * (1 + FUTURES_MAKER_FEE + SLIPPAGE_RATE)
                     adjusted_exit = exit_price * (1 - FUTURES_TAKER_FEE - SLIPPAGE_RATE)
                     funding_fee = get_funding_fee(client, symbol, trade['entry_time'], df['timestamp'].iloc[j])
                     raw_profit = (adjusted_exit - adjusted_entry) / adjusted_entry
+                    logger.debug(f"Long trade take profit exit calculated at index {j}: exit_price {exit_price}, raw_profit {raw_profit}, funding_fee {funding_fee}")
                     trade.update({
                         'exit_price': exit_price,
                         'exit_time': df['timestamp'].iloc[j],
@@ -128,35 +159,41 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
                     })
                     break
             if trade['status'] == 'open':
-                exit_price = df['close'].iloc[max_hold]
+                exit_price = df['close'].iloc[min(entry_idx + MAX_HOLD_BARS, len(df) - 1)]
                 adjusted_entry = trade['entry_price'] * (1 + FUTURES_MAKER_FEE + SLIPPAGE_RATE)
                 adjusted_exit = exit_price * (1 - FUTURES_TAKER_FEE - SLIPPAGE_RATE)
                 let_profit = (adjusted_exit - adjusted_entry) / adjusted_entry
-                funding_fee = get_funding_fee(client, symbol, trade['entry_time'], df['timestamp'].iloc[max_hold])
+                funding_fee = get_funding_fee(client, symbol, trade['entry_time'], df['timestamp'].iloc[min(entry_idx + MAX_HOLD_BARS, len(df) - 1)])
+                logger.debug(f"Long trade expired at max_hold index {min(entry_idx + MAX_HOLD_BARS, len(df) - 1)}: close price {exit_price}, profit {let_profit - funding_fee}, funding_fee {funding_fee}")
                 trade.update({
                     'exit_price': exit_price,
-                    'exit_time': df['timestamp'].iloc[max_hold],
+                    'exit_time': df['timestamp'].iloc[min(entry_idx + MAX_HOLD_BARS, len(df) - 1)],
                     'status': 'expired',
                     'profit': let_profit - funding_fee,
                     'outcome': 'WIN' if (let_profit - funding_fee) >= 0 else 'LOSS'
                 })
             lowest_point = df['low'].iloc[entry_idx:j+1].min()
+            logger.debug(f"Long trade drawdown: lowest_point {lowest_point}, entry_price {trade['entry_price']}, drawdown {(lowest_point - trade['entry_price']) / trade['entry_price']}")
             trade['drawdown'] = (lowest_point - trade['entry_price']) / trade['entry_price']
         elif trade['direction'] == 'short':
             new_low = trade['entry_price']
             for j in range(entry_idx, max_hold + 1):
                 if df['low'].iloc[j] < trade['entry_price'] * TRAILING_START_SHORT:
                     if df['low'].iloc[j] < new_low:
+                        old_low = new_low
                         new_low = df['low'].iloc[j]
                         potential_stop = new_low * (1 + trailing_stop_pct)
+                        logger.debug(f"Short trade update at index {j}: new low updated from {old_low} to {new_low}, potential_stop {potential_stop}, previous stop_loss {trade['stop_loss']}")
                         if potential_stop < trade['stop_loss']:
                             trade['stop_loss'] = potential_stop
                 if (j - entry_idx) >= min_bars_before_stop and df['low'].iloc[j] <= trade['take_profit']:
+                    logger.debug(f"Short trade take profit triggered at index {j}: low {df['low'].iloc[j]} <= take_profit {trade['take_profit']}")
                     exit_price = trade['take_profit']
                     adjusted_entry = trade['entry_price'] * (1 - FUTURES_MAKER_FEE - SLIPPAGE_RATE)
                     adjusted_exit = exit_price * (1 + FUTURES_TAKER_FEE + SLIPPAGE_RATE)
                     funding_fee = get_funding_fee(client, symbol, trade['entry_time'], df['timestamp'].iloc[j])
                     raw_profit = (adjusted_entry - adjusted_exit) / adjusted_entry
+                    logger.debug(f"Short trade take profit exit calculated at index {j}: exit_price {exit_price}, raw_profit {raw_profit}, funding_fee {funding_fee}")
                     trade.update({
                         'exit_price': exit_price,
                         'exit_time': df['timestamp'].iloc[j],
@@ -166,11 +203,13 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
                     })
                     break
                 if df['high'].iloc[j] >= trade['stop_loss']:
+                    logger.debug(f"Short trade stop loss triggered at index {j}: high {df['high'].iloc[j]} >= stop_loss {trade['stop_loss']}")
                     exit_price = trade['stop_loss']
                     adjusted_entry = trade['entry_price'] * (1 - FUTURES_MAKER_FEE - SLIPPAGE_RATE)
                     adjusted_exit = exit_price * (1 + FUTURES_TAKER_FEE + SLIPPAGE_RATE)
                     funding_fee = get_funding_fee(client, symbol, trade['entry_time'], df['timestamp'].iloc[j])
                     raw_profit = (adjusted_entry - adjusted_exit) / adjusted_entry
+                    logger.debug(f"Short trade stop loss exit calculated at index {j}: exit_price {exit_price}, raw_profit {raw_profit}, funding_fee {funding_fee}")
                     trade.update({
                         'exit_price': exit_price,
                         'exit_time': df['timestamp'].iloc[j],
@@ -180,20 +219,23 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
                     })
                     break
             if trade['status'] == 'open':
-                exit_price = df['close'].iloc[max_hold]
+                exit_price = df['close'].iloc[min(entry_idx + MAX_HOLD_BARS, len(df) - 1)]
                 adjusted_entry = trade['entry_price'] * (1 - FUTURES_MAKER_FEE - SLIPPAGE_RATE)
                 adjusted_exit = exit_price * (1 + FUTURES_TAKER_FEE + SLIPPAGE_RATE)
                 sh_profit = (adjusted_entry - adjusted_exit) / adjusted_entry
-                funding_fee = get_funding_fee(client, symbol, trade['entry_time'], df['timestamp'].iloc[max_hold])
+                funding_fee = get_funding_fee(client, symbol, trade['entry_time'], df['timestamp'].iloc[min(entry_idx + MAX_HOLD_BARS, len(df) - 1)])
+                logger.debug(f"Short trade expired at max_hold index {min(entry_idx + MAX_HOLD_BARS, len(df) - 1)}: close price {exit_price}, profit {sh_profit - funding_fee}, funding_fee {funding_fee}")
                 trade.update({
                     'exit_price': exit_price,
-                    'exit_time': df['timestamp'].iloc[max_hold],
+                    'exit_time': df['timestamp'].iloc[min(entry_idx + MAX_HOLD_BARS, len(df) - 1)],
                     'status': 'expired',
                     'profit': sh_profit - funding_fee,
                     'outcome': 'WIN' if (sh_profit - funding_fee) >= 0 else 'LOSS'
                 })
             highest_point = df['high'].iloc[entry_idx:j+1].max()
+            logger.debug(f"Short trade drawdown: highest_point {highest_point}, entry_price {trade['entry_price']}, drawdown {(trade['entry_price'] - highest_point) / trade['entry_price']}")
             trade['drawdown'] = (trade['entry_price'] - highest_point) / trade['entry_price']
+    logger.debug(f"Completed processing trades for symbol {symbol}. Total signals: {len(signals)}")
     return signals
 
 def simulate_capital(signals, initial_capital=1000):
@@ -328,21 +370,6 @@ def analyze_aggregated_results(all_signals, initial_capital=1000):
         print(df[['entry_time', 'entry_price', 'SL', 'TP', 'exit_price', 'profit_pct', 'outcome']].head(5))
     except Exception as e:
         print(f"Aggregated analysis error: {str(e)}")
-
-def simulate_order_execution(side, market_price, quantity, timestamp):
-    """
-    Simulate order execution using historical order book snapshots.
-    For now, this uses a dummy order book snapshot.
-    In production, fetch the snapshot corresponding to the given timestamp.
-    """
-    # Create a dummy order book snapshot based on the current market price
-    order_book = {
-        'bids': [[market_price * 0.99, 10], [market_price * 0.98, 20]],
-        'asks': [[market_price * 1.01, 10], [market_price * 1.02, 20]]
-    }
-    from trade_manager import simulate_fill_price
-    fill_price = simulate_fill_price(side, market_price, quantity, order_book)
-    return fill_price
 
 def run_sequential_backtest(trades, initial_capital=10000):
     current_capital = initial_capital
