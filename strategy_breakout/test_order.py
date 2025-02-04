@@ -1,6 +1,7 @@
 from config import BINANCE_API_KEY, BINANCE_API_SECRET, RISK_PER_TRADE, LEVERAGE
 from binance.client import Client
 import math
+from decimal import Decimal, ROUND_DOWN
 
 # Initialize the Binance Futures Testnet client
 client = Client(BINANCE_API_KEY, BINANCE_API_SECRET, testnet=True)
@@ -11,13 +12,18 @@ def dynamic_round_quantity(symbol, quantity):
         info = client.get_symbol_info(symbol)
         for f in info.get('filters', []):
             if f.get('filterType') == 'LOT_SIZE':
-                step_size = float(f.get('stepSize'))
-                if step_size > 0:
-                    precision = int(round(-math.log10(step_size)))
-                    return round(quantity, precision)
-        return round(quantity, 3)
+                step_size_str = f.get('stepSize')
+                step_size = Decimal(step_size_str)
+                value_dec = Decimal(str(quantity))
+                precision = -step_size.as_tuple().exponent
+                quantized = value_dec.quantize(Decimal('1e-' + str(precision)), rounding=ROUND_DOWN)
+                if precision == 0:
+                    return str(int(quantized))
+                else:
+                    return f"{quantized:.{precision}f}"
+        return str(round(quantity, 3))
     except Exception as e:
-        return round(quantity, 3)
+        return str(round(quantity, 3))
 
 
 def test_order():

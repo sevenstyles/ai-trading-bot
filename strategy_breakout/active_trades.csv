@@ -1,2 +1,2 @@
-entry_time,entry_price,stop_loss,take_profit,direction,status,quantity,new_high,symbol
-2025-02-04 13:41:00,0.009492744,0.0094692675,0.009777526319999999,long,open,0.001,0.009493,RSRUSDT
+entry_time,entry_price,stop_loss,take_profit,direction,status,quantity,new_low,symbol
+2025-02-04 16:22:26.055337,4.808,4.65561,4.66376,short,open,316.69,4.644,ATOMUSDT

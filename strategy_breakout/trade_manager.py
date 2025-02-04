@@ -16,6 +16,7 @@ from indicators import (
 )
 from trade_logger import log_trade
 import math
+from decimal import Decimal, ROUND_DOWN
 
 def update_active_trade(symbol, df):
     trade = state.active_trades.get(symbol)
@@ -67,10 +68,10 @@ def close_trade(symbol, trade, exit_price, exit_time, close_reason=""):
         if 'avgPrice' in order and float(order['avgPrice']) > 0:
             effective_exit = float(order['avgPrice'])
         else:
-            effective_exit = simulate_fill_price(side, exit_price)
+            effective_exit = simulate_fill_price(symbol, side, exit_price)
     except Exception as e:
         log_debug(f"Error closing trade for {symbol}: {e}")
-        effective_exit = simulate_fill_price(side, exit_price)
+        effective_exit = simulate_fill_price(symbol, side, exit_price)
     trade['exit_price'] = effective_exit
     trade['exit_time'] = exit_time
     trade['status'] = 'closed'
@@ -113,7 +114,7 @@ def check_for_trade(symbol):
     log_debug(f"For {symbol} at index {latest_idx} - long_signal: {long_signal}, short_signal: {short_signal}")
     if long_signal:
         market_price = df["close"].iloc[-1]
-        simulated_entry = simulate_fill_price("BUY", market_price)
+        simulated_entry = simulate_fill_price(symbol, "BUY", market_price)
         quantity = place_order(symbol, "BUY", market_price)
         state.active_trades[symbol] = {
             'entry_time': df.index[-1],
@@ -127,7 +128,7 @@ def check_for_trade(symbol):
         update_stop_order(symbol, state.active_trades[symbol])
     elif short_signal:
         market_price = df["close"].iloc[-1]
-        simulated_entry = simulate_fill_price("SELL", market_price)
+        simulated_entry = simulate_fill_price(symbol, "SELL", market_price)
         quantity = place_order(symbol, "SELL", market_price)
         state.active_trades[symbol] = {
             'entry_time': df.index[-1],
@@ -147,15 +148,34 @@ def dynamic_round_quantity(symbol, quantity):
         info = client.get_symbol_info(symbol)
         for f in info.get('filters', []):
             if f.get('filterType') == 'LOT_SIZE':
-                step_size = float(f.get('stepSize'))
-                # Calculate precision based on step_size
-                if step_size > 0:
-                    precision = int(round(-math.log10(step_size)))
-                    precision = min(precision, 2)  # cap maximum precision to 2 decimals
-                    return round(quantity, precision)
-        return round(quantity, 3)
+                step = float(f.get('stepSize'))
+                if step == 0:
+                    return str(quantity)
+                precision = int(round(-math.log10(step)))
+                rounded = math.floor(quantity * (10 ** precision)) / (10 ** precision)
+                min_qty = float(f.get('minQty', 0))
+                if rounded < min_qty:
+                    rounded = min_qty
+                return format(rounded, f'.{precision}f') if precision > 0 else str(int(rounded))
+        return str(round(quantity, 3))
     except Exception as e:
-        return round(quantity, 3)
+        return str(round(quantity, 3))
+
+
+def dynamic_round_price(symbol, price):
+    try:
+        info = client.get_symbol_info(symbol)
+        for f in info.get('filters', []):
+            if f.get('filterType') == 'PRICE_FILTER':
+                tick = float(f.get('tickSize'))
+                if tick == 0:
+                    return str(price)
+                precision = int(round(-math.log10(tick)))
+                rounded = math.floor(price * (10 ** precision)) / (10 ** precision)
+                return format(rounded, f'.{precision}f') if precision > 0 else str(int(rounded))
+        return str(round(price, 4))
+    except Exception as e:
+        return str(round(price, 4))
 
 
 def place_order(symbol, side, price):
@@ -191,18 +211,20 @@ def place_order(symbol, side, price):
         return None
 
 
-def simulate_fill_price(side, market_price, quantity=1.0, order_book=None):
-    """Simulate filling an order using market depth data if provided, otherwise apply default slippage."""
+def simulate_fill_price(symbol, side, market_price, quantity=1.0, order_book=None):
+    """Simulate filling an order using market depth data if provided, otherwise apply default slippage and round the price."""
     if order_book is not None:
         from orderbook_simulator import simulate_market_order
         average_price, filled_qty = simulate_market_order(order_book, quantity, side.lower())
-        return average_price
+        return float(dynamic_round_price(symbol, average_price))
     else:
         if side.upper() == "BUY":
-            return market_price * (1 + SLIPPAGE_RATE)
+            simulated = market_price * (1 + SLIPPAGE_RATE)
         elif side.upper() == "SELL":
-            return market_price * (1 - SLIPPAGE_RATE)
-        return market_price
+            simulated = market_price * (1 - SLIPPAGE_RATE)
+        else:
+            simulated = market_price
+        return float(dynamic_round_price(symbol, simulated))
 
 
 def save_executed_trades_csv():
@@ -282,7 +304,7 @@ def update_stop_order(symbol, trade):
             log_debug(f"Could not cancel previous stop order for {symbol}: {e}")
     try:
         stop_loss = trade["stop_loss"]
-        stop_price_str = f"{stop_loss:.2f}" if stop_loss >= 10 else f"{stop_loss:.4f}"
+        stop_price = dynamic_round_price(symbol, stop_loss)
         current_price = None
         try:
             ticker = client.get_symbol_ticker(symbol=symbol)
@@ -292,7 +314,7 @@ def update_stop_order(symbol, trade):
             if symbol in state.candles_dict and not state.candles_dict[symbol].empty:
                 current_price = state.candles_dict[symbol].iloc[-1]["close"]
         if current_price is not None:
-            stop_price = float(stop_price_str)
+            # Ensure stop price is sufficiently away from current price
             min_buffer = current_price * 0.0025
             if trade["direction"] == "short":
                 if stop_price <= current_price or (stop_price - current_price) < min_buffer:
@@ -300,15 +322,30 @@ def update_stop_order(symbol, trade):
             elif trade["direction"] == "long":
                 if stop_price >= current_price or (current_price - stop_price) < min_buffer:
                     return
+
+            # Check against PERCENT_PRICE filter if available
+            symbol_info = client.get_symbol_info(symbol)
+            for f in symbol_info.get("filters", []):
+                if f.get("filterType") == "PERCENT_PRICE":
+                    multiplier_up = float(f.get("multiplierUp", 0))
+                    multiplier_down = float(f.get("multiplierDown", 0))
+                    if trade["direction"] == "short" and stop_price > current_price * multiplier_up:
+                        log_debug(f"Stop price {stop_price} exceeds allowed multiplier for {symbol}")
+                        return
+                    if trade["direction"] == "long" and stop_price < current_price * multiplier_down:
+                        log_debug(f"Stop price {stop_price} below allowed multiplier for {symbol}")
+                        return
+                    break
+
             new_order = client.futures_create_order(
                 symbol=symbol,
                 side=side,
                 type="STOP_MARKET",
-                stopPrice=stop_price_str,
+                stopPrice=str(stop_price),
                 closePosition=True
             )
             trade["stop_order_id"] = new_order.get("orderId")
-            log_trade(f"Placed new stop order for {symbol} at {stop_price_str}: {new_order}")
+            log_trade(f"Placed new stop order for {symbol} at {stop_price}: {new_order}")
         else:
             log_debug(f"Could not update stop order for {symbol} due to missing current price.")
     except Exception as e:
