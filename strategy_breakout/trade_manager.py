@@ -191,12 +191,18 @@ def place_order(symbol, side, price):
         return None
 
 
-def simulate_fill_price(side, market_price):
-    if side == "BUY":
-        return market_price * (1 + SLIPPAGE_RATE)
-    elif side == "SELL":
-        return market_price * (1 - SLIPPAGE_RATE)
-    return market_price
+def simulate_fill_price(side, market_price, quantity=1.0, order_book=None):
+    """Simulate filling an order using market depth data if provided, otherwise apply default slippage."""
+    if order_book is not None:
+        from orderbook_simulator import simulate_market_order
+        average_price, filled_qty = simulate_market_order(order_book, quantity, side.lower())
+        return average_price
+    else:
+        if side.upper() == "BUY":
+            return market_price * (1 + SLIPPAGE_RATE)
+        elif side.upper() == "SELL":
+            return market_price * (1 - SLIPPAGE_RATE)
+        return market_price
 
 
 def save_executed_trades_csv():

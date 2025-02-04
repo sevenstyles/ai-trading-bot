@@ -329,6 +329,21 @@ def analyze_aggregated_results(all_signals, initial_capital=1000):
     except Exception as e:
         print(f"Aggregated analysis error: {str(e)}")
 
+def simulate_order_execution(side, market_price, quantity, timestamp):
+    """
+    Simulate order execution using historical order book snapshots.
+    For now, this uses a dummy order book snapshot.
+    In production, fetch the snapshot corresponding to the given timestamp.
+    """
+    # Create a dummy order book snapshot based on the current market price
+    order_book = {
+        'bids': [[market_price * 0.99, 10], [market_price * 0.98, 20]],
+        'asks': [[market_price * 1.01, 10], [market_price * 1.02, 20]]
+    }
+    from trade_manager import simulate_fill_price
+    fill_price = simulate_fill_price(side, market_price, quantity, order_book)
+    return fill_price
+
 def run_sequential_backtest(trades, initial_capital=10000):
     current_capital = initial_capital
     trades_sorted = sorted(trades, key=lambda t: t['entry_time'])
