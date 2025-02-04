@@ -286,7 +286,7 @@ def analyze_results(signals, symbol):
     except Exception as e:
         print(f"Analysis error: {str(e)}")
 
-def analyze_aggregated_results(all_signals, initial_capital=1000):
+def analyze_aggregated_results(all_signals, initial_capital=1000, days=30):
     if not all_signals:
         print("No aggregated trades generated")
         return
@@ -308,8 +308,7 @@ def analyze_aggregated_results(all_signals, initial_capital=1000):
         print(f"ATR Period         : {config.ATR_PERIOD}")
         print(f"Minimum ATR %      : {config.MIN_ATR_PCT}")
         print(f"Trend Strength Th. : {config.TREND_STRENGTH_THRESHOLD}")
-        print(f"Minimum ADX        : {config.MIN_ADX}")
-        print(f"Momentum Window    : {config.MOMENTUM_WINDOW}")
+        print(f"Backtesting period (days)  : {days}")
         print("="*30)
         df = pd.DataFrame(all_signals)
         df['profit_pct'] = (df['profit'] * 100).round(2)

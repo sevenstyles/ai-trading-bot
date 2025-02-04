@@ -1,2 +1,2 @@
-entry_time,entry_price,stop_loss,take_profit,direction,status,quantity,new_low,symbol
-2025-02-04 16:22:26.055337,4.808,4.65561,4.66376,short,open,316.69,4.644,ATOMUSDT
+entry_time,entry_price,stop_loss,take_profit,direction,status,quantity,new_high,symbol
+2025-02-04 17:04:00,0.2196,0.2200485,0.226188,long,open,0.001,0.2206,TRXUSDT
