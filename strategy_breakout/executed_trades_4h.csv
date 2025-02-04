@@ -1,0 +1,2 @@
+entry_time,entry_price,stop_loss,take_profit,direction,status,quantity,new_low,exit_price,exit_time,close_reason,symbol,profit_pct
+2025-02-04 16:22:26.055337,4.808,4.5302975,4.66376,short,closed,316.69,4.519,4.532,2025-02-04 16:23:00,stop loss hit,ATOMUSDT,5.740432612312809
