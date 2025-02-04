@@ -1,2 +1,2 @@
-entry_time,entry_price,stop_loss,take_profit,direction,status,quantity,stop_order_id,new_high,symbol
-2025-02-04 10:05:00,614.74722,615.35775,633.1896366,long,open,0.001,481469992,616.9,BNBUSDT
+entry_time,entry_price,stop_loss,take_profit,direction,status,quantity,new_high,symbol
+2025-02-04 11:00:00,1.050525,1.045272375,1.08204075,long,open,0.001,1.050525,STXUSDT

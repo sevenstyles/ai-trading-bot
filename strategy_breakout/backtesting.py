@@ -201,7 +201,7 @@ def simulate_capital(signals, initial_capital=1000):
     capital = initial_capital
     for trade in sorted_signals:
         if 'profit' in trade:
-            capital *= (1 + trade['profit'])
+            capital *= (1 + RISK_PER_TRADE * trade['profit'])
             trade['capital_after'] = capital
     return capital
 
@@ -334,6 +334,6 @@ def run_sequential_backtest(trades, initial_capital=10000):
     trades_sorted = sorted(trades, key=lambda t: t['entry_time'])
     for trade in trades_sorted:
         if 'profit' in trade:
-            current_capital *= (1 + trade['profit'])
+            current_capital *= (1 + RISK_PER_TRADE * trade['profit'])
             trade['capital_after'] = current_capital
     return current_capital 

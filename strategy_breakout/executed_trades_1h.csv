@@ -1,2 +1,5 @@
-entry_time,entry_price,stop_loss,take_profit,direction,status,quantity,new_high,exit_price,exit_time,close_reason,symbol,profit_pct
-2025-02-04 10:18:00,0.88044,0.8787975,0.9068532,long,closed,0.001,0.881,0.87835810125,2025-02-04 10:19:00,stop loss hit,LITUSDT,-0.236461172822677
+entry_time,entry_price,stop_loss,take_profit,direction,status,quantity,new_high,exit_price,exit_time,close_reason,symbol,stop_order_id,profit_pct
+2025-02-04 10:18:00,0.88044,0.8787975,0.9068532,long,closed,0.001,0.881,0.87835810125,2025-02-04 10:19:00,stop loss hit,LITUSDT,,-0.236461172822677
+2025-02-04 10:28:00,1.02281115,1.0176970942499999,1.0534954845,long,closed,0.001,1.02281115,1.017188245702875,2025-02-04 10:30:00,stop loss hit,JUPUSDT,,-0.5497499999999976
+2025-02-04 10:05:00,614.74722,615.35775,633.1896366,long,closed,0.001,616.9,615.050071125,2025-02-04 10:37:00,stop loss hit,BNBUSDT,481469992.0,0.04926433420879476
+2025-02-04 10:50:00,0.538269,0.53735325,0.55441707,long,closed,0.001,0.5387,0.537084573375,2025-02-04 10:51:00,stop loss hit,KAVAUSDT,,-0.22004362595653046
