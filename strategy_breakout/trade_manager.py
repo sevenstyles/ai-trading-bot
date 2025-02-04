@@ -148,15 +148,14 @@ def dynamic_round_quantity(symbol, quantity):
         info = client.get_symbol_info(symbol)
         for f in info.get('filters', []):
             if f.get('filterType') == 'LOT_SIZE':
-                step = float(f.get('stepSize'))
-                if step == 0:
-                    return str(quantity)
-                precision = int(round(-math.log10(step)))
-                rounded = math.floor(quantity * (10 ** precision)) / (10 ** precision)
-                min_qty = float(f.get('minQty', 0))
-                if rounded < min_qty:
-                    rounded = min_qty
-                return format(rounded, f'.{precision}f') if precision > 0 else str(int(rounded))
+                step = f.get('stepSize')
+                dstep = Decimal(str(step))
+                qty_decimal = Decimal(str(quantity))
+                rounded_qty = qty_decimal.quantize(dstep, rounding=ROUND_DOWN)
+                min_qty = Decimal(f.get('minQty', '0'))
+                if rounded_qty < min_qty:
+                    rounded_qty = min_qty
+                return format(rounded_qty, 'f')
         return str(round(quantity, 3))
     except Exception as e:
         return str(round(quantity, 3))
@@ -167,12 +166,11 @@ def dynamic_round_price(symbol, price):
         info = client.get_symbol_info(symbol)
         for f in info.get('filters', []):
             if f.get('filterType') == 'PRICE_FILTER':
-                tick = float(f.get('tickSize'))
-                if tick == 0:
-                    return str(price)
-                precision = int(round(-math.log10(tick)))
-                rounded = math.floor(price * (10 ** precision)) / (10 ** precision)
-                return format(rounded, f'.{precision}f') if precision > 0 else str(int(rounded))
+                tick = f.get('tickSize')
+                dtick = Decimal(str(tick))
+                price_decimal = Decimal(str(price))
+                rounded_price = price_decimal.quantize(dtick, rounding=ROUND_DOWN)
+                return format(rounded_price, 'f')
         return str(round(price, 4))
     except Exception as e:
         return str(round(price, 4))
@@ -241,6 +239,7 @@ def save_executed_trades_csv():
                 except Exception as e:
                     return None
             df['profit_pct'] = df.apply(calc_profit, axis=1)
+            df['profit_pct'] = df['profit_pct'].round(2)
         filename = f"executed_trades_{CANDLESTICK_INTERVAL}.csv"
         df.to_csv(filename, index=False)
         log_debug(f"Executed trades saved to {filename}")

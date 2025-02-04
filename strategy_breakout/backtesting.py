@@ -139,7 +139,7 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
                         'exit_time': df['timestamp'].iloc[j],
                         'status': 'stopped',
                         'profit': raw_profit - funding_fee,
-                        'outcome': 'LOSS'
+                        'outcome': 'WIN' if (raw_profit - funding_fee) >= 0 else 'LOSS'
                     })
                     break
                 if df['high'].iloc[j] >= trade['take_profit']:
@@ -155,7 +155,7 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
                         'exit_time': df['timestamp'].iloc[j],
                         'status': 'target',
                         'profit': raw_profit - funding_fee,
-                        'outcome': 'WIN'
+                        'outcome': 'WIN' if (raw_profit - funding_fee) >= 0 else 'LOSS'
                     })
                     break
             if trade['status'] == 'open':
@@ -199,7 +199,7 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
                         'exit_time': df['timestamp'].iloc[j],
                         'status': 'target',
                         'profit': raw_profit - funding_fee,
-                        'outcome': 'WIN'
+                        'outcome': 'WIN' if (raw_profit - funding_fee) >= 0 else 'LOSS'
                     })
                     break
                 if df['high'].iloc[j] >= trade['stop_loss']:
@@ -215,7 +215,7 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
                         'exit_time': df['timestamp'].iloc[j],
                         'status': 'stopped',
                         'profit': raw_profit - funding_fee,
-                        'outcome': 'LOSS'
+                        'outcome': 'WIN' if (raw_profit - funding_fee) >= 0 else 'LOSS'
                     })
                     break
             if trade['status'] == 'open':
