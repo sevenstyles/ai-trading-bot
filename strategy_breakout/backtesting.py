@@ -15,6 +15,7 @@ if not logger.handlers:
     logger.addHandler(fh)
 logger.propagate = False
 from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, LONG_TAKE_PROFIT_MULTIPLIER, SHORT_TAKE_PROFIT_MULTIPLIER, SLIPPAGE_RATE, LONG_STOP_LOSS_MULTIPLIER, SHORT_STOP_LOSS_MULTIPLIER, TRAILING_STOP_PCT, TRAILING_START_LONG, TRAILING_START_SHORT, MIN_BARS_BEFORE_STOP, ATR_PERIOD, LONG_STOP_LOSS_ATR_MULTIPLIER, SHORT_STOP_LOSS_ATR_MULTIPLIER, FUTURES_MAKER_FEE, FUTURES_TAKER_FEE, FUNDING_RATE
+from strategy import get_trend_direction
 
 def get_funding_fee(client, symbol, entry_time, exit_time):
     # Convert entry and exit times (assumed to be datetime objects) to milliseconds
@@ -71,6 +72,18 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
     logger.debug(f"DataFrame after dropping NA: shape {df.shape}")
     df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
     logger.debug(f"Timestamps converted. First timestamp: {df['timestamp'].iloc[0] if not df.empty else 'empty'}")
+    klines_4h = client.get_historical_klines(symbol, "4h", start_date.strftime("%d %b %Y"), end_date.strftime("%d %b %Y"))
+    logger.debug(f"Fetched {len(klines_4h)} historical 4h klines for symbol {symbol}")
+    df_4h = pd.DataFrame(klines_4h, columns=[
+        'timestamp', 'open', 'high', 'low', 'close', 'volume',
+        'close_time', 'quote_asset_volume', 'trades',
+        'taker_buy_base', 'taker_buy_quote', 'ignore'
+    ])
+    numeric_cols_4h = ['open', 'high', 'low', 'close', 'volume']
+    df_4h[numeric_cols_4h] = df_4h[numeric_cols_4h].apply(pd.to_numeric, errors='coerce')
+    df_4h = df_4h.dropna(subset=numeric_cols_4h)
+    df_4h['timestamp'] = pd.to_datetime(df_4h['timestamp'], unit='ms')
+    df_4h = df_4h.sort_values(by='timestamp')
     from indicators import calculate_market_structure, calculate_trend_strength, calculate_emas, calculate_macd, calculate_adx, calculate_rsi, generate_signal, generate_short_signal, calculate_atr
     df = calculate_market_structure(df)
     logger.debug(f"After calculate_market_structure: shape {df.shape}")
@@ -88,7 +101,17 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
     logger.debug("ATR calculated and added to DataFrame")
     signals = []
     for i in range(len(df)):
+        # Get candidate time and corresponding 4h data up to candidate time
+        candidate_time = df['timestamp'].iloc[i]
+        df_4h_current = df_4h[df_4h['timestamp'] <= candidate_time]
+        if df_4h_current.empty:
+            continue
+
         if generate_signal(df, i):
+            # Check higher timeframe trend for long signal
+            higher_trend = get_trend_direction(df_4h_current)
+            if higher_trend != 'bullish':
+                continue
             entry_price = df['close'].iloc[i]
             atr_value = df['atr'].iloc[i]
             if pd.isna(atr_value) or atr_value <= 0:
@@ -98,7 +121,7 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
                 logger.warning(f"Invalid long SL calculated at index {i}: {stop_loss} >= {entry_price}. Resetting stop loss to fallback value.")
                 stop_loss = entry_price * 0.995
             entry = {
-                'entry_time': df['timestamp'].iloc[i],
+                'entry_time': candidate_time,
                 'entry_price': entry_price,
                 'initial_stop_loss': stop_loss,
                 'stop_loss': stop_loss,
@@ -113,8 +136,12 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
             }
             signals.append(entry)
         elif generate_short_signal(df, i):
+            # Check higher timeframe trend for short signal
+            higher_trend = get_trend_direction(df_4h_current)
+            if higher_trend != 'bearish':
+                continue
             entry_price = df['close'].iloc[i]
-            entry_time = df['timestamp'].iloc[i]
+            entry_time = candidate_time
             atr_value = df['atr'].iloc[i]
             if pd.isna(atr_value) or atr_value <= 0:
                 atr_value = entry_price * 0.01

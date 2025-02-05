@@ -4,6 +4,7 @@ import state
 from logger import log_debug
 from binance_client import client
 from config import RISK_PER_TRADE, SLIPPAGE_RATE, LEVERAGE, CANDLESTICK_INTERVAL
+from config import CAPITAL, ORDER_SIZE_PCT
 from indicators import (
     calculate_market_structure,
     calculate_trend_strength,
@@ -17,6 +18,7 @@ from indicators import (
 from trade_logger import log_trade
 import math
 from decimal import Decimal, ROUND_DOWN
+from strategy import get_trend_direction
 
 def apply_trailing_stop(symbol, trade, latest_candle, trailing_stop_pct):
     # For long trades, update new_high and potential trailing stop
@@ -117,6 +119,44 @@ def check_for_trade(symbol):
     long_signal = generate_signal(df, latest_idx)
     short_signal = generate_short_signal(df, latest_idx)
     log_debug(f"For {symbol} at index {latest_idx} - long_signal: {long_signal}, short_signal: {short_signal}")
+    
+    # Retrieve HTF (4h) candles for filtering (last 30 days)
+    import datetime
+    start_date = datetime.datetime.now() - datetime.timedelta(days=30)
+    end_date = datetime.datetime.now()
+    start_str = start_date.strftime("%d %b %Y")
+    end_str = end_date.strftime("%d %b %Y")
+    htf_klines = client.get_historical_klines(symbol, "4h", start_str, end_str)
+    if not htf_klines:
+        log_debug(f"Could not retrieve HTF candles for {symbol}")
+        return
+    df_4h = pd.DataFrame(htf_klines, columns=[
+        'timestamp', 'open', 'high', 'low', 'close', 'volume',
+        'close_time', 'quote_asset_volume', 'trades', 'taker_buy_base', 'taker_buy_quote', 'ignore'
+    ])
+    numeric_cols = ['open', 'high', 'low', 'close', 'volume']
+    df_4h[numeric_cols] = df_4h[numeric_cols].apply(pd.to_numeric, errors='coerce')
+    df_4h['timestamp'] = pd.to_datetime(df_4h['timestamp'], unit='ms')
+    df_4h = df_4h.sort_values(by='timestamp')
+    
+    # Filter HTF candles up to the current timeframe's latest timestamp
+    current_time = df.index[-1]
+    df_4h_current = df_4h[df_4h['timestamp'] <= current_time]
+    if df_4h_current.empty:
+        log_debug(f"No HTF candles available up to {current_time} for {symbol}")
+        return
+    
+    htf_trend = get_trend_direction(df_4h_current)
+    log_debug(f"HTF trend for {symbol}: {htf_trend}")
+    
+    # Only allow trades if the HTF trend aligns with the lower timeframe signal
+    if long_signal and htf_trend != 'bullish':
+        log_debug(f"HTF trend is not bullish for {symbol}. Skipping long trade.")
+        return
+    if short_signal and htf_trend != 'bearish':
+        log_debug(f"HTF trend is not bearish for {symbol}. Skipping short trade.")
+        return
+    
     if long_signal:
         market_price = df["close"].iloc[-1]
         simulated_entry = simulate_fill_price(symbol, "BUY", market_price)
@@ -188,18 +228,11 @@ def place_order(symbol, side, price):
     except Exception as e:
         log_trade(f"Error setting leverage for {symbol}: {e}")
     try:
-        balance_info = client.futures_account_balance()
-        usdt_balance = None
-        for b in balance_info:
-            if b.get('asset') == 'USDT':
-                usdt_balance = float(b.get('balance', 0))
-                break
-        if usdt_balance is None or usdt_balance <= 0:
-            quantity = 0.001
-        else:
-            order_value = usdt_balance * RISK_PER_TRADE
-            quantity = order_value / price
-            quantity = dynamic_round_quantity(symbol, quantity)
+        # Calculate order value based on capital and order size percentage for live trading
+        order_value = CAPITAL * ORDER_SIZE_PCT
+        quantity = order_value / price
+        quantity = dynamic_round_quantity(symbol, quantity)
+     
         order = client.futures_create_order(
             symbol=symbol,
             side=side,
