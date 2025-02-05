@@ -116,7 +116,7 @@ def check_entry_conditions(data, zones, trend):
         'Analysis': []
     }
     valid_zones = [z for z in zones if ((z['type'] == 'demand' if trend == 'bullish' else z['type'] == 'supply') and z['valid'])]
-    volume_ok = ltf.volume.iloc[-1] > ltf.volume.rolling(20).mean().iloc[-1] * 1.0
+    volume_ok = ltf.volume.iloc[-1] > ltf.volume.rolling(20).mean().iloc[-1] * 1.5
     last_close = ltf.close.iloc[-1]
     zone_active = any((zone['low'] * 0.98 < last_close < zone['high'] * 1.02) for zone in valid_zones)
     if volume_ok and zone_active:
@@ -135,10 +135,10 @@ def breakout_signal(df, i):
     """Simplified breakout signal logic for increased trade frequency."""
     if i < 3:
         return False
-    price_buffer = 1.001
+    price_buffer = 1.003
     cond_price = df['close'].iloc[i] > df['consol_high'].iloc[i] * price_buffer
-    cond_volume = (df['volume'].iloc[i] / df['volume'].rolling(20).mean().iloc[i]) >= 1.0
-    cond_consolidation = (df['consol_high'].iloc[i] - df['consol_low'].iloc[i]) < df['consol_high'].iloc[i] * 1.05
+    cond_volume = (df['volume'].iloc[i] / df['volume'].rolling(20).mean().iloc[i]) >= 1.5
+    cond_consolidation = (df['consol_high'].iloc[i] - df['consol_low'].iloc[i]) < df['consol_high'].iloc[i] * 1.03
     cond_trend = df['close'].iloc[i] > df['ema50'].iloc[i]
     cond_macd = df['macd'].iloc[i] > df['signal'].iloc[i]
     cond_rsi = ((df['rsi'].iloc[i] > 30) and (df['rsi'].iloc[i] < 70)) if 'rsi' in df.columns else True
