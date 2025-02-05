@@ -69,10 +69,6 @@ SHORT_TAKE_PROFIT_MULTIPLIER = 0.96
 LONG_STOP_LOSS_MULTIPLIER = 0.995
 SHORT_STOP_LOSS_MULTIPLIER = 1.005
 
-# Parameters for consolidation breakout strategy
-CONSOLIDATION_THRESHOLD_PCT = 0.5      # Maximum consolidation range as a percent of price (e.g., 0.5 means 0.5%)
-CONSOLIDATION_RISK_REWARD_MULTIPLIER = 3.0  # Take profit multiplier for consolidation breakouts
-
 # Removed duplicate profit target multipliers. Previous definitions of 1.06 and 0.94 have been removed.
 
 # New parameters to simulate live futures trading conditions:

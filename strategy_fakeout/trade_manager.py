@@ -159,32 +159,13 @@ def check_for_trade(symbol):
     
     if long_signal:
         market_price = df["close"].iloc[-1]
-        # Look back over the last 5 bars for consolidation breakout logic
-        lookback = 5
-        consolidation_df = df.iloc[max(0, len(df) - lookback):]
-        if not consolidation_df.empty:
-            consol_high = consolidation_df['high'].max()
-            consol_low = consolidation_df['low'].min()
-            consol_range = consol_high - consol_low
-            relative_consolidation = consol_range / market_price
-        else:
-            relative_consolidation = None
-
-        if relative_consolidation is not None and relative_consolidation <= (config.CONSOLIDATION_THRESHOLD_PCT / 100):
-            stop_loss = consol_low
-            risk = market_price - consol_low
-            take_profit = market_price + risk * config.CONSOLIDATION_RISK_REWARD_MULTIPLIER
-            logger.debug(f"Consolidation breakout long detected for {symbol}: relative_consolidation {relative_consolidation:.4f}")
-        else:
-            stop_loss = market_price * 0.995
-            take_profit = market_price * 1.03
         simulated_entry = simulate_fill_price(symbol, "BUY", market_price)
         quantity = place_order(symbol, "BUY", market_price)
         state.active_trades[symbol] = {
             'entry_time': df.index[-1],
             'entry_price': simulated_entry,
-            'stop_loss': stop_loss,
-            'take_profit': take_profit,
+            'stop_loss': simulated_entry * 0.995,
+            'take_profit': simulated_entry * 1.03,
             'direction': 'long',
             'status': 'open',
             'quantity': quantity if quantity is not None else 0.001
@@ -192,32 +173,13 @@ def check_for_trade(symbol):
         update_stop_order(symbol, state.active_trades[symbol])
     elif short_signal:
         market_price = df["close"].iloc[-1]
-        # Look back over the last 5 bars for consolidation breakout logic for shorts
-        lookback = 5
-        consolidation_df = df.iloc[max(0, len(df) - lookback):]
-        if not consolidation_df.empty:
-            consol_high = consolidation_df['high'].max()
-            consol_low = consolidation_df['low'].min()
-            consol_range = consol_high - consol_low
-            relative_consolidation = consol_range / market_price
-        else:
-            relative_consolidation = None
-
-        if relative_consolidation is not None and relative_consolidation <= (config.CONSOLIDATION_THRESHOLD_PCT / 100):
-            stop_loss = consol_high
-            risk = consol_high - market_price
-            take_profit = market_price - risk * config.CONSOLIDATION_RISK_REWARD_MULTIPLIER
-            logger.debug(f"Consolidation breakout short detected for {symbol}: relative_consolidation {relative_consolidation:.4f}")
-        else:
-            stop_loss = market_price * 1.005
-            take_profit = market_price * 0.97
         simulated_entry = simulate_fill_price(symbol, "SELL", market_price)
         quantity = place_order(symbol, "SELL", market_price)
         state.active_trades[symbol] = {
             'entry_time': df.index[-1],
             'entry_price': simulated_entry,
-            'stop_loss': stop_loss,
-            'take_profit': take_profit,
+            'stop_loss': simulated_entry * 1.005,
+            'take_profit': simulated_entry * 0.97,
             'direction': 'short',
             'status': 'open',
             'quantity': quantity if quantity is not None else 0.001

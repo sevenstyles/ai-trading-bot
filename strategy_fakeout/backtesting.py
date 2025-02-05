@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 import random
 import json
 import logging
-import config  # Added missing import for config
 logger = logging.getLogger("backtester")
 logger.setLevel(logging.DEBUG)
 if not logger.handlers:
@@ -102,51 +101,31 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
     logger.debug("ATR calculated and added to DataFrame")
     signals = []
     for i in range(len(df)):
+        # Get candidate time and corresponding 4h data up to candidate time
         candidate_time = df['timestamp'].iloc[i]
         df_4h_current = df_4h[df_4h['timestamp'] <= candidate_time]
         if df_4h_current.empty:
             continue
 
         if generate_signal(df, i):
+            # Check higher timeframe trend for long signal
             higher_trend = get_trend_direction(df_4h_current)
             if higher_trend != 'bullish':
                 continue
             entry_price = df['close'].iloc[i]
-            # Look back over the last 5 bars to detect consolidation
-            lookback = 5
-            start_index = max(0, i - lookback)
-            consolidation_df = df.iloc[start_index:i]
-            if not consolidation_df.empty:
-                consol_high = consolidation_df['high'].max()
-                consol_low = consolidation_df['low'].min()
-                consol_range = consol_high - consol_low
-                relative_consolidation = consol_range / entry_price
-            else:
-                relative_consolidation = None
-
-            # Check if consolidation is tight enough
-            if relative_consolidation is not None and relative_consolidation <= (config.CONSOLIDATION_THRESHOLD_PCT / 100):
-                stop_loss = consol_low
-                risk = entry_price - consol_low
-                take_profit = entry_price + risk * config.CONSOLIDATION_RISK_REWARD_MULTIPLIER
-                logger.debug(f"Consolidation breakout long at index {i}: relative_consolidation {relative_consolidation:.4f}")
-            else:
-                atr_value = df['atr'].iloc[i]
-                if pd.isna(atr_value) or atr_value <= 0:
-                    atr_value = entry_price * 0.01
-                stop_loss = entry_price - max(atr_value * LONG_STOP_LOSS_ATR_MULTIPLIER, entry_price * 0.01)
-                take_profit = entry_price * LONG_TAKE_PROFIT_MULTIPLIER
-
+            atr_value = df['atr'].iloc[i]
+            if pd.isna(atr_value) or atr_value <= 0:
+                atr_value = entry_price * 0.01  # Fallback to 1% of entry price
+            stop_loss = entry_price - max(atr_value * LONG_STOP_LOSS_ATR_MULTIPLIER, entry_price * 0.01)
             if stop_loss >= entry_price:
                 logger.warning(f"Invalid long SL calculated at index {i}: {stop_loss} >= {entry_price}. Resetting stop loss to fallback value.")
                 stop_loss = entry_price * 0.995
-
             entry = {
                 'entry_time': candidate_time,
                 'entry_price': entry_price,
                 'initial_stop_loss': stop_loss,
                 'stop_loss': stop_loss,
-                'take_profit': take_profit,
+                'take_profit': df['close'].iloc[i] * LONG_TAKE_PROFIT_MULTIPLIER,
                 'exit_price': 0,
                 'exit_time': None,
                 'profit': 0,
@@ -157,47 +136,27 @@ def backtest_strategy(symbol, timeframe='1h', days=30, client=None, use_random_d
             }
             signals.append(entry)
         elif generate_short_signal(df, i):
+            # Check higher timeframe trend for short signal
             higher_trend = get_trend_direction(df_4h_current)
             if higher_trend != 'bearish':
                 continue
             entry_price = df['close'].iloc[i]
-            # Look back over the last 5 bars to detect consolidation for shorts
-            lookback = 5
-            start_index = max(0, i - lookback)
-            consolidation_df = df.iloc[start_index:i]
-            if not consolidation_df.empty:
-                consol_high = consolidation_df['high'].max()
-                consol_low = consolidation_df['low'].min()
-                consol_range = consol_high - consol_low
-                relative_consolidation = consol_range / entry_price
-            else:
-                relative_consolidation = None
-
-            # For shorts, if consolidation is tight, use the consolidation high as stop-loss
-            if relative_consolidation is not None and relative_consolidation <= (config.CONSOLIDATION_THRESHOLD_PCT / 100):
-                stop_loss = consol_high
-                risk = consol_high - entry_price
-                take_profit = entry_price - risk * config.CONSOLIDATION_RISK_REWARD_MULTIPLIER
-                logger.debug(f"Consolidation breakout short at index {i}: relative_consolidation {relative_consolidation:.4f}")
-            else:
-                atr_value = df['atr'].iloc[i]
-                if pd.isna(atr_value) or atr_value <= 0:
-                    atr_value = entry_price * 0.01
-                stop_loss = entry_price * SHORT_STOP_LOSS_MULTIPLIER + (atr_value * SHORT_STOP_LOSS_ATR_MULTIPLIER)
-                stop_loss = max(stop_loss, entry_price * 1.005)
-                take_profit = entry_price * SHORT_TAKE_PROFIT_MULTIPLIER
-
+            entry_time = candidate_time
+            atr_value = df['atr'].iloc[i]
+            if pd.isna(atr_value) or atr_value <= 0:
+                atr_value = entry_price * 0.01
+            stop_loss = entry_price * SHORT_STOP_LOSS_MULTIPLIER + (atr_value * SHORT_STOP_LOSS_ATR_MULTIPLIER)
+            stop_loss = max(stop_loss, entry_price * 1.005)
             if stop_loss <= entry_price:
                 logger.warning(f"Invalid short SL calculated at index {i}: {stop_loss} <= {entry_price}. Resetting stop loss to fallback value.")
                 stop_loss = entry_price * 1.005
-
             trade = {
                 'symbol': symbol,
                 'direction': 'short',
                 'entry_price': entry_price,
                 'stop_loss': stop_loss,
-                'take_profit': take_profit,
-                'entry_time': candidate_time,
+                'take_profit': entry_price * SHORT_TAKE_PROFIT_MULTIPLIER,
+                'entry_time': entry_time,
                 'status': 'open'
             }
             signals.append(trade)
