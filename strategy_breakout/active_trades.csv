@@ -1,2 +1,2 @@
-entry_time,entry_price,stop_loss,take_profit,direction,status,quantity,new_high,symbol
-2025-02-05 10:33:00,3.30865349,3.3047175,3.4079130947000005,long,open,0.001,3.313,FILUSDT
+entry_time,entry_price,stop_loss,take_profit,direction,status,quantity,symbol
+2025-02-05 16:15:00,0.00113626,0.0011305787,0.0011703478,long,open,0.001,SPELLUSDT

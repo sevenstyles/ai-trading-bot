@@ -69,7 +69,6 @@ def calculate_market_structure(df):
     """Identify key market structure elements."""
     df['higher_high'] = df['high'] > df['high'].shift()
     df['lower_low'] = df['low'] < df['low'].shift()
-    df['atr'] = df['high'] - df['low'].rolling(14).mean()
     df['range'] = df['high'] - df['low']
     return df
 

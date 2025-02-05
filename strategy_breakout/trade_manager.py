@@ -18,36 +18,41 @@ from trade_logger import log_trade
 import math
 from decimal import Decimal, ROUND_DOWN
 
+def apply_trailing_stop(symbol, trade, latest_candle, trailing_stop_pct):
+    # For long trades, update new_high and potential trailing stop
+    if trade['direction'] == 'long':
+        initial_high = trade.get('new_high', trade['entry_price'])
+        new_high = max(initial_high, latest_candle['high'])
+        if new_high != initial_high:
+            trade['new_high'] = new_high
+            potential_stop = new_high * (1 - trailing_stop_pct)
+            if potential_stop > trade['stop_loss']:
+                trade['stop_loss'] = potential_stop
+                state.trade_adjustments_count += 1
+                update_stop_order(symbol, trade)
+    elif trade['direction'] == 'short':
+        initial_low = trade.get('new_low', trade['entry_price'])
+        new_low = min(initial_low, latest_candle['low'])
+        if new_low != initial_low:
+            trade['new_low'] = new_low
+            potential_stop = new_low * (1 + trailing_stop_pct)
+            if potential_stop < trade['stop_loss']:
+                trade['stop_loss'] = potential_stop
+                state.trade_adjustments_count += 1
+                update_stop_order(symbol, trade)
+
 def update_active_trade(symbol, df):
     trade = state.active_trades.get(symbol)
     if not trade:
         return
     trailing_stop_pct = 0.0025
     latest_candle = df.iloc[-1]
-    if trade['direction'] == 'long':
-        if 'new_high' not in trade:
-            trade['new_high'] = trade['entry_price']
-        if latest_candle['high'] > trade['new_high']:
-            trade['new_high'] = latest_candle['high']
-            potential_stop = trade['new_high'] * (1 - trailing_stop_pct)
-            if potential_stop > trade['stop_loss']:
-                trade['stop_loss'] = potential_stop
-                state.trade_adjustments_count += 1
-                update_stop_order(symbol, trade)
-        if latest_candle['low'] <= trade['stop_loss']:
-            close_trade(symbol, trade, trade['stop_loss'], df.index[-1], close_reason="stop loss hit")
-    elif trade['direction'] == 'short':
-        if 'new_low' not in trade:
-            trade['new_low'] = trade['entry_price']
-        if latest_candle['low'] < trade['new_low']:
-            trade['new_low'] = latest_candle['low']
-            potential_stop = trade['new_low'] * (1 + trailing_stop_pct)
-            if potential_stop < trade['stop_loss']:
-                trade['stop_loss'] = potential_stop
-                state.trade_adjustments_count += 1
-                update_stop_order(symbol, trade)
-        if latest_candle['high'] >= trade['stop_loss']:
-            close_trade(symbol, trade, trade['stop_loss'], df.index[-1], close_reason="stop loss hit")
+    apply_trailing_stop(symbol, trade, latest_candle, trailing_stop_pct)
+    # Check if the stop loss has been hit
+    if trade['direction'] == 'long' and latest_candle['low'] <= trade['stop_loss']:
+        close_trade(symbol, trade, trade['stop_loss'], df.index[-1], close_reason="stop loss hit")
+    elif trade['direction'] == 'short' and latest_candle['high'] >= trade['stop_loss']:
+        close_trade(symbol, trade, trade['stop_loss'], df.index[-1], close_reason="stop loss hit")
 
 
 def close_trade(symbol, trade, exit_price, exit_time, close_reason=""):

@@ -10,8 +10,8 @@ import state
 
 
 def main():
-    print("Starting live trading with 1m timeframe...")
-    preload_candles(interval="1m", limit=50)
+    print("Starting live trading with 15m timeframe...")
+    preload_candles(interval="15m", limit=50)
     load_active_positions()
 
     twm = ThreadedWebsocketManager(api_key=config.BINANCE_API_KEY, api_secret=config.BINANCE_API_SECRET, testnet=True)
@@ -20,7 +20,7 @@ def main():
     worker_thread = threading.Thread(target=message_worker, daemon=True)
     worker_thread.start()
 
-    streams = [s.lower() + "@kline_1m" for s in state.symbols]
+    streams = [s.lower() + "@kline_15m" for s in state.symbols]
     print(f"Subscribing to streams: {streams}")
     socket_id = twm.start_multiplex_socket(callback=process_candle, streams=streams)
     print(f"Multiplex socket started with id: {socket_id}")
