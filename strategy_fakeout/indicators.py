@@ -147,4 +147,28 @@ def generate_short_signal(df, i):
     macd_confirm = (df['macd'].iloc[i] < df['signal'].iloc[i])
 
     return all([structure_break, volatility_expansion, smart_money_confirm, trend_aligned,
-                adx_condition, rsi_condition, trend_confirm, ema_slope, bearish_trend, ema_crossover, macd_confirm]) 
+                adx_condition, rsi_condition, trend_confirm, ema_slope, bearish_trend, ema_crossover, macd_confirm])
+
+def get_trend_direction(htf_data, period=20):
+    """
+    Determines the trend direction on higher timeframe data.
+    
+    Uses a simple moving average (SMA) to decide:
+      - If the latest close is greater than the SMA, it's an 'uptrend'.
+      - Otherwise, it's a 'downtrend'.
+      
+    Parameters:
+      htf_data (DataFrame): Higher timeframe price data (must include a 'close' column).
+      period (int): Lookback period for the SMA.
+      
+    Returns:
+      str: "uptrend" or "downtrend"
+    """
+    sma = htf_data['close'].rolling(window=period).mean()
+    last_close = htf_data['close'].iloc[-1]
+    last_sma = sma.iloc[-1]
+    
+    if last_close > last_sma:
+        return "uptrend"
+    else:
+        return "downtrend" 
