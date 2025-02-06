@@ -1,11 +1,12 @@
+import sys, os
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+sys.path.insert(0, os.getcwd())
+
 from binance.client import Client
 import pandas as pd
 from config import BINANCE_API_KEY, BINANCE_API_SECRET, OHLCV_TIMEFRAME, CAPITAL
 from data_fetch import get_top_volume_pairs
 from backtesting import backtest_strategy, analyze_results, analyze_aggregated_results
-
-# Import the new plotting function
-from trade_visualization import save_trade_chart_for_symbol
 
 client = Client(api_key=BINANCE_API_KEY, api_secret=BINANCE_API_SECRET)
 
@@ -15,8 +16,8 @@ def main():
         print("No top volume pairs found.")
         return
 
-    # Backtest period set to 14 days
-    days = 14
+    # Backtest period set to 30 days
+    days = 30
     all_trades = []
     
     for symbol in symbols:
@@ -29,8 +30,6 @@ def main():
             short_trades = len(df_trades[df_trades["side"]=="short"])
             print(f"Long trades: {long_trades}, Short trades: {short_trades}")
             analyze_results(trades, symbol)
-            # Save the trade chart for this symbol
-            save_trade_chart_for_symbol(symbol, trades, price_df)
             all_trades.extend(trades)
         else:
             print(f"No valid trades generated for {symbol}")

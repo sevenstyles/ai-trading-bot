@@ -50,7 +50,7 @@ def generate_signal(data, lookback=30):
             return None
         entry_price = confirmation_candle.close
         higher_of_two = max(breakout_candle.high, confirmation_candle.high)
-        stop_loss = higher_of_two * 1.001  # set SL just above the higher of the two candles
+        stop_loss = higher_of_two * 1.005  # set SL just above the higher of the two candles (increased multiplier)
         risk = stop_loss - entry_price
         take_profit = entry_price - 3 * risk
         debug_info = {
@@ -76,7 +76,7 @@ def generate_signal(data, lookback=30):
             return None
         entry_price = confirmation_candle.close
         lower_of_two = min(breakout_candle.low, confirmation_candle.low)
-        stop_loss = lower_of_two * 0.999  # set SL just below the lower of the two candles
+        stop_loss = lower_of_two * 0.995  # set SL just below the lower of the two candles (increased deviation)
         risk = entry_price - stop_loss
         take_profit = entry_price + 3 * risk
         debug_info = {

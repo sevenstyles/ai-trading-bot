@@ -5,20 +5,10 @@ from logger import log_debug
 from binance_client import client
 from config import RISK_PER_TRADE, SLIPPAGE_RATE, LEVERAGE, CANDLESTICK_INTERVAL
 from config import CAPITAL, ORDER_SIZE_PCT
-from indicators import (
-    calculate_market_structure,
-    calculate_trend_strength,
-    calculate_emas,
-    calculate_macd,
-    calculate_adx,
-    calculate_rsi,
-    generate_signal,
-    generate_short_signal
-)
+from strategy import get_trend_direction, generate_signal
 from trade_logger import log_trade
 import math
 from decimal import Decimal, ROUND_DOWN
-from strategy import get_trend_direction
 
 def apply_trailing_stop(symbol, trade, latest_candle, trailing_stop_pct):
     # For long trades, update new_high and potential trailing stop
@@ -108,16 +98,10 @@ def check_for_trade(symbol):
         update_active_trade(symbol, df)
         save_active_trades_csv()
         return
-    df = calculate_market_structure(df)
-    df = calculate_trend_strength(df)
-    df = calculate_emas(df)
-    df = calculate_macd(df)
-    df = calculate_adx(df)
-    df = calculate_rsi(df)
     log_debug(f"For {symbol} - Latest Candle Time: {df.index[-1]}, Close: {df['close'].iloc[-1]}")
     latest_idx = len(df) - 1
     long_signal = generate_signal(df, latest_idx)
-    short_signal = generate_short_signal(df, latest_idx)
+    short_signal = False
     log_debug(f"For {symbol} at index {latest_idx} - long_signal: {long_signal}, short_signal: {short_signal}")
     
     # Retrieve HTF (4h) candles for filtering (last 30 days)

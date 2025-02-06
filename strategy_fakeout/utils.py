@@ -35,15 +35,4 @@ def get_tier_parameters(tier):
     }
     return params[tier]
 
-def get_volatility_tier(df):
-    """Determine volatility tier based on ATR percentage."""
-    # This function assumes calculate_atr imported from indicators.
-    from indicators import calculate_atr
-    atr = calculate_atr(df)
-    atr_percentile = atr.iloc[-1] / df['close'].iloc[-1] * 100
-    if atr_percentile >= 1.1:
-        return 'high'
-    elif atr_percentile >= 0.7:
-        return 'medium'
-    else:
-        return 'low' 
+# Removed get_volatility_tier because it depended on the deleted indicators.py 
