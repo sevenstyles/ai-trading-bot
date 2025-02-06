@@ -15,8 +15,8 @@ def main():
         print("No top volume pairs found.")
         return
 
-    # Reduced backtest period from 30 to 7 days
-    days = 7
+    # Backtest period set to 14 days
+    days = 14
     all_trades = []
     
     for symbol in symbols:

@@ -25,7 +25,7 @@ def generate_signal(data, lookback=30):
       lookback (int): Number of candles to use as the lookback for the swing point (min 10, max 300).
     
     Returns:
-      dict or None: A dictionary containing 'side', 'entry', 'stop_loss', and 'take_profit' if a setup is detected; otherwise, None.
+      dict or None: A dictionary containing 'side', 'entry', 'stop_loss', 'take_profit' and 'debug_info' if a setup is detected; otherwise, None.
     """
     lookback = max(10, min(lookback, 300))
     if len(data) < lookback + 2:
@@ -52,11 +52,21 @@ def generate_signal(data, lookback=30):
         stop_loss = max(breakout_candle.high, confirmation_candle.high)  # Stop loss is placed just above the higher of breakout or confirmation candle's high
         risk = stop_loss - entry_price
         take_profit = entry_price - 3 * risk
+        debug_info = {
+            "lookback": lookback,
+            "swing_high": swing_high,
+            "swing_low": swing_low,
+            "pos_high": int(pos_high),
+            "pos_low": int(pos_low),
+            "breakout_candle": breakout_candle.to_dict(),
+            "confirmation_candle": confirmation_candle.to_dict()
+        }
         return {
             "side": "short",
             "entry": entry_price,
             "stop_loss": stop_loss,
-            "take_profit": take_profit
+            "take_profit": take_profit,
+            "debug_info": debug_info
         }
 
     # Long trade setup with minimum 3 candle gap enforcement
@@ -67,11 +77,21 @@ def generate_signal(data, lookback=30):
         stop_loss = breakout_candle.low  # Stop loss is placed just below the breakout candle's low
         risk = entry_price - stop_loss
         take_profit = entry_price + 3 * risk
+        debug_info = {
+            "lookback": lookback,
+            "swing_high": swing_high,
+            "swing_low": swing_low,
+            "pos_high": int(pos_high),
+            "pos_low": int(pos_low),
+            "breakout_candle": breakout_candle.to_dict(),
+            "confirmation_candle": confirmation_candle.to_dict()
+        }
         return {
             "side": "long",
             "entry": entry_price,
             "stop_loss": stop_loss,
-            "take_profit": take_profit
+            "take_profit": take_profit,
+            "debug_info": debug_info
         }
 
     return None 

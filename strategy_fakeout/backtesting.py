@@ -43,7 +43,7 @@ def calculate_exit_profit_short(entry_price, exit_price):
     # For shorts, profit is positive when exit_price is lower than entry_price
     return (adjusted_entry - adjusted_exit) / adjusted_entry
 
-def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, use_random_date=False, swing_lookback=30):
+def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, use_random_date=False, swing_lookback=20):
     # Determine backtesting date range using the current date
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
@@ -153,6 +153,7 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
                 "outcome": outcome,
                 "profit": profit
             }
+            logger.debug(f"Trade generated for {symbol}: {trade} | Signal debug info: {signal.get('debug_info', {})}")
             signals.append(trade)
     logger.debug(f"Completed backtesting for {symbol}. Total trades: {len(signals)}")
     return signals, df
