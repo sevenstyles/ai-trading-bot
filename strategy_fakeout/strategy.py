@@ -49,7 +49,8 @@ def generate_signal(data, lookback=30):
         if (lookback - pos_high) < 4:  # require at least 3 candles between swing high candle and breakout candle
             return None
         entry_price = confirmation_candle.close
-        stop_loss = max(breakout_candle.high, confirmation_candle.high)  # Stop loss is placed just above the higher of breakout or confirmation candle's high
+        higher_of_two = max(breakout_candle.high, confirmation_candle.high)
+        stop_loss = higher_of_two * 1.001  # set SL just above the higher of the two candles
         risk = stop_loss - entry_price
         take_profit = entry_price - 3 * risk
         debug_info = {
@@ -74,7 +75,8 @@ def generate_signal(data, lookback=30):
         if (lookback - pos_low) < 4:  # require at least 3 candles between swing low candle and breakout candle
             return None
         entry_price = confirmation_candle.close
-        stop_loss = breakout_candle.low  # Stop loss is placed just below the breakout candle's low
+        lower_of_two = min(breakout_candle.low, confirmation_candle.low)
+        stop_loss = lower_of_two * 0.999  # set SL just below the lower of the two candles
         risk = entry_price - stop_loss
         take_profit = entry_price + 3 * risk
         debug_info = {

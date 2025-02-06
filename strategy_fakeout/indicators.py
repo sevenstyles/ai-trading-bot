@@ -11,15 +11,6 @@ def calculate_atr(df, period=14):
     df['atr'] = df['tr'].rolling(period).mean()
     return df['atr']
 
-def calculate_macd(df, fast=12, slow=26, signal=9):
-    """Calculate MACD and its histogram."""
-    df['ema_fast'] = df['close'].ewm(span=fast, adjust=False).mean()
-    df['ema_slow'] = df['close'].ewm(span=slow, adjust=False).mean()
-    df['macd'] = df['ema_fast'] - df['ema_slow']
-    df['signal'] = df['macd'].ewm(span=signal, adjust=False).mean()
-    df['histogram'] = df['macd'] - df['signal']
-    return df
-
 def calculate_rsi(df, period=14):
     """Calculate Relative Strength Index."""
     delta = df['close'].diff()
@@ -78,12 +69,6 @@ def calculate_trend_strength(df):
     df['trend_power'] = np.log(df['high'] / df['low']).rolling(14).sum()
     return df
 
-def calculate_emas(df):
-    """Calculate necessary EMAs (200 and 50)."""
-    df['ema200'] = df['close'].ewm(span=200, adjust=False).mean()
-    df['ema50'] = df['close'].ewm(span=50, adjust=False).mean()
-    return df
-
 def generate_signal(df, i):
     """Generate a trade signal based on market structure breaks and indicators."""
     if i < 20:
@@ -101,13 +86,8 @@ def generate_signal(df, i):
                      (df['trend_power'].iloc[i] > df['trend_power'].quantile(0.4)))
     adx_condition = (df['adx'].iloc[i] > 25)
     rsi_condition = (df['rsi'].iloc[i] > 45) and (df['rsi'].iloc[i] < 80)
-    trend_confirm = (df['close'].iloc[i] > df['ema200'].iloc[i])
-    ema_slope = (df['ema200'].iloc[i] > df['ema200'].iloc[i-1])
-    bullish_trend = (df['close'].iloc[i] > df['ema50'].iloc[i])
-    ema_crossover = (df['ema50'].iloc[i] > df['ema200'].iloc[i])
-    macd_confirm = (df['macd'].iloc[i] > df['signal'].iloc[i])
     return all([structure_break, volatility_expansion, smart_money_confirm, trend_aligned,
-                adx_condition, rsi_condition, trend_confirm, ema_slope, bullish_trend, ema_crossover, macd_confirm])
+                adx_condition, rsi_condition])
 
 def generate_short_signal(df, i):
     """Generate a short trade signal based on inverted market structure and technical indicators."""
@@ -137,17 +117,8 @@ def generate_short_signal(df, i):
     # Mirror RSI condition for shorts (avoid extreme oversold)
     rsi_condition = (df['rsi'].iloc[i] > 20) and (df['rsi'].iloc[i] < 55)
 
-    # Inverted moving average conditions: price below EMAs instead of above
-    trend_confirm = (df['close'].iloc[i] < df['ema200'].iloc[i])
-    ema_slope = (df['ema200'].iloc[i] < df['ema200'].iloc[i-1])
-    bearish_trend = (df['close'].iloc[i] < df['ema50'].iloc[i])
-    ema_crossover = (df['ema50'].iloc[i] < df['ema200'].iloc[i])
-
-    # For MACD, require the MACD be below its signal line for bearish bias
-    macd_confirm = (df['macd'].iloc[i] < df['signal'].iloc[i])
-
     return all([structure_break, volatility_expansion, smart_money_confirm, trend_aligned,
-                adx_condition, rsi_condition, trend_confirm, ema_slope, bearish_trend, ema_crossover, macd_confirm])
+                adx_condition, rsi_condition])
 
 def get_trend_direction(htf_data, period=20):
     """

@@ -16,7 +16,7 @@ if not logger.handlers:
 logger.propagate = False
 from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, LONG_TAKE_PROFIT_MULTIPLIER, SHORT_TAKE_PROFIT_MULTIPLIER, SLIPPAGE_RATE, LONG_STOP_LOSS_MULTIPLIER, SHORT_STOP_LOSS_MULTIPLIER, TRAILING_STOP_PCT, TRAILING_START_LONG, TRAILING_START_SHORT, MIN_BARS_BEFORE_STOP, ATR_PERIOD, LONG_STOP_LOSS_ATR_MULTIPLIER, SHORT_STOP_LOSS_ATR_MULTIPLIER, FUTURES_MAKER_FEE, FUTURES_TAKER_FEE, FUNDING_RATE, OHLCV_TIMEFRAME
 from strategy import generate_signal
-from indicators import calculate_market_structure, calculate_trend_strength, calculate_emas, calculate_macd, calculate_adx, calculate_rsi, generate_short_signal, calculate_atr
+from indicators import calculate_market_structure, calculate_trend_strength, calculate_adx, calculate_rsi, generate_short_signal, calculate_atr
 
 def get_funding_fee(client, symbol, entry_time, exit_time):
     # Convert entry and exit times (assumed to be datetime objects) to milliseconds
