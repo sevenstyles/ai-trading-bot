@@ -27,7 +27,7 @@ def main():
     # Update the interval values here
     intervals = {
         '1d': 30,   
-        '4h': 400,   
+        '1h': 100,   
         '15m': 700    
     }
     

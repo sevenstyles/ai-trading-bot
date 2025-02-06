@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 
 
-def generate_signal(data, lookback=30):
+def generate_signal(data, lookback=40):
     """
     Generate trading signal based solely on a swing breakout strategy.
     
@@ -48,9 +48,21 @@ def generate_signal(data, lookback=30):
     if breakout_candle.close > swing_high and confirmation_candle.close < swing_high:
         if (lookback - pos_high) < 4:  # require at least 3 candles between swing high candle and breakout candle
             return None
+
+        # Additional structure confirmation: require at least 2 peaks and 2 troughs in swing_window
+        peaks = []
+        troughs = []
+        for i in range(1, len(swing_window) - 1):
+            if swing_window["high"].iloc[i] > swing_window["high"].iloc[i-1] and swing_window["high"].iloc[i] > swing_window["high"].iloc[i+1]:
+                peaks.append((i, swing_window["high"].iloc[i]))
+            if swing_window["low"].iloc[i] < swing_window["low"].iloc[i-1] and swing_window["low"].iloc[i] < swing_window["low"].iloc[i+1]:
+                troughs.append((i, swing_window["low"].iloc[i]))
+        if len(peaks) < 2 or len(troughs) < 2:
+            return None
+
         entry_price = confirmation_candle.close
         higher_of_two = max(breakout_candle.high, confirmation_candle.high)
-        stop_loss = higher_of_two * 1.005  # set SL just above the higher of the two candles (increased multiplier)
+        stop_loss = higher_of_two * 1.005  # set SL just above the higher of the two candles
         risk = stop_loss - entry_price
         take_profit = entry_price - 3 * risk
         debug_info = {
@@ -59,6 +71,8 @@ def generate_signal(data, lookback=30):
             "swing_low": swing_low,
             "pos_high": int(pos_high),
             "pos_low": int(pos_low),
+            "peaks": peaks,
+            "troughs": troughs,
             "breakout_candle": breakout_candle.to_dict(),
             "confirmation_candle": confirmation_candle.to_dict()
         }
