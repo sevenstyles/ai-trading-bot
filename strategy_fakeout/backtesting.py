@@ -16,7 +16,7 @@ if not logger.handlers:
     fh.setFormatter(formatter)
     logger.addHandler(fh)
 logger.propagate = False
-from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, LONG_TAKE_PROFIT_MULTIPLIER, SHORT_TAKE_PROFIT_MULTIPLIER, SLIPPAGE_RATE, LONG_STOP_LOSS_MULTIPLIER, SHORT_STOP_LOSS_MULTIPLIER, TRAILING_STOP_PCT, TRAILING_START_LONG, TRAILING_START_SHORT, MIN_BARS_BEFORE_STOP, ATR_PERIOD, LONG_STOP_LOSS_ATR_MULTIPLIER, SHORT_STOP_LOSS_ATR_MULTIPLIER, FUTURES_MAKER_FEE, FUTURES_TAKER_FEE, FUNDING_RATE, OHLCV_TIMEFRAME
+from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, SLIPPAGE_RATE, LONG_STOP_LOSS_MULTIPLIER, SHORT_STOP_LOSS_MULTIPLIER, TRAILING_STOP_PCT, TRAILING_START_LONG, TRAILING_START_SHORT, MIN_BARS_BEFORE_STOP, ATR_PERIOD, LONG_STOP_LOSS_ATR_MULTIPLIER, SHORT_STOP_LOSS_ATR_MULTIPLIER, FUTURES_MAKER_FEE, FUTURES_TAKER_FEE, FUNDING_RATE, OHLCV_TIMEFRAME
 from strategy import generate_signal
 
 def get_funding_fee(client, symbol, entry_time, exit_time):
@@ -116,89 +116,32 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
         exit_idx = None
         for j in range(i+1, len(df)):
             candle = df.iloc[j]
-            # --- Existing inner loop trade exit logic begins ---
             if signal.get('side', 'long') == 'long':
-                # (Existing long trade logic)
-                if not signal.get('partial_profit_taken', False):
-                    if candle['high'] >= entry_price * 1.02:
-                        signal['partial_profit_taken'] = True
-                        partial_profit_fixed = 0.02
-                        new_entry = candle['close']
-                        new_take_profit = new_entry + (take_profit - entry_price)
-                        signal['partial_profit_price'] = new_entry
-                if signal.get('partial_profit_taken', False):
-                    if candle['low'] <= stop_loss:
-                        exit_price = stop_loss
-                        profit_remaining = (exit_price - new_entry) / new_entry
-                        total_profit = 0.5 * partial_profit_fixed + 0.5 * profit_remaining
-                        outcome = 'WIN' if total_profit > 0 else ('BREAK EVEN' if abs(total_profit) < 1e-8 else 'LOSS')
-                        exit_idx = j
-                        signal['profit'] = total_profit
-                        break
-                    if candle['high'] >= new_take_profit:
-                        exit_price = new_take_profit
-                        profit_remaining = (exit_price - new_entry) / new_entry
-                        total_profit = 0.5 * partial_profit_fixed + 0.5 * profit_remaining
-                        outcome = 'WIN'
-                        exit_idx = j
-                        signal['profit'] = total_profit
-                        break
-                else:
-                    if candle['close'] >= entry_price * 1.015 and stop_loss < entry_price:
-                        stop_loss = entry_price
-                    if candle['low'] <= stop_loss:
-                        exit_price = stop_loss
-                        outcome = 'BREAK EVEN' if abs(stop_loss - entry_price) < 1e-8 else 'LOSS'
-                        exit_idx = j
-                        signal['profit'] = (exit_price - entry_price) / entry_price
-                        break
-                    if candle['high'] >= take_profit:
-                        exit_price = take_profit
-                        outcome = 'WIN'
-                        exit_idx = j
-                        signal['profit'] = (exit_price - entry_price) / entry_price
-                        break
-            else:  # short trade logic (similar structure)
-                if not signal.get('partial_profit_taken', False):
-                    if candle['low'] <= entry_price * 0.98:
-                        signal['partial_profit_taken'] = True
-                        partial_profit_fixed = 0.02
-                        new_entry = candle['close']
-                        new_take_profit = new_entry - (entry_price - take_profit)
-                        signal['partial_profit_price'] = new_entry
-                if signal.get('partial_profit_taken', False):
-                    if candle['high'] >= stop_loss:
-                        exit_price = stop_loss
-                        profit_remaining = (new_entry - exit_price) / new_entry
-                        total_profit = 0.5 * partial_profit_fixed + 0.5 * profit_remaining
-                        outcome = 'WIN' if total_profit > 0 else ('BREAK EVEN' if abs(total_profit) < 1e-8 else 'LOSS')
-                        exit_idx = j
-                        signal['profit'] = total_profit
-                        break
-                    if candle['low'] <= new_take_profit:
-                        exit_price = new_take_profit
-                        profit_remaining = (new_entry - exit_price) / new_entry
-                        total_profit = 0.5 * partial_profit_fixed + 0.5 * profit_remaining
-                        outcome = 'WIN'
-                        exit_idx = j
-                        signal['profit'] = total_profit
-                        break
-                else:
-                    if candle['close'] <= entry_price * 0.985 and stop_loss > entry_price:
-                        stop_loss = entry_price
-                    if candle['high'] >= stop_loss:
-                        exit_price = stop_loss
-                        outcome = 'BREAK EVEN' if abs(stop_loss - entry_price) < 1e-8 else 'LOSS'
-                        exit_idx = j
-                        signal['profit'] = (entry_price - exit_price) / entry_price
-                        break
-                    if candle['low'] <= take_profit:
-                        exit_price = take_profit
-                        outcome = 'WIN'
-                        exit_idx = j
-                        signal['profit'] = (entry_price - exit_price) / entry_price
-                        break
-            # End inner loop logic
+                if candle['low'] <= stop_loss:
+                    exit_price = stop_loss
+                    outcome = 'BREAK EVEN' if abs(stop_loss - entry_price) < 1e-8 else 'LOSS'
+                    exit_idx = j
+                    signal['profit'] = (exit_price - entry_price) / entry_price
+                    break
+                if candle['high'] >= take_profit:
+                    exit_price = take_profit
+                    outcome = 'WIN'
+                    exit_idx = j
+                    signal['profit'] = (exit_price - entry_price) / entry_price
+                    break
+            else:  # short trade logic
+                if candle['high'] >= stop_loss:
+                    exit_price = stop_loss
+                    outcome = 'BREAK EVEN' if abs(stop_loss - entry_price) < 1e-8 else 'LOSS'
+                    exit_idx = j
+                    signal['profit'] = (entry_price - exit_price) / entry_price
+                    break
+                if candle['low'] <= take_profit:
+                    exit_price = take_profit
+                    outcome = 'WIN'
+                    exit_idx = j
+                    signal['profit'] = (entry_price - exit_price) / entry_price
+                    break
         # If no exit condition met in inner loop, use final candle
         if exit_idx is None:
             exit_idx = len(df) - 1

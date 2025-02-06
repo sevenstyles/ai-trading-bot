@@ -88,6 +88,18 @@ def generate_signal(data, lookback=40):
     if breakout_candle.close < swing_low and confirmation_candle.close > swing_low:
         if (lookback - pos_low) < 4:  # require at least 3 candles between swing low candle and breakout candle
             return None
+
+        # Additional structure confirmation for long: require at least 2 peaks and 2 troughs in swing_window
+        peaks = []
+        troughs = []
+        for i in range(1, len(swing_window) - 1):
+            if swing_window['high'].iloc[i] > swing_window['high'].iloc[i-1] and swing_window['high'].iloc[i] > swing_window['high'].iloc[i+1]:
+                peaks.append((i, swing_window['high'].iloc[i]))
+            if swing_window['low'].iloc[i] < swing_window['low'].iloc[i-1] and swing_window['low'].iloc[i] < swing_window['low'].iloc[i+1]:
+                troughs.append((i, swing_window['low'].iloc[i]))
+        if len(peaks) < 2 or len(troughs) < 2:
+            return None
+
         entry_price = confirmation_candle.close
         lower_of_two = min(breakout_candle.low, confirmation_candle.low)
         stop_loss = lower_of_two * 0.995  # set SL just below the lower of the two candles (increased deviation)
@@ -99,6 +111,8 @@ def generate_signal(data, lookback=40):
             "swing_low": swing_low,
             "pos_high": int(pos_high),
             "pos_low": int(pos_low),
+            "peaks": peaks,
+            "troughs": troughs,
             "breakout_candle": breakout_candle.to_dict(),
             "confirmation_candle": confirmation_candle.to_dict()
         }
