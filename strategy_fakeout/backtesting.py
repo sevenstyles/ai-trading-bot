@@ -32,15 +32,19 @@ def get_funding_fee(client, symbol, entry_time, exit_time):
         return 0.0
 
 def calculate_exit_profit_long(entry_price, exit_price):
+    # If exit price equals entry price, consider it breakeven
+    if abs(exit_price - entry_price) < 1e-8:
+        return 0.0
     adjusted_entry = entry_price * (1 + FUTURES_MAKER_FEE + SLIPPAGE_RATE)
     adjusted_exit = exit_price * (1 - FUTURES_TAKER_FEE - SLIPPAGE_RATE)
     return (adjusted_exit - adjusted_entry) / adjusted_entry
 
 def calculate_exit_profit_short(entry_price, exit_price):
-    # Adjust entry and exit prices for short trades
+    # If exit price equals entry price, consider it breakeven
+    if abs(exit_price - entry_price) < 1e-8:
+        return 0.0
     adjusted_entry = entry_price * (1 - FUTURES_MAKER_FEE - SLIPPAGE_RATE)
     adjusted_exit = exit_price * (1 + FUTURES_TAKER_FEE + SLIPPAGE_RATE)
-    # For shorts, profit is positive when exit_price is lower than entry_price
     return (adjusted_entry - adjusted_exit) / adjusted_entry
 
 def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, use_random_date=False, swing_lookback=20):
@@ -109,9 +113,11 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
             for j in range(i+1, len(df)):
                 candle = df.iloc[j]
                 if signal["side"] == "long":
+                    if candle["close"] >= entry_price * 1.015 and stop_loss < entry_price:
+                        stop_loss = entry_price
                     if candle["low"] <= stop_loss:
                         exit_price = stop_loss
-                        outcome = "LOSS"
+                        outcome = "BREAK EVEN" if abs(stop_loss - entry_price) < 1e-8 else "LOSS"
                         exit_time = df.index[j]
                         break
                     if candle["high"] >= take_profit:
@@ -120,9 +126,11 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
                         exit_time = df.index[j]
                         break
                 elif signal["side"] == "short":
+                    if candle["close"] <= entry_price * 0.985 and stop_loss > entry_price:
+                        stop_loss = entry_price
                     if candle["high"] >= stop_loss:
                         exit_price = stop_loss
-                        outcome = "LOSS"
+                        outcome = "BREAK EVEN" if abs(stop_loss - entry_price) < 1e-8 else "LOSS"
                         exit_time = df.index[j]
                         break
                     if candle["low"] <= take_profit:
@@ -134,9 +142,15 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
                 exit_price = df["close"].iloc[-1]
                 exit_time = df.index[-1]
                 if signal["side"] == "long":
-                    outcome = "WIN" if exit_price > entry_price else "LOSS"
+                    if abs(exit_price - entry_price) < 1e-8:
+                        outcome = "BREAK EVEN"
+                    else:
+                        outcome = "WIN" if exit_price > entry_price else "LOSS"
                 else:
-                    outcome = "WIN" if exit_price < entry_price else "LOSS"
+                    if abs(exit_price - entry_price) < 1e-8:
+                        outcome = "BREAK EVEN"
+                    else:
+                        outcome = "WIN" if exit_price < entry_price else "LOSS"
             if signal["side"] == "long":
                 profit = calculate_exit_profit_long(entry_price, exit_price)
             else:
@@ -173,7 +187,9 @@ def analyze_results(signals, symbol):
         return
     df = pd.DataFrame(signals)
     total_trades = len(df)
-    win_rate = len(df[df["outcome"]=="WIN"]) / total_trades * 100
+    wins = len(df[df["outcome"]=="WIN"])
+    losses = len(df[df["outcome"]=="LOSS"])
+    win_rate = (wins/(wins+losses)*100) if (wins+losses) > 0 else 0
     # Convert entry_time and exit_time from naive UTC to UTC+11
     from datetime import timezone, timedelta
     utc_plus_11 = timezone(timedelta(hours=11))
@@ -183,7 +199,9 @@ def analyze_results(signals, symbol):
     
     print(f"--- {symbol} ---")
     print(f"Total Trades: {total_trades}")
-    print(f"Win Rate: {win_rate:.2f}%")
+    print(f"Win Rate (wins vs losses): {win_rate:.2f}%")
+    break_even_trades = len(df[df["outcome"]=="BREAK EVEN"])
+    print(f"Break Even Trades: {break_even_trades}")
     df["profit_pct"] = (df["profit"] * 100).round(2)
     # Include the 'side' column in the printed output
     print(df[["side", "entry_time", "entry", "stop_loss", "take_profit", "exit_time", "exit_price", "profit_pct", "outcome"]])
@@ -212,27 +230,26 @@ def analyze_aggregated_results(all_signals, initial_capital=1000, days=30):
             df.rename(columns={'entry': 'entry_price'}, inplace=True)
         
         # Determine outcome and risk-reward ratio
-        df['outcome'] = np.where(df['profit'] > 0, 'WIN', np.where(df['profit'] < 0, 'LOSS', 'BREAKEVEN'))
-        df['risk_reward'] = df.apply(lambda row: (row['TP']-row['entry_price'])/(row['entry_price']-row['SL']) 
-                                     if row['entry_price'] > row['SL'] else (row['entry_price']-row['TP'])/(row['SL']-row['entry_price']), axis=1)
+        df['outcome'] = np.where(abs(df['profit']) < 1e-8, 'BREAK EVEN', np.where(df['profit'] > 0, 'WIN', 'LOSS'))
+        df['risk_reward'] = df.apply(lambda row: ((row['TP']-row['entry_price'])/(row['entry_price']-row['SL']) if (row['entry_price']-row['SL']) != 0 else float('inf')) if row['entry_price'] > row['SL'] else ((row['entry_price']-row['TP'])/(row['SL']-row['entry_price']) if (row['SL']-row['entry_price']) != 0 else float('inf')), axis=1)
         
         total_trades = len(df)
-        win_rate = len(df[df['outcome'] == 'WIN']) / total_trades * 100
+        wins = len(df[df['outcome'] == 'WIN'])
+        losses = len(df[df['outcome'] == 'LOSS'])
+        win_rate = (wins/(wins+losses)*100) if (wins+losses) > 0 else 0
         long_trades = len(df[df['side'] == 'long'])
         short_trades = len(df[df['side'] == 'short'])
-        
+        break_even_trades = len(df[df['outcome'] == 'BREAK EVEN'])
         final_capital = simulate_capital(all_signals, initial_capital=initial_capital)
         
         print("=== Aggregated Report ===")
         print(f"Total Trades: {total_trades}")
-        print(f"Win Rate: {win_rate:.2f}%")
-        print(f"Long Trades: {long_trades}, Short Trades: {short_trades}")
+        print(f"Win Rate (wins vs losses): {win_rate:.2f}%")
+        print(f"Long Trades: {long_trades}, Short Trades: {short_trades}, Break Even Trades: {break_even_trades}")
         print(f"Simulation: Starting Capital: ${initial_capital}, Final Capital: ${final_capital:.2f}")
-        
-        best_trade = df.loc[df['profit_pct'].idxmax()]
-        worst_trade = df.loc[df['profit_pct'].idxmin()]
-        print(f"Best Trade: {best_trade['symbol']} - {best_trade['side']} trade on {best_trade['entry_time']}, Profit: {best_trade['profit_pct']}% (Entry: {best_trade['entry_price']}, Exit: {best_trade['exit_price']})")
-        print(f"Worst Trade: {worst_trade['symbol']} - {worst_trade['side']} trade on {worst_trade['entry_time']}, Profit: {worst_trade['profit_pct']}% (Entry: {worst_trade['entry_price']}, Exit: {worst_trade['exit_price']})")
+        df["profit_pct"] = (df["profit"] * 100).round(2)
+        # Include the 'side' column in the printed output
+        print(df[["side", "entry_time", "entry_price", "SL", "TP", "exit_time", "exit_price", "profit_pct", "outcome"]])
         print("=== END OF SUMMARY ===\n")
     except Exception as e:
         print(f"Aggregated analysis error: {str(e)}")
