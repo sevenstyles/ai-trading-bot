@@ -44,10 +44,12 @@ def generate_signal(data, lookback=30):
     if pos_low >= pos_high:
         return None
 
-    # Short trade setup
+    # Short trade setup with minimum 3 candle gap enforcement
     if breakout_candle.close > swing_high and confirmation_candle.close < swing_high:
+        if (lookback - pos_high) < 4:  # require at least 3 candles between swing high candle and breakout candle
+            return None
         entry_price = confirmation_candle.close
-        stop_loss = breakout_candle.high  # Stop loss is placed just above the breakout candle's high
+        stop_loss = max(breakout_candle.high, confirmation_candle.high)  # Stop loss is placed just above the higher of breakout or confirmation candle's high
         risk = stop_loss - entry_price
         take_profit = entry_price - 3 * risk
         return {
@@ -57,8 +59,10 @@ def generate_signal(data, lookback=30):
             "take_profit": take_profit
         }
 
-    # Long trade setup
+    # Long trade setup with minimum 3 candle gap enforcement
     if breakout_candle.close < swing_low and confirmation_candle.close > swing_low:
+        if (lookback - pos_low) < 4:  # require at least 3 candles between swing low candle and breakout candle
+            return None
         entry_price = confirmation_candle.close
         stop_loss = breakout_candle.low  # Stop loss is placed just below the breakout candle's low
         risk = entry_price - stop_loss
