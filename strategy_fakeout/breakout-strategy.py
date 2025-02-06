@@ -1,8 +1,8 @@
 from binance.client import Client
 import pandas as pd
-from config import BINANCE_API_KEY, BINANCE_API_SECRET, OHLCV_TIMEFRAME
+from config import BINANCE_API_KEY, BINANCE_API_SECRET, OHLCV_TIMEFRAME, CAPITAL
 from data_fetch import get_top_volume_pairs
-from backtesting import backtest_strategy, analyze_results
+from backtesting import backtest_strategy, analyze_results, analyze_aggregated_results
 
 # Import the new plotting function
 from trade_visualization import save_trade_chart_for_symbol
@@ -35,7 +35,8 @@ def main():
         else:
             print(f"No valid trades generated for {symbol}")
     
-    # Optionally, aggregated analysis for all symbols can be added here.
+    # Call aggregated analysis after processing all symbols
+    analyze_aggregated_results(all_trades, initial_capital=CAPITAL, days=days)
     print("\nAggregated backtesting completed.")
 
 if __name__ == "__main__":

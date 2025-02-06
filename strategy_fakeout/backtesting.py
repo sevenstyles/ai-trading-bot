@@ -44,17 +44,9 @@ def calculate_exit_profit_short(entry_price, exit_price):
     return (adjusted_entry - adjusted_exit) / adjusted_entry
 
 def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, use_random_date=False, swing_lookback=30):
-    # Determine backtesting date range.
-    if use_random_date:
-        start_random = datetime(2021, 1, 1)
-        end_random = datetime(2022, 1, 1)
-        random_seconds = random.randint(0, int((end_random - start_random).total_seconds()))
-        random_end = start_random + timedelta(seconds=random_seconds)
-        end_date = random_end
-        start_date = end_date - timedelta(days=days)
-    else:
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=days)
+    # Determine backtesting date range using the current date
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=days)
     
     # Fetch lower timeframe klines.
     klines = client.get_historical_klines(
@@ -181,11 +173,19 @@ def analyze_results(signals, symbol):
     df = pd.DataFrame(signals)
     total_trades = len(df)
     win_rate = len(df[df["outcome"]=="WIN"]) / total_trades * 100
+    # Convert entry_time and exit_time from naive UTC to UTC+11
+    from datetime import timezone, timedelta
+    utc_plus_11 = timezone(timedelta(hours=11))
+    # Assuming the timestamps are in UTC, we localize and then convert
+    df["entry_time"] = pd.to_datetime(df["entry_time"]).dt.tz_localize('UTC').dt.tz_convert(utc_plus_11)
+    df["exit_time"] = pd.to_datetime(df["exit_time"]).dt.tz_localize('UTC').dt.tz_convert(utc_plus_11)
+    
     print(f"--- {symbol} ---")
     print(f"Total Trades: {total_trades}")
     print(f"Win Rate: {win_rate:.2f}%")
     df["profit_pct"] = (df["profit"] * 100).round(2)
-    print(df[["entry_time", "entry", "stop_loss", "take_profit", "exit_time", "exit_price", "profit_pct", "outcome"]])
+    # Include the 'side' column in the printed output
+    print(df[["side", "entry_time", "entry", "stop_loss", "take_profit", "exit_time", "exit_price", "profit_pct", "outcome"]])
 
 def analyze_aggregated_results(all_signals, initial_capital=1000, days=30):
     if not all_signals:
@@ -193,97 +193,46 @@ def analyze_aggregated_results(all_signals, initial_capital=1000, days=30):
         return
     try:
         import config
+        print("\n")  # Added blank line for separation
         print("=== BACKTESTER SETTINGS ===")
         print(f"Timeframe used             : {config.OHLCV_TIMEFRAME}")
-        print(f"Long Take Profit Target    : {config.LONG_TAKE_PROFIT_MULTIPLIER}")
-        print(f"Short Take Profit Target   : {config.SHORT_TAKE_PROFIT_MULTIPLIER}")
-        print(f"Long Stop Loss Multiplier  : {config.LONG_STOP_LOSS_MULTIPLIER}")
-        print(f"Short Stop Loss Multiplier : {config.SHORT_STOP_LOSS_MULTIPLIER}")
-        print(f"Futures Maker Fee         : {config.FUTURES_MAKER_FEE}")
-        print(f"Futures Taker Fee         : {config.FUTURES_TAKER_FEE}")
-        print(f"Slippage Rate              : {config.SLIPPAGE_RATE}")
-        print("="*30)
-        print("=== TECHNICAL SETTINGS ===")
-        print(f"EMA Short Period   : {config.EMA_SHORT}")
-        print(f"EMA Long Period    : {config.EMA_LONG}")
-        print(f"ATR Period         : {config.ATR_PERIOD}")
-        print(f"Minimum ATR %      : {config.MIN_ATR_PCT}")
-        print(f"Trend Strength Th. : {config.TREND_STRENGTH_THRESHOLD}")
         print(f"Backtesting period (days)  : {days}")
         print("="*30)
+        
         df = pd.DataFrame(all_signals)
-        df['profit_pct'] = (df['profit'] * 100).round(2)
-        if 'initial_stop_loss' in df.columns:
-            df.rename(columns={'initial_stop_loss': 'SL'}, inplace=True)
-        elif 'stop_loss' in df.columns:
+        df["profit_pct"] = (df["profit"] * 100).round(2)
+        
+        # Rename columns for consistency
+        if 'stop_loss' in df.columns:
             df.rename(columns={'stop_loss': 'SL'}, inplace=True)
         if 'take_profit' in df.columns:
             df.rename(columns={'take_profit': 'TP'}, inplace=True)
+        if 'entry' in df.columns:
+            df.rename(columns={'entry': 'entry_price'}, inplace=True)
+        
+        # Determine outcome and risk-reward ratio
         df['outcome'] = np.where(df['profit'] > 0, 'WIN', np.where(df['profit'] < 0, 'LOSS', 'BREAKEVEN'))
-        df['risk_reward'] = df.apply(
-            lambda row: (row['TP']-row['entry_price'])/(row['entry_price']-row['SL']) if row['entry_price'] > row['SL'] else (row['entry_price']-row['TP'])/(row['SL']-row['entry_price']),
-            axis=1
-        )
+        df['risk_reward'] = df.apply(lambda row: (row['TP']-row['entry_price'])/(row['entry_price']-row['SL']) 
+                                     if row['entry_price'] > row['SL'] else (row['entry_price']-row['TP'])/(row['SL']-row['entry_price']), axis=1)
+        
         total_trades = len(df)
-        win_trades = df[df['outcome'] == 'WIN']
-        loss_trades = df[df['outcome'] == 'LOSS']
-        avg_win = win_trades['profit_pct'].mean() if not win_trades.empty else 0
-        avg_loss = loss_trades['profit_pct'].mean() if not loss_trades.empty else 0
-        risk_reward = abs(avg_win / avg_loss) if avg_loss != 0 else np.inf
-        total_wins = df[df['outcome'] == 'WIN']['profit'].sum()
-        total_losses = abs(df[df['outcome'] == 'LOSS']['profit'].sum())
-        print(f"Total Wins Sum: {total_wins:.2f}%")  # Debug output
-        print(f"Total Losses Sum: {total_losses:.2f}%")  # Debug output
-        profit_factor = total_wins / total_losses if total_losses > 0 else np.inf
-        max_drawdown = df['drawdown'].min() if 'drawdown' in df.columns else 0
-        final_capital = simulate_capital(all_signals, initial_capital=initial_capital)
-        print("=== Aggregated Report Across All Symbols ===")
-        print(f"Total Trades: {total_trades}")
-        print(f"Win Rate: {len(win_trades) / total_trades:.1%}")
-        print(f"Avg Win: {avg_win:.2f}% | Avg Loss: {avg_loss:.2f}%")
-        print(f"Profit Factor: {profit_factor:.2f}")
-        print(f"Max Drawdown: {max_drawdown * 100:.2f}%")
-        print(f"\nStarting Capital: ${initial_capital}")
-        print(f"Final Capital: ${final_capital:.2f}")
+        win_rate = len(df[df['outcome'] == 'WIN']) / total_trades * 100
         long_trades = len(df[df['side'] == 'long'])
         short_trades = len(df[df['side'] == 'short'])
-        print(f"Long Trades: {long_trades} | Short Trades: {short_trades}")
-        capital_change = final_capital - initial_capital
-        print(f"Capital Change: ${capital_change:.2f}")
-        wins_count = len(df[df['outcome'] == 'WIN'])
-        losses_count = len(df[df['outcome'] == 'LOSS'])
-        print(f"Total Wins: {wins_count}")
-        print(f"Total Losses: {losses_count}")
+        
+        final_capital = simulate_capital(all_signals, initial_capital=initial_capital)
+        
+        print("=== Aggregated Report ===")
+        print(f"Total Trades: {total_trades}")
+        print(f"Win Rate: {win_rate:.2f}%")
+        print(f"Long Trades: {long_trades}, Short Trades: {short_trades}")
+        print(f"Simulation: Starting Capital: ${initial_capital}, Final Capital: ${final_capital:.2f}")
+        
         best_trade = df.loc[df['profit_pct'].idxmax()]
-        print(f"Best Trade: {best_trade['symbol']} trade on {best_trade['entry_time']} with profit {best_trade['profit_pct']:.2f}% (entry: {best_trade['entry_price']}, exit: {best_trade['exit_price']})")
-        pair_profit = df.groupby('symbol')['profit'].sum()
-        best_pair = pair_profit.idxmax()
-        best_pair_profit = pair_profit.max() * 100
-        print(f"Best Performing Pair: {best_pair} with aggregated profit of {best_pair_profit:.2f}%")
-        df['entry_time'] = pd.to_datetime(df['entry_time'])
-        df['exit_time'] = pd.to_datetime(df['exit_time'])
-        df['trade_duration'] = (df['exit_time'] - df['entry_time']).dt.total_seconds() / 60
-        df['trade_duration'] = df['trade_duration'].apply(lambda x: max(x, 5))  # Minimum 1 bar duration
-        avg_duration = df['trade_duration'].mean()
-        max_duration = df['trade_duration'].max()
-        min_duration = df['trade_duration'].min()
-        duration_std = df['trade_duration'].std()
-        avg_risk_reward = df['risk_reward'].mean()
-        print(f"Average Trade Duration: {avg_duration:.2f} minutes")
-        print(f"Max Trade Duration: {max_duration:.2f} minutes")
-        print(f"Min Trade Duration: {min_duration:.2f} minutes")
-        print(f"Trade Duration Std Dev: {duration_std:.2f} minutes")
-        print(f"Average Risk/Reward Ratio: {avg_risk_reward:.2f}")
-        print(f"Duration Percentiles (minutes):")
-        print(f"25th: {df['trade_duration'].quantile(0.25):.1f} | 50th: {df['trade_duration'].quantile(0.5):.1f} | 75th: {df['trade_duration'].quantile(0.75):.1f}")
-        print("\nSample Aggregated Trades:")
-        print(df[['entry_time', 'entry_price', 'SL', 'TP', 'exit_price', 'profit_pct', 'outcome']].head(5))
-        if 'drawdown' in df.columns:
-            df['drawdown_pct'] = df['drawdown'] * 100
-            print("Top 5 Drawdowns:")
-            print(df.nsmallest(5, 'drawdown_pct')[['symbol', 'entry_time', 'drawdown_pct']])
-        invalid_trades = df[(df['trade_duration'] == 5) | (df['trade_duration'] == 300)]
-        print(f"Found {len(invalid_trades)} trades with suspicious durations (5 or 300 minutes)")
+        worst_trade = df.loc[df['profit_pct'].idxmin()]
+        print(f"Best Trade: {best_trade['symbol']} - {best_trade['side']} trade on {best_trade['entry_time']}, Profit: {best_trade['profit_pct']}% (Entry: {best_trade['entry_price']}, Exit: {best_trade['exit_price']})")
+        print(f"Worst Trade: {worst_trade['symbol']} - {worst_trade['side']} trade on {worst_trade['entry_time']}, Profit: {worst_trade['profit_pct']}% (Entry: {worst_trade['entry_price']}, Exit: {worst_trade['exit_price']})")
+        print("=== END OF SUMMARY ===\n")
     except Exception as e:
         print(f"Aggregated analysis error: {str(e)}")
 
