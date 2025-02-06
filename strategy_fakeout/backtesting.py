@@ -43,7 +43,7 @@ def calculate_exit_profit_short(entry_price, exit_price):
     # For shorts, profit is positive when exit_price is lower than entry_price
     return (adjusted_entry - adjusted_exit) / adjusted_entry
 
-def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=30, client=None, use_random_date=False, swing_lookback=30):
+def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, use_random_date=False, swing_lookback=30):
     # Determine backtesting date range.
     if use_random_date:
         start_random = datetime(2021, 1, 1)
@@ -64,7 +64,7 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=30, client=None, u
     )
     if not klines:
         logger.error(f"No klines fetched for {symbol} on timeframe {timeframe}")
-        return []
+        return [], None
     df = pd.DataFrame(klines, columns=[
         'timestamp', 'open', 'high', 'low', 'close', 'volume',
         'close_time', 'quote_asset_volume', 'trades',
@@ -85,7 +85,7 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=30, client=None, u
     )
     if not klines_4h:
         logger.error(f"No 4h klines fetched for {symbol}")
-        return []
+        return [], df
     df_htf = pd.DataFrame(klines_4h, columns=[
         'timestamp', 'open', 'high', 'low', 'close', 'volume',
         'close_time', 'quote_asset_volume', 'trades',
@@ -101,7 +101,6 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=30, client=None, u
     total_needed = swing_lookback + 2  # lookback candles + breakout + confirmation
     # Loop over the candles starting from the first index where we have total_needed candles.
     for i in range(total_needed - 1, len(df)):
-        # Build a window of (swing_lookback + 2) candles.
         window = df.iloc[i - (total_needed - 1): i+1]
         current_time = window.index[-1]
         htf_window = df_htf[df_htf.index <= current_time]
@@ -115,7 +114,6 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=30, client=None, u
             take_profit = signal["take_profit"]
             outcome = None
             exit_price = None
-            # Look ahead in the lower timeframe to simulate the trade exit.
             for j in range(i+1, len(df)):
                 candle = df.iloc[j]
                 if signal["side"] == "long":
@@ -147,20 +145,25 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=30, client=None, u
                     outcome = "WIN" if exit_price > entry_price else "LOSS"
                 else:
                     outcome = "WIN" if exit_price < entry_price else "LOSS"
+            if signal["side"] == "long":
+                profit = calculate_exit_profit_long(entry_price, exit_price)
+            else:
+                profit = calculate_exit_profit_short(entry_price, exit_price)
             trade = {
                 "symbol": symbol,
                 "side": signal["side"],
                 "entry_time": entry_time,
-                "entry_price": entry_price,
+                "entry": entry_price,
                 "stop_loss": stop_loss,
                 "take_profit": take_profit,
                 "exit_time": exit_time,
                 "exit_price": exit_price,
-                "outcome": outcome
+                "outcome": outcome,
+                "profit": profit
             }
             signals.append(trade)
     logger.debug(f"Completed backtesting for {symbol}. Total trades: {len(signals)}")
-    return signals
+    return signals, df
 
 def simulate_capital(signals, initial_capital=1000):
     sorted_signals = sorted(signals, key=lambda t: t['entry_time'])
@@ -181,7 +184,8 @@ def analyze_results(signals, symbol):
     print(f"--- {symbol} ---")
     print(f"Total Trades: {total_trades}")
     print(f"Win Rate: {win_rate:.2f}%")
-    print(df[["entry_time", "entry_price", "stop_loss", "take_profit", "exit_time", "exit_price", "outcome"]])
+    df["profit_pct"] = (df["profit"] * 100).round(2)
+    print(df[["entry_time", "entry", "stop_loss", "take_profit", "exit_time", "exit_price", "profit_pct", "outcome"]])
 
 def analyze_aggregated_results(all_signals, initial_capital=1000, days=30):
     if not all_signals:
@@ -241,6 +245,11 @@ def analyze_aggregated_results(all_signals, initial_capital=1000, days=30):
         print(f"Max Drawdown: {max_drawdown * 100:.2f}%")
         print(f"\nStarting Capital: ${initial_capital}")
         print(f"Final Capital: ${final_capital:.2f}")
+        long_trades = len(df[df['side'] == 'long'])
+        short_trades = len(df[df['side'] == 'short'])
+        print(f"Long Trades: {long_trades} | Short Trades: {short_trades}")
+        capital_change = final_capital - initial_capital
+        print(f"Capital Change: ${capital_change:.2f}")
         wins_count = len(df[df['outcome'] == 'WIN'])
         losses_count = len(df[df['outcome'] == 'LOSS'])
         print(f"Total Wins: {wins_count}")
@@ -251,10 +260,6 @@ def analyze_aggregated_results(all_signals, initial_capital=1000, days=30):
         best_pair = pair_profit.idxmax()
         best_pair_profit = pair_profit.max() * 100
         print(f"Best Performing Pair: {best_pair} with aggregated profit of {best_pair_profit:.2f}%")
-        long_count = len(df[df['direction'] == 'long'])
-        short_count = len(df[df['direction'] == 'short'])
-        print(f"Total Long Trades: {long_count}")
-        print(f"Total Short Trades: {short_count}")
         df['entry_time'] = pd.to_datetime(df['entry_time'])
         df['exit_time'] = pd.to_datetime(df['exit_time'])
         df['trade_duration'] = (df['exit_time'] - df['entry_time']).dt.total_seconds() / 60
