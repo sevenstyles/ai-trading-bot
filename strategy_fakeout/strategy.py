@@ -4,52 +4,15 @@ import logging
 
 logger = logging.getLogger("backtester")
 
-def calculate_stop_loss(entry_price, raw_stop_level, side="long"):
-    """Calculate stop loss with maximum distance limits."""
-    stop_distance_pct = abs(raw_stop_level - entry_price) / entry_price
-    
-    # Maximum allowed stop distance (2% for now)
-    MAX_STOP_DISTANCE = 0.02
-    
-    if stop_distance_pct > MAX_STOP_DISTANCE:
-        # If stop is too far, limit it to max distance
-        if side == "long":
-            return entry_price * (1 - MAX_STOP_DISTANCE)
-        else:  # short
-            return entry_price * (1 + MAX_STOP_DISTANCE)
-    return raw_stop_level
-
 def generate_signal(data, lookback=40):
     """
-    Generate trading signal based on failed breakout reversal strategy.
-    
-    For a long trade (from failed short setup):
-      1. Examine the first 'lookback' candles to identify the swing high
-      2. The breakout candle must have its high above the swing high
-      3. The confirmation candle must close below the swing high
-      4. Within next 5 candles, if price closes above the highest high of breakout/confirmation candles
-         we enter a long trade with stop loss below the lowest low of the monitoring period
-    
-    For a short trade (from failed long setup):
-      1. Examine the first 'lookback' candles to identify the swing low
-      2. The breakout candle must have its low below the swing low
-      3. The confirmation candle must close above the swing low
-      4. Within next 5 candles, if price closes below the lowest low of breakout/confirmation candles
-         we enter a short trade with stop loss above the highest high of the monitoring period
-    
-    Parameters:
-      data (DataFrame): Lower timeframe price data containing at least (lookback + 7) candles
-                       (lookback + breakout + confirmation + 5 monitoring candles)
-      lookback (int): Number of candles to use as the lookback for the swing point (min 10, max 300)
-    
-    Returns:
-      dict or None: A dictionary containing 'side', 'entry', 'stop_loss', 'take_profit' and 'debug_info' if a setup is detected
+    Generate trading signals based on failed breakout patterns.
+    Uses the exact lowest/highest point of the 5 bars before breakout for stop loss.
+    Take profit is set at 4x the distance from entry to stop loss.
     """
-    lookback = max(10, min(lookback, 300))
-    if len(data) < lookback + 7:  # Need extra candles for monitoring period
-        logger.debug(f"Not enough data: got {len(data)} candles, need {lookback + 7}")
+    if len(data) < lookback + 7:  # Need enough bars for lookback + breakout + confirmation + monitoring
         return None
-
+        
     swing_window = data.iloc[:lookback]
     breakout_candle = data.iloc[lookback]
     confirmation_candle = data.iloc[lookback + 1]
@@ -58,7 +21,13 @@ def generate_signal(data, lookback=40):
     swing_high = swing_window["high"].max()
     swing_low = swing_window["low"].min()
 
+    # Get the 5 bars before breakout for stop loss calculation
+    pre_breakout_window = data.iloc[lookback-5:lookback]
+    pre_breakout_low = pre_breakout_window['low'].min()
+    pre_breakout_high = pre_breakout_window['high'].max()
+
     logger.debug(f"Analyzing window: Swing High: {swing_high}, Swing Low: {swing_low}")
+    logger.debug(f"Pre-breakout window - High: {pre_breakout_high}, Low: {pre_breakout_low}")
     logger.debug(f"Breakout candle - High: {breakout_candle.high}, Low: {breakout_candle.low}, Close: {breakout_candle.close}")
     logger.debug(f"Confirmation candle - High: {confirmation_candle.high}, Low: {confirmation_candle.low}, Close: {confirmation_candle.close}")
 
@@ -67,35 +36,28 @@ def generate_signal(data, lookback=40):
         logger.debug("Found potential short setup (breakout above swing high)")
         if confirmation_candle.close < swing_high:
             logger.debug("Confirmed failed short (close below swing high)")
-            # Get the highest high of breakout and confirmation candles
             setup_high = max(breakout_candle.high, confirmation_candle.high)
             
-            # Check if price closes above the setup high within monitoring period
             for i, candle in enumerate(monitoring_candles.itertuples()):
-                if candle.close > confirmation_candle.high:
+                if candle.close > swing_high:
                     logger.debug(f"Found long entry on candle {i+1} of monitoring period")
                     entry_price = candle.close
                     
-                    # Calculate initial stop loss
-                    monitoring_period = data.iloc[lookback + 1:lookback + 2 + i + 1]
-                    raw_stop = monitoring_period['low'].min() * 0.995
+                    # Set stop loss at the pre-breakout low
+                    stop_loss = pre_breakout_low
                     
-                    # Apply maximum stop loss distance limit
-                    stop_loss = calculate_stop_loss(entry_price, raw_stop, "long")
-                    
-                    # Log if stop was adjusted
-                    if stop_loss != raw_stop:
-                        logger.debug(f"Stop loss adjusted from {raw_stop:.4f} to {stop_loss:.4f} (max distance limit)")
-                    
+                    # Calculate take profit at 4x the risk
                     risk = entry_price - stop_loss
-                    take_profit = entry_price + (4 * risk)
-
+                    take_profit = entry_price + (4 * risk)  # 4:1 reward:risk ratio
+                    
                     debug_info = {
                         "setup_type": "failed_short_to_long",
                         "lookback": lookback,
                         "swing_high": swing_high,
                         "swing_low": swing_low,
                         "setup_high": setup_high,
+                        "pre_breakout_low": pre_breakout_low,
+                        "pre_breakout_high": pre_breakout_high,
                         "breakout_candle": breakout_candle.to_dict(),
                         "confirmation_candle": confirmation_candle.to_dict(),
                         "reversal_candle": {
@@ -105,13 +67,16 @@ def generate_signal(data, lookback=40):
                             'close': candle.close,
                             'volume': candle.volume
                         },
-                        "monitoring_candles_used": i + 1
+                        "monitoring_candles_used": i + 1,
+                        "risk_distance": risk,
+                        "reward_distance": 4 * risk
                     }
                     return {
                         "side": "long",
                         "entry": entry_price,
                         "stop_loss": stop_loss,
                         "take_profit": take_profit,
+                        "take_profit_levels": [take_profit],  # Keep this for compatibility
                         "debug_info": debug_info
                     }
 
@@ -120,35 +85,28 @@ def generate_signal(data, lookback=40):
         logger.debug("Found potential long setup (breakout below swing low)")
         if confirmation_candle.close > swing_low:
             logger.debug("Confirmed failed long (close above swing low)")
-            # Get the lowest low of breakout and confirmation candles
             setup_low = min(breakout_candle.low, confirmation_candle.low)
             
-            # Check if price closes below the setup low within monitoring period
             for i, candle in enumerate(monitoring_candles.itertuples()):
-                if candle.close < confirmation_candle.low:
+                if candle.close < swing_low:
                     logger.debug(f"Found short entry on candle {i+1} of monitoring period")
                     entry_price = candle.close
                     
-                    # Calculate initial stop loss
-                    monitoring_period = data.iloc[lookback + 1:lookback + 2 + i + 1]
-                    raw_stop = monitoring_period['high'].max() * 1.005
+                    # Set stop loss at the pre-breakout high
+                    stop_loss = pre_breakout_high
                     
-                    # Apply maximum stop loss distance limit
-                    stop_loss = calculate_stop_loss(entry_price, raw_stop, "short")
-                    
-                    # Log if stop was adjusted
-                    if stop_loss != raw_stop:
-                        logger.debug(f"Stop loss adjusted from {raw_stop:.4f} to {stop_loss:.4f} (max distance limit)")
-                    
+                    # Calculate take profit at 4x the risk
                     risk = stop_loss - entry_price
-                    take_profit = entry_price - (4 * risk)
-
+                    take_profit = entry_price - (4 * risk)  # 4:1 reward:risk ratio
+                    
                     debug_info = {
                         "setup_type": "failed_long_to_short",
                         "lookback": lookback,
                         "swing_high": swing_high,
                         "swing_low": swing_low,
                         "setup_low": setup_low,
+                        "pre_breakout_low": pre_breakout_low,
+                        "pre_breakout_high": pre_breakout_high,
                         "breakout_candle": breakout_candle.to_dict(),
                         "confirmation_candle": confirmation_candle.to_dict(),
                         "reversal_candle": {
@@ -158,13 +116,16 @@ def generate_signal(data, lookback=40):
                             'close': candle.close,
                             'volume': candle.volume
                         },
-                        "monitoring_candles_used": i + 1
+                        "monitoring_candles_used": i + 1,
+                        "risk_distance": risk,
+                        "reward_distance": 4 * risk
                     }
                     return {
                         "side": "short",
                         "entry": entry_price,
                         "stop_loss": stop_loss,
                         "take_profit": take_profit,
+                        "take_profit_levels": [take_profit],  # Keep this for compatibility
                         "debug_info": debug_info
                     }
 

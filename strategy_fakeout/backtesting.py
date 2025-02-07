@@ -16,11 +16,18 @@ if not logger.handlers:
     fh.setFormatter(formatter)
     logger.addHandler(fh)
 logger.propagate = False
-from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, SLIPPAGE_RATE, LONG_STOP_LOSS_MULTIPLIER, SHORT_STOP_LOSS_MULTIPLIER, TRAILING_STOP_PCT, TRAILING_START_LONG, TRAILING_START_SHORT, MIN_BARS_BEFORE_STOP, FUTURES_MAKER_FEE, FUTURES_TAKER_FEE, FUNDING_RATE, OHLCV_TIMEFRAME
+from config import (
+    MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE,
+    SLIPPAGE_RATE, STOP_LOSS_SLIPPAGE, LONG_STOP_LOSS_MULTIPLIER,
+    SHORT_STOP_LOSS_MULTIPLIER, TRAILING_STOP_PCT, TRAILING_START_LONG,
+    TRAILING_START_SHORT, MIN_BARS_BEFORE_STOP, FUTURES_MAKER_FEE,
+    FUTURES_TAKER_FEE, FUNDING_RATE, OHLCV_TIMEFRAME, POSITION_SIZE_CAP,
+    MIN_TRADE_VALUE
+)
 from strategy import generate_signal
 
 def get_funding_fee(client, symbol, entry_time, exit_time):
-    # Convert entry and exit times (assumed to be datetime objects) to milliseconds
+    """Calculate funding fees for the trade duration."""
     start_ms = int(entry_time.timestamp() * 1000)
     end_ms = int(exit_time.timestamp() * 1000)
     try:
@@ -29,27 +36,51 @@ def get_funding_fee(client, symbol, entry_time, exit_time):
         total_fee = sum(float(event['fundingRate']) * position_value for event in funding_data)
         return total_fee / CAPITAL  # Return as percentage of capital
     except Exception as e:
-        print(f"Error fetching funding rate for {symbol}: {e}")
+        logger.error(f"Error fetching funding rate for {symbol}: {e}")
         return 0.0
 
-def calculate_exit_profit_long(entry_price, exit_price):
+def calculate_exit_profit_long(entry_price, exit_price, include_funding=True, entry_time=None, exit_time=None, client=None, symbol=None):
+    """Calculate profit for a long trade including all fees."""
     # If exit price equals entry price, consider it breakeven
     if abs(exit_price - entry_price) < 1e-8:
         return 0.0
+        
+    # Add extra slippage for stop loss hits
+    actual_slippage = STOP_LOSS_SLIPPAGE if exit_price < entry_price else SLIPPAGE_RATE
+    
     adjusted_entry = entry_price * (1 + FUTURES_MAKER_FEE + SLIPPAGE_RATE)
-    adjusted_exit = exit_price * (1 - FUTURES_TAKER_FEE - SLIPPAGE_RATE)
-    return (adjusted_exit - adjusted_entry) / adjusted_entry
+    adjusted_exit = exit_price * (1 - FUTURES_TAKER_FEE - actual_slippage)
+    price_profit = (adjusted_exit - adjusted_entry) / adjusted_entry
+    
+    # Add funding fees if requested
+    if include_funding and entry_time and exit_time and client and symbol:
+        funding_fee = get_funding_fee(client, symbol, entry_time, exit_time)
+        return price_profit - funding_fee
+    
+    return price_profit
 
-def calculate_exit_profit_short(entry_price, exit_price):
+def calculate_exit_profit_short(entry_price, exit_price, include_funding=True, entry_time=None, exit_time=None, client=None, symbol=None):
+    """Calculate profit for a short trade including all fees."""
     # If exit price equals entry price, consider it breakeven
     if abs(exit_price - entry_price) < 1e-8:
         return 0.0
+        
+    # Add extra slippage for stop loss hits
+    actual_slippage = STOP_LOSS_SLIPPAGE if exit_price > entry_price else SLIPPAGE_RATE
+    
     adjusted_entry = entry_price * (1 - FUTURES_MAKER_FEE - SLIPPAGE_RATE)
-    adjusted_exit = exit_price * (1 + FUTURES_TAKER_FEE + SLIPPAGE_RATE)
-    return (adjusted_entry - adjusted_exit) / adjusted_entry
+    adjusted_exit = exit_price * (1 + FUTURES_TAKER_FEE + actual_slippage)
+    price_profit = (adjusted_entry - adjusted_exit) / adjusted_entry
+    
+    # Add funding fees if requested
+    if include_funding and entry_time and exit_time and client and symbol:
+        funding_fee = get_funding_fee(client, symbol, entry_time, exit_time)
+        return price_profit - funding_fee
+    
+    return price_profit
 
 def calculate_position_size(entry_price, stop_loss, side="long"):
-    """Calculate the position size based on capital, risk per trade, and leverage."""
+    """Calculate the position size based on capital, risk per trade, and leverage with limits."""
     risk_amount = CAPITAL * RISK_PER_TRADE  # How much money we're willing to risk
     stop_distance = abs(entry_price - stop_loss)
     stop_distance_pct = stop_distance / entry_price
@@ -59,6 +90,16 @@ def calculate_position_size(entry_price, stop_loss, side="long"):
     
     # Apply leverage
     leveraged_position = position_value * LEVERAGE
+    
+    # Apply position size cap
+    if leveraged_position > POSITION_SIZE_CAP:
+        logger.debug(f"Position size {leveraged_position:.2f} exceeds cap {POSITION_SIZE_CAP}. Reducing position.")
+        leveraged_position = POSITION_SIZE_CAP
+    
+    # Check minimum trade value
+    if leveraged_position < MIN_TRADE_VALUE:
+        logger.debug(f"Position size {leveraged_position:.2f} below minimum {MIN_TRADE_VALUE}. Skipping trade.")
+        return 0, 0
     
     # Calculate the quantity of contracts/tokens
     quantity = leveraged_position / entry_price
@@ -70,7 +111,7 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
     
-    # Fetch lower timeframe klines.
+    # Fetch lower timeframe klines
     klines = client.get_historical_klines(
         symbol, timeframe,
         start_date.strftime("%d %b %Y"),
@@ -79,6 +120,7 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
     if not klines:
         logger.error(f"No klines fetched for {symbol} on timeframe {timeframe}")
         return [], None
+        
     df = pd.DataFrame(klines, columns=[
         'timestamp', 'open', 'high', 'low', 'close', 'volume',
         'close_time', 'quote_asset_volume', 'trades',
@@ -91,7 +133,7 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
     df.set_index('timestamp', inplace=True)
     df.sort_index(inplace=True)
     
-    # Fetch higher timeframe (4h) data.
+    # Fetch higher timeframe (4h) data
     klines_4h = client.get_historical_klines(
         symbol, "4h",
         start_date.strftime("%d %b %Y"),
@@ -100,6 +142,7 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
     if not klines_4h:
         logger.error(f"No 4h klines fetched for {symbol}")
         return [], df
+        
     df_htf = pd.DataFrame(klines_4h, columns=[
         'timestamp', 'open', 'high', 'low', 'close', 'volume',
         'close_time', 'quote_asset_volume', 'trades',
@@ -142,141 +185,136 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
                 signal['side']
             )
             
+            # Skip trade if position size is too small
+            if quantity == 0:
+                i += 1
+                continue
+            
             logger.debug(f"Position Size: {quantity:.4f} contracts")
             logger.debug(f"Position Value: ${position_value:.2f}")
             logger.debug(f"Using {LEVERAGE}x leverage")
             
+            # Add trade details
             signal['quantity'] = quantity
             signal['position_value'] = position_value
             signal['leverage_used'] = LEVERAGE
-        
-        if not signal:
-            i += 1
+            signal['entry_time'] = df.index[i]  # Set entry time
+            signal['symbol'] = symbol
+            
+            entry_price = signal["entry"]
+            entry_time = df.index[i]
+            stop_loss = signal["stop_loss"]
+            take_profit = signal["take_profit"]
+            
+            outcome = None
+            max_profit_reached = 0  # Track maximum profit reached
+            bars_held = 0  # Track number of bars in trade
+            exit_price = None  # Initialize exit price
+            exit_time = None  # Initialize exit time
+            
+            # Process subsequent candles for this trade
+            for j in range(i+1, min(i + MAX_HOLD_BARS, len(df))):
+                candle = df.iloc[j]
+                bars_held += 1
+                
+                if signal['side'] == 'long':
+                    # Calculate current profit in R multiples
+                    current_profit = (candle['high'] - entry_price)
+                    profit_r = current_profit / (entry_price - stop_loss)
+                    max_profit_reached = max(max_profit_reached, profit_r)
+                    
+                    # Check stop loss
+                    if candle['low'] <= stop_loss:
+                        exit_price = stop_loss
+                        exit_time = df.index[j]
+                        outcome = 'LOSS'
+                        signal['profit'] = calculate_exit_profit_long(
+                            entry_price, exit_price, True,
+                            entry_time, exit_time,
+                            client, symbol
+                        )
+                        logger.debug(f"Long trade stopped out at {exit_price:.4f} (Entry: {entry_price:.4f}, Max profit reached: {max_profit_reached:.1f}R)")
+                        break
+                        
+                    # Check take profit
+                    if candle['high'] >= take_profit:
+                        exit_price = take_profit
+                        exit_time = df.index[j]
+                        outcome = 'WIN'
+                        signal['profit'] = calculate_exit_profit_long(
+                            entry_price, exit_price, True,
+                            entry_time, exit_time,
+                            client, symbol
+                        )
+                        logger.debug(f"Long trade hit TP at {exit_price:.4f} (Entry: {entry_price:.4f})")
+                        break
+                        
+                else:  # short trade
+                    # Calculate current profit in R multiples
+                    current_profit = (entry_price - candle['low'])
+                    profit_r = current_profit / (stop_loss - entry_price)
+                    max_profit_reached = max(max_profit_reached, profit_r)
+                    
+                    # Check stop loss
+                    if candle['high'] >= stop_loss:
+                        exit_price = stop_loss
+                        exit_time = df.index[j]
+                        outcome = 'LOSS'
+                        signal['profit'] = calculate_exit_profit_short(
+                            entry_price, exit_price, True,
+                            entry_time, exit_time,
+                            client, symbol
+                        )
+                        logger.debug(f"Short trade stopped out at {exit_price:.4f} (Entry: {entry_price:.4f}, Max profit reached: {max_profit_reached:.1f}R)")
+                        break
+                        
+                    # Check take profit
+                    if candle['low'] <= take_profit:
+                        exit_price = take_profit
+                        exit_time = df.index[j]
+                        outcome = 'WIN'
+                        signal['profit'] = calculate_exit_profit_short(
+                            entry_price, exit_price, True,
+                            entry_time, exit_time,
+                            client, symbol
+                        )
+                        logger.debug(f"Short trade hit TP at {exit_price:.4f} (Entry: {entry_price:.4f})")
+                        break
+            
+            # If no exit condition met, close at last candle
+            if not outcome:
+                exit_price = df.iloc[j]['close']
+                exit_time = df.index[j]
+                if signal['side'] == 'long':
+                    signal['profit'] = calculate_exit_profit_long(
+                        entry_price, exit_price, True,
+                        entry_time, exit_time,
+                        client, symbol
+                    )
+                else:
+                    signal['profit'] = calculate_exit_profit_short(
+                        entry_price, exit_price, True,
+                        entry_time, exit_time,
+                        client, symbol
+                    )
+                outcome = 'WIN' if signal['profit'] > 0 else 'LOSS'
+                logger.debug(f"Trade closed at end of period: {exit_price:.4f} (Entry: {entry_price:.4f})")
+            
+            # Set final trade details
+            signal['outcome'] = outcome
+            signal['max_profit_reached'] = max_profit_reached
+            signal['bars_held'] = bars_held
+            signal['exit_price'] = exit_price
+            signal['exit_time'] = exit_time
+            signal['duration'] = (exit_time - entry_time).total_seconds() / 3600  # Duration in hours
+            signals.append(signal)
+            
+            # Skip the processed candles
+            i = j + 1
             continue
             
-        entry_price = signal["entry"]
-        entry_time = df.index[i]
-        initial_stop_loss = signal["stop_loss"]
-        take_profit = signal["take_profit"]
-        current_stop_loss = initial_stop_loss
-        risk = abs(entry_price - initial_stop_loss)  # Initial risk amount
+        i += 1
         
-        # Calculate actual dollar risk
-        dollar_risk = signal['position_value'] * (risk / entry_price)
-        logger.debug(f"Dollar Risk: ${dollar_risk:.2f}")
-        
-        outcome = None
-        max_profit_reached = 0  # Track maximum profit reached
-        
-        # Process subsequent candles for this trade starting from i+1
-        exit_idx = None
-        for j in range(i+1, len(df)):
-            candle = df.iloc[j]
-            
-            if signal.get('side', 'long') == 'long':
-                # Calculate current profit in R multiples
-                current_profit = (candle['high'] - entry_price)
-                profit_r = current_profit / risk
-                max_profit_reached = max(max_profit_reached, profit_r)
-                
-                # Trailing stop logic for longs
-                if profit_r >= 1:  # Once we're in more than 1R profit
-                    # Calculate new stop loss based on profit achieved
-                    if profit_r >= 3:
-                        new_stop = entry_price + (2 * risk)  # Lock in 2R if we're up 3R
-                    elif profit_r >= 2:
-                        new_stop = entry_price + risk  # Lock in 1R if we're up 2R
-                    elif profit_r >= 1:
-                        new_stop = entry_price + (0.5 * risk)  # Lock in 0.5R if we're up 1R
-                    
-                    # Only move stop loss up, never down
-                    if new_stop > current_stop_loss:
-                        current_stop_loss = new_stop
-                        logger.debug(f"Trailing stop moved up to {current_stop_loss:.2f} ({profit_r:.1f}R profit)")
-                
-                # Check stop loss and take profit
-                if candle['low'] <= current_stop_loss:
-                    exit_price = current_stop_loss
-                    outcome = 'WIN' if exit_price > entry_price else 'LOSS'
-                    exit_idx = j
-                    signal['profit'] = calculate_exit_profit_long(entry_price, exit_price)
-                    logger.debug(f"Long trade stopped out at {exit_price} (Entry: {entry_price}, Max profit reached: {max_profit_reached:.1f}R)")
-                    break
-                if candle['high'] >= take_profit:
-                    exit_price = take_profit
-                    outcome = 'WIN'
-                    exit_idx = j
-                    signal['profit'] = calculate_exit_profit_long(entry_price, exit_price)
-                    logger.debug(f"Long trade hit TP at {exit_price} (Entry: {entry_price})")
-                    break
-                    
-            else:  # short trade logic
-                # Calculate current profit in R multiples
-                current_profit = (entry_price - candle['low'])
-                profit_r = current_profit / risk
-                max_profit_reached = max(max_profit_reached, profit_r)
-                
-                # Trailing stop logic for shorts
-                if profit_r >= 1:  # Once we're in more than 1R profit
-                    # Calculate new stop loss based on profit achieved
-                    if profit_r >= 3:
-                        new_stop = entry_price - (2 * risk)  # Lock in 2R if we're up 3R
-                    elif profit_r >= 2:
-                        new_stop = entry_price - risk  # Lock in 1R if we're up 2R
-                    elif profit_r >= 1:
-                        new_stop = entry_price - (0.5 * risk)  # Lock in 0.5R if we're up 1R
-                    
-                    # Only move stop loss down, never up
-                    if new_stop < current_stop_loss:
-                        current_stop_loss = new_stop
-                        logger.debug(f"Trailing stop moved down to {current_stop_loss:.2f} ({profit_r:.1f}R profit)")
-                
-                # Check stop loss and take profit
-                if candle['high'] >= current_stop_loss:
-                    exit_price = current_stop_loss
-                    outcome = 'WIN' if exit_price < entry_price else 'LOSS'
-                    exit_idx = j
-                    signal['profit'] = calculate_exit_profit_short(entry_price, exit_price)
-                    logger.debug(f"Short trade stopped out at {exit_price} (Entry: {entry_price}, Max profit reached: {max_profit_reached:.1f}R)")
-                    break
-                if candle['low'] <= take_profit:
-                    exit_price = take_profit
-                    outcome = 'WIN'
-                    exit_idx = j
-                    signal['profit'] = calculate_exit_profit_short(entry_price, exit_price)
-                    logger.debug(f"Short trade hit TP at {exit_price} (Entry: {entry_price})")
-                    break
-        
-        # If no exit condition met in inner loop, use final candle
-        if exit_idx is None:
-            exit_idx = len(df) - 1
-            exit_price = df['close'].iloc[exit_idx]
-            exit_time = df.index[exit_idx]
-            if signal.get('side', 'long') == 'long':
-                outcome = 'BREAK EVEN' if abs(exit_price - entry_price) < 1e-8 else ('WIN' if exit_price > entry_price else 'LOSS')
-                signal['profit'] = calculate_exit_profit_long(entry_price, exit_price)
-            else:
-                outcome = 'BREAK EVEN' if abs(exit_price - entry_price) < 1e-8 else ('WIN' if exit_price < entry_price else 'LOSS')
-                signal['profit'] = calculate_exit_profit_short(entry_price, exit_price)
-            signal['take_profit'] = take_profit
-            logger.debug(f"Trade closed at end of period: {exit_price} (Entry: {entry_price})")
-
-        # Set the exit details
-        exit_time = df.index[exit_idx]
-        signal['outcome'] = outcome
-        signal['entry_time'] = entry_time
-        signal['exit_time'] = exit_time
-        signal['exit_price'] = exit_price
-        
-        # Calculate trade duration
-        duration = exit_time - entry_time
-        signal['duration'] = duration.total_seconds() / 3600  # Convert to hours
-        logger.debug(f"Trade duration: {signal['duration']:.1f} hours")
-        
-        signals.append(signal)
-        # Advance the outer loop counter to just after the exit candle
-        i = exit_idx + 1
-    logger.debug(f"Completed backtesting for {symbol}. Total trades: {len(signals)}")
     return signals, df
 
 def simulate_capital(signals, initial_capital=1000):
@@ -289,34 +327,94 @@ def simulate_capital(signals, initial_capital=1000):
     return capital
 
 def analyze_results(signals, symbol):
+    """Analyze and display trading results for a single symbol."""
     if not signals:
         print(f"No trades for {symbol}")
         return
+        
     df = pd.DataFrame(signals)
-    if "profit" not in df.columns:
-        df["profit"] = 0.0
+    
+    # Ensure all required columns exist
+    required_cols = ['entry_time', 'exit_time', 'profit', 'outcome', 'side', 
+                    'entry', 'stop_loss', 'take_profit', 'exit_price']
+    for col in required_cols:
+        if col not in df.columns:
+            logger.error(f"Missing required column: {col}")
+            return
+            
+    # Calculate basic statistics
     total_trades = len(df)
     wins = len(df[df["outcome"]=="WIN"])
     losses = len(df[df["outcome"]=="LOSS"])
     win_rate = (wins/(wins+losses)*100) if (wins+losses) > 0 else 0
-    # Convert entry_time and exit_time from naive UTC to UTC+11
-    from datetime import timezone, timedelta
-    utc_plus_11 = timezone(timedelta(hours=11))
-    # Assuming the timestamps are in UTC, we localize and then convert
-    df["entry_time"] = pd.to_datetime(df["entry_time"]).dt.tz_localize('UTC').dt.tz_convert(utc_plus_11)
-    df["exit_time"] = pd.to_datetime(df["exit_time"]).dt.tz_localize('UTC').dt.tz_convert(utc_plus_11)
-    
-    print("--- " + symbol + " ---")
-    print(f"Total Trades: {total_trades}")
-    print(f"Win Rate (wins vs losses): {win_rate:.2f}%")
     break_even_trades = len(df[df["outcome"]=="BREAK EVEN"])
-    print(f"Break Even Trades: {break_even_trades}")
+    long_trades = len(df[df["side"]=="long"])
+    short_trades = len(df[df["side"]=="short"])
+    
+    # Convert profit to percentage
     df["profit_pct"] = (df["profit"] * 100).round(2)
-    # Include partial profit details if available
-    cols = ["side", "entry_time", "entry", "stop_loss", "take_profit", "exit_time", "exit_price", "profit_pct", "outcome"]
-    if "partial_profit_taken" in df.columns or "partial_profit_price" in df.columns:
-        cols.extend(["partial_profit_taken", "partial_profit_price"])
-    print(df[cols])
+    
+    # Calculate average trade duration
+    if 'duration' in df.columns:
+        avg_duration = df['duration'].mean()
+    else:
+        avg_duration = None
+    
+    # Calculate average R multiple
+    df['R_multiple'] = df.apply(lambda row: 
+        (row['exit_price'] - row['entry']) / (row['entry'] - row['stop_loss'])
+        if row['side'] == 'long' else
+        (row['entry'] - row['exit_price']) / (row['stop_loss'] - row['entry']), 
+        axis=1
+    )
+    avg_r_multiple = df['R_multiple'].mean()
+    
+    # Print results
+    print("\n" + "="*50)
+    print(f"=== {symbol} Trading Results ===")
+    print("="*50)
+    print(f"Total Trades: {total_trades}")
+    print(f"Win Rate: {win_rate:.2f}%")
+    print(f"Wins: {wins}, Losses: {losses}, Break Even: {break_even_trades}")
+    print(f"Long Trades: {long_trades}, Short Trades: {short_trades}")
+    if avg_duration is not None:
+        print(f"Average Trade Duration: {avg_duration:.1f} hours")
+    print(f"Average R Multiple: {avg_r_multiple:.2f}")
+    print("\nDetailed Trade List:")
+    print("-"*100)
+    
+    # Format timestamps for display
+    df['entry_time'] = pd.to_datetime(df['entry_time']).dt.strftime('%Y-%m-%d %H:%M')
+    df['exit_time'] = pd.to_datetime(df['exit_time']).dt.strftime('%Y-%m-%d %H:%M')
+    
+    # Display trade details
+    display_cols = [
+        'side', 'entry_time', 'entry', 'stop_loss', 'take_profit',
+        'exit_time', 'exit_price', 'profit_pct', 'outcome'
+    ]
+    
+    # Add optional columns if they exist
+    if 'max_profit_reached' in df.columns:
+        df['max_profit_reached'] = df['max_profit_reached'].round(2)
+        display_cols.append('max_profit_reached')
+    if 'bars_held' in df.columns:
+        display_cols.append('bars_held')
+    
+    print(df[display_cols].to_string(index=False))
+    print("-"*100)
+    
+    # Print summary statistics
+    total_profit_pct = df['profit_pct'].sum()
+    avg_profit_pct = df['profit_pct'].mean()
+    max_profit_pct = df['profit_pct'].max()
+    min_profit_pct = df['profit_pct'].min()
+    
+    print("\nSummary Statistics:")
+    print(f"Total Profit: {total_profit_pct:.2f}%")
+    print(f"Average Profit per Trade: {avg_profit_pct:.2f}%")
+    print(f"Best Trade: {max_profit_pct:.2f}%")
+    print(f"Worst Trade: {min_profit_pct:.2f}%")
+    print("="*50 + "\n")
 
 def analyze_aggregated_results(all_signals, initial_capital=1000, days=30):
     if not all_signals:

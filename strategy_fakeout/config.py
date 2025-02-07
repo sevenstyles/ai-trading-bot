@@ -13,9 +13,9 @@ BINANCE_API_SECRET = 'f851e4347572938d9f945c67c8904cece84175d6210d8400b04e3cd44d
 CONFIRMATION_WINDOW = 24  # 6 hours (24*15min)
 MIN_SESSION_RANGE_PCT = 1.5
 MIN_PRICE = 0.000001
-POSITION_SIZE_CAP = 5000
 MIN_QUOTE_VOLUME = 25000
 MIN_TRADE_VALUE = 250
+POSITION_SIZE_CAP = 5000  # Maximum position size in quote currency
 
 MIN_CONSOL_RANGE_PCT = 3.0
 BUFFER_PCT = 0.0025
@@ -25,7 +25,7 @@ MIN_CONSOL_DAYS = 1
 VOL_MA_PERIOD = 20
 
 MAX_HOLD_PERIOD = 72  # in hours
-MAX_HOLD_BARS = 72
+MAX_HOLD_BARS = 72  # Maximum number of bars to hold a position
 
 RISK_REWARD_RATIO = 3.0
 
@@ -58,24 +58,29 @@ TAKE_PROFIT_LEVELS = {
 MIN_LIQUIDITY = 500000
 
 # Backtester Settings
-OHLCV_TIMEFRAME = "4h"
-LONG_STOP_LOSS_MULTIPLIER = 0.995
-SHORT_STOP_LOSS_MULTIPLIER = 1.005
+OHLCV_TIMEFRAME = "1h"  # Main timeframe for analysis and trading
+
+# Capital and Risk Management
+MAX_STOP_DISTANCE = 0.02  # Maximum allowed stop loss distance (2%)
+LONG_STOP_LOSS_MULTIPLIER = 0.995  # Default stop loss distance for longs
+SHORT_STOP_LOSS_MULTIPLIER = 1.005  # Default stop loss distance for shorts
+STOP_LOSS_SLIPPAGE = 0.001  # Additional slippage for stop losses (0.1%)
+
+# Trading Fees and Slippage
+FUTURES_MAKER_FEE = 0.0002  # Maker fee for entry (0.02%)
+FUTURES_TAKER_FEE = 0.0005  # Taker fee for exit (0.05%)
+SLIPPAGE_RATE = 0.0005  # Standard slippage rate (0.05%)
+FUNDING_RATE = 0.0001  # Funding rate per funding period (0.01%)
+
+# Trailing Stop Settings
+TRAILING_STOP_PCT = 0.003  # Trailing stop distance (0.3%)
+TRAILING_START_LONG = 1.002  # Start trailing at 0.2% profit for longs
+TRAILING_START_SHORT = 0.998  # Start trailing at 0.2% profit for shorts
+MIN_BARS_BEFORE_STOP = 5  # Minimum bars before trailing stop activates
 
 # Removed duplicate profit target multipliers. Previous definitions of 1.06 and 0.94 have been removed.
 
 # New parameters to simulate live futures trading conditions:
-FUTURES_MAKER_FEE = 0.0002  # Maker fee for entry (0.02%)
-FUTURES_TAKER_FEE = 0.0005  # Taker fee for exit (0.05%)
-SLIPPAGE_RATE = 0.0005      # Slippage rate (0.05%)
-FUNDING_RATE = 0.0001       # Funding rate per funding period (approx 0.01%), assuming funding applies every 8 hours
-
-# Trailing Stop Settings for Backtesting Strategy
-TRAILING_STOP_PCT = 0.003
-TRAILING_START_LONG = 1.002
-TRAILING_START_SHORT = 0.998
-
-MIN_BARS_BEFORE_STOP = 5
 
 # Backtesting and live trading candlestick interval
 CANDLESTICK_INTERVAL = "4h" 

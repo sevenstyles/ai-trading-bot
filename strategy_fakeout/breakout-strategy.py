@@ -11,7 +11,7 @@ from backtesting import backtest_strategy, analyze_results, analyze_aggregated_r
 client = Client(api_key=BINANCE_API_KEY, api_secret=BINANCE_API_SECRET)
 
 def main():
-    symbols = get_top_volume_pairs(limit=100)
+    symbols = get_top_volume_pairs(limit=10)
     if not symbols:
         print("No top volume pairs found.")
         return
