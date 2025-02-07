@@ -48,6 +48,23 @@ def calculate_exit_profit_short(entry_price, exit_price):
     adjusted_exit = exit_price * (1 + FUTURES_TAKER_FEE + SLIPPAGE_RATE)
     return (adjusted_entry - adjusted_exit) / adjusted_entry
 
+def calculate_position_size(entry_price, stop_loss, side="long"):
+    """Calculate the position size based on capital, risk per trade, and leverage."""
+    risk_amount = CAPITAL * RISK_PER_TRADE  # How much money we're willing to risk
+    stop_distance = abs(entry_price - stop_loss)
+    stop_distance_pct = stop_distance / entry_price
+    
+    # Calculate the position size that risks the desired amount
+    position_value = risk_amount / stop_distance_pct
+    
+    # Apply leverage
+    leveraged_position = position_value * LEVERAGE
+    
+    # Calculate the quantity of contracts/tokens
+    quantity = leveraged_position / entry_price
+    
+    return quantity, leveraged_position
+
 def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, use_random_date=False, swing_lookback=20):
     # Determine backtesting date range using the current date
     end_date = datetime.now()
@@ -117,6 +134,21 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
             logger.debug(f"Signal found: {signal['side']} at {df.index[i]}")
             logger.debug(f"Setup type: {signal['debug_info']['setup_type']}")
             logger.debug(f"Entry: {signal['entry']}, SL: {signal['stop_loss']}, TP: {signal['take_profit']}")
+            
+            # Calculate position size
+            quantity, position_value = calculate_position_size(
+                signal['entry'], 
+                signal['stop_loss'], 
+                signal['side']
+            )
+            
+            logger.debug(f"Position Size: {quantity:.4f} contracts")
+            logger.debug(f"Position Value: ${position_value:.2f}")
+            logger.debug(f"Using {LEVERAGE}x leverage")
+            
+            signal['quantity'] = quantity
+            signal['position_value'] = position_value
+            signal['leverage_used'] = LEVERAGE
         
         if not signal:
             i += 1
@@ -128,6 +160,11 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
         take_profit = signal["take_profit"]
         current_stop_loss = initial_stop_loss
         risk = abs(entry_price - initial_stop_loss)  # Initial risk amount
+        
+        # Calculate actual dollar risk
+        dollar_risk = signal['position_value'] * (risk / entry_price)
+        logger.debug(f"Dollar Risk: ${dollar_risk:.2f}")
+        
         outcome = None
         max_profit_reached = 0  # Track maximum profit reached
         
