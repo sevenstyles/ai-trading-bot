@@ -16,7 +16,7 @@ if not logger.handlers:
     fh.setFormatter(formatter)
     logger.addHandler(fh)
 logger.propagate = False
-from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, SLIPPAGE_RATE, LONG_STOP_LOSS_MULTIPLIER, SHORT_STOP_LOSS_MULTIPLIER, TRAILING_STOP_PCT, TRAILING_START_LONG, TRAILING_START_SHORT, MIN_BARS_BEFORE_STOP, ATR_PERIOD, LONG_STOP_LOSS_ATR_MULTIPLIER, SHORT_STOP_LOSS_ATR_MULTIPLIER, FUTURES_MAKER_FEE, FUTURES_TAKER_FEE, FUNDING_RATE, OHLCV_TIMEFRAME
+from config import MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE, SLIPPAGE_RATE, LONG_STOP_LOSS_MULTIPLIER, SHORT_STOP_LOSS_MULTIPLIER, TRAILING_STOP_PCT, TRAILING_START_LONG, TRAILING_START_SHORT, MIN_BARS_BEFORE_STOP, FUTURES_MAKER_FEE, FUTURES_TAKER_FEE, FUNDING_RATE, OHLCV_TIMEFRAME
 from strategy import generate_signal
 
 def get_funding_fee(client, symbol, entry_time, exit_time):
@@ -48,7 +48,7 @@ def calculate_exit_profit_short(entry_price, exit_price):
     adjusted_exit = exit_price * (1 + FUTURES_TAKER_FEE + SLIPPAGE_RATE)
     return (adjusted_entry - adjusted_exit) / adjusted_entry
 
-def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, use_random_date=False, swing_lookback=20):
+def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, use_random_date=False, swing_lookback=40):
     # Determine backtesting date range using the current date
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
@@ -149,12 +149,11 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
             exit_time = df.index[exit_idx]
             if signal.get('side', 'long') == 'long':
                 outcome = 'BREAK EVEN' if abs(exit_price - entry_price) < 1e-8 else ('WIN' if exit_price > entry_price else 'LOSS')
+                signal['profit'] = (exit_price - entry_price) / entry_price
             else:
                 outcome = 'BREAK EVEN' if abs(exit_price - entry_price) < 1e-8 else ('WIN' if exit_price < entry_price else 'LOSS')
-            if signal.get('side', 'long') == 'long':
-                signal['take_profit'] = take_profit
-            else:
-                signal['take_profit'] = take_profit
+                signal['profit'] = (entry_price - exit_price) / entry_price
+            signal['take_profit'] = take_profit
         # Set the exit details
         exit_time = df.index[exit_idx]
         signal['outcome'] = outcome
