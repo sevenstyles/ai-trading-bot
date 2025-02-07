@@ -4,7 +4,7 @@ import csv
 print("csv module imported")
 import os  # Import the 'os' module
 print("os module imported")
-from config import SYMBOL, ORDER_TYPE, LIMIT_PRICE_OFFSET, STOP_LOSS_PERCENTAGE, TAKE_PROFIT_PERCENTAGE, MAX_POSITION_SIZE_PERCENTAGE, API_KEY, API_SECRET
+from config import SYMBOL, ORDER_TYPE, LIMIT_PRICE_OFFSET, STOP_LOSS_PERCENTAGE, TAKE_PROFIT_PERCENTAGE, MAX_POSITION_SIZE_PERCENTAGE, API_KEY, API_SECRET, ORDER_FLOW_DELTA_Z_SCORE_THRESHOLD, TICK_INTERVAL
 print("Config imported")
 from binance_data import BinanceData
 print("BinanceData imported")
@@ -12,6 +12,7 @@ from order_flow_analyzer import OrderFlowAnalyzer
 print("OrderFlowAnalyzer imported")
 from binance import Client, exceptions
 print("Binance Client and exceptions imported")
+import logging
 
 print("Trading Bot script starting...")
 print(f"Executing trading_bot.py from: {os.path.abspath(__file__)}")
@@ -26,127 +27,287 @@ class TradingBot:
             self.order_flow_analyzer = OrderFlowAnalyzer()
             print("OrderFlowAnalyzer created.")
 
-            # Delay BinanceData creation
-            #print("Creating BinanceData...")
-            self.binance_data = None #BinanceData(self.order_flow_analyzer)
-            #print("BinanceData created.")
+            print("Creating BinanceData...")
+            self.binance_data = BinanceData(self.order_flow_analyzer)
+            print("BinanceData created.")
 
-            # Explicitly set testnet=True here
-            #print("Creating Binance Client in TradingBot...")
-            #self.client = self.binance_data.client #Client(API_KEY, API_SECRET, testnet=True) # Use the same client
-            #print("Binance Client in TradingBot created.")
-            self.client = None
-
-            self.in_position = False
-            self.entry_price = 0.0
-            self.stop_loss_price = 0.0
-            self.take_profit_price = 0.0
-            self.csv_file = f"trades_{SYMBOL}_{int(time.time())}.csv"  # Unique filename
-            self.csv_writer = None  # Initialize csv_writer
-            print("Calling initialize_csv...")
+            self.symbol = SYMBOL
+            self.order_type = ORDER_TYPE
+            self.limit_price_offset = LIMIT_PRICE_OFFSET
+            self.stop_loss_percentage = STOP_LOSS_PERCENTAGE
+            self.take_profit_percentage = TAKE_PROFIT_PERCENTAGE
+            self.max_position_size_percentage = MAX_POSITION_SIZE_PERCENTAGE
+            self.open_trades = []  # List to store open trades
+            self.client = Client(API_KEY, API_SECRET)
+            self.csv_file_path = 'trade_history.csv'
             self.initialize_csv()
-            print("initialize_csv completed.")
             print("TradingBot.__init__ finished.")
+
+            # Configure logging
+            logging.basicConfig(filename='error_log.txt', level=logging.ERROR,
+                                format='%(asctime)s - %(levelname)s - %(message)s')
+
+            # Initialize big move CSV
+            self.big_move_csv_file = None
+            self.big_move_csv_writer = None
+            self.initialize_big_move_csv()
 
         except Exception as e:
             print(f"Error in TradingBot.__init__: {e}")
             raise  # Re-raise the exception to see the full traceback
 
-    def initialize_csv(self):
-        """Creates the CSV file and writes the header row."""
-        file_exists = os.path.isfile(self.csv_file)
-        with open(self.csv_file, 'a', newline='') as file:
-            self.csv_writer = csv.writer(file)
-            if not file_exists:
-                self.csv_writer.writerow([
-                    "Timestamp", "Signal", "Entry Price", "Quantity",
-                    "Stop Loss", "Take Profit", "Exit Price", "Exit Timestamp", "PNL"
-                ])
-
-    def write_trade_to_csv(self, signal, entry_price, quantity, stop_loss, take_profit, exit_price=None, exit_timestamp=None, pnl=None):
-        """Writes trade data to the CSV file."""
-        timestamp = int(time.time())  # Use consistent timestamp format
-        with open(self.csv_file, 'a', newline='') as file:
-            writer = csv.writer(file)
-            writer.writerow([
-                timestamp, signal, entry_price, quantity, stop_loss,
-                take_profit, exit_price, exit_timestamp, pnl
-            ])
-
     def run(self):
-        try:
-            # Initialize BinanceData here, after OrderFlowAnalyzer
-            print("Creating BinanceData in run()...")
-            self.binance_data = BinanceData(self.order_flow_analyzer)
-            print("BinanceData created in run().")
-            self.client = self.binance_data.client
+        print("Creating BinanceData in run()...")
+        self.binance_data.start()
+        print("BinanceData started in run().")
 
-            self.binance_data.start()
+        try:
             while True:
+                # Check for big move potential
+                self.check_big_move_potential()
+
+                # Check for trading signals
                 signal = self.order_flow_analyzer.check_for_signals()
+
                 if signal:
-                    print(f"Signal detected: {signal}")
+                    print(f"Received signal: {signal}")
                     self.execute_trade(signal)
-                self.check_stop_loss_take_profit()
-                time.sleep(1)  # Check every second. Adjust as needed.
+
+                # Monitor open trades
+                self.monitor_open_trades()
+
+                # Wait for the specified tick interval
+                time.sleep(TICK_INTERVAL)
+
         except Exception as e:
-            print(f"Error in TradingBot.run(): {e}")
-            raise
+            print(f"Error in run: {e}")
+            logging.error(f"Error in run: {e}")
         finally:
-            if self.binance_data:
-                self.binance_data.stop()
+            self.binance_data.stop()
+
+    def initialize_csv(self):
+        timestamp = int(time.time())
+        filename = f"trades_{self.symbol}_{timestamp}.csv"
+        self.csv_file = open(filename, mode='w', newline='')
+        self.csv_writer = csv.writer(self.csv_file)
+        # Write the header to the CSV file
+        header = ['Signal', 'Entry Price', 'Quantity', 'Stop Loss', 'Take Profit', 'Exit Price', 'Exit Timestamp', 'PNL', 'Status']
+        self.csv_writer.writerow(header)
+        self.csv_file.flush()
+
+    def write_trade_to_csv(self, signal, entry_price, quantity, stop_loss, take_profit, exit_price, exit_timestamp, pnl, status):
+        if self.csv_writer:
+            row = [signal, entry_price, quantity, stop_loss, take_profit, exit_price, exit_timestamp, pnl, status]
+            self.csv_writer.writerow(row)
+            self.csv_file.flush()  # Ensure data is written immediately
+
+    def get_available_balance(self):
+        try:
+            # Get account balances
+            balances = self.client.get_account()['balances']
+            # Find the balance for the quote currency (e.g., USDT)
+            for balance in balances:
+                if balance['asset'] == SYMBOL[-3:]:  # Assumes USDT as quote currency
+                    return float(balance['free'])
+            print(f"Quote currency {SYMBOL[-3:]} not found in account.")
+            return 0.0
+        except exceptions.BinanceAPIException as e:
+            print(f"Binance API Exception: {e}")
+            return 0.0
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+            return 0.0
+
+    def calculate_quantity(self, entry_price):
+        try:
+            available_balance = self.get_available_balance()
+            # Calculate the maximum position size based on the available balance
+            max_position_size = available_balance * self.max_position_size_percentage
+            # Calculate the quantity to trade based on the entry price
+            quantity = max_position_size / entry_price
+            # Get the symbol information to determine the quantity precision
+            symbol_info = self.client.get_symbol_info(symbol=self.symbol)
+            if not symbol_info:
+                print(f"Could not retrieve symbol information for {self.symbol}")
+                return None
+            # Extract the filters from the symbol information
+            filters = symbol_info['filters']
+            # Find the LOT_SIZE filter to determine the step size
+            lot_size_filter = next((f for f in filters if f['filterType'] == 'LOT_SIZE'), None)
+            if not lot_size_filter:
+                print("Could not retrieve LOT_SIZE filter.")
+                return None
+            # Determine the step size from the LOT_SIZE filter
+            step_size = float(lot_size_filter['stepSize'])
+            # Round the quantity down to the nearest step size
+            quantity = round(quantity / step_size) * step_size
+            return quantity
+        except exceptions.BinanceAPIException as e:
+            print(f"Binance API Exception: {e}")
+            return None
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+            return None
+
+    def place_order(self, side, quantity, price=None):
+        try:
+            if self.order_type == 'MARKET':
+                order = self.client.order_market(
+                    symbol=self.symbol,
+                    side=side,
+                    quantity=quantity)
+            elif self.order_type == 'LIMIT' and price:
+                order = self.client.order_limit(
+                    symbol=self.symbol,
+                    side=side,
+                    quantity=quantity,
+                    price=price)
+            else:
+                print("Invalid order type or missing price for LIMIT order.")
+                return None
+            return order
+        except exceptions.BinanceAPIException as e:
+            print(f"Binance API Exception: {e}")
+            return None
+        except exceptions.BinanceOrderException as e:
+            print(f"Binance Order Exception: {e}")
+            return None
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+            return None
 
     def execute_trade(self, signal):
-        if self.in_position:
-            print("Already in a position. Skipping trade execution.")
-            return  # Already in a position, don't enter another
-
-        current_price = self.binance_data.get_current_price()
-        if current_price is None:
-            print("Could not retrieve current price.  Skipping trade execution.")
-            return
-
-        # Get account balance and calculate quantity
-        balance = self.get_available_balance()
-        if balance is None:
-            return
-        quantity = self.calculate_quantity(balance, current_price)
-
+        """
+        Executes a trade based on the signal.
+        """
         try:
-            if signal == "buy":
-                if ORDER_TYPE == 'MARKET':
-                    order = self.client.order_market_buy(symbol=SYMBOL, quantity=quantity)
-                elif ORDER_TYPE == 'LIMIT':
-                    bid_price = max(self.order_flow_analyzer.order_book['bids'].keys()) #best bid
-                    limit_price = round(bid_price * (1 + LIMIT_PRICE_OFFSET), 8) #ensure correct decimal places
-                    order = self.client.order_limit_buy(symbol=SYMBOL, quantity=quantity, price=str(limit_price))
-                else:
-                    raise ValueError(f"Invalid ORDER_TYPE: {ORDER_TYPE}")
+            # Get current price
+            current_price = float(self.binance_data.current_price)
 
-                print(f"Buy order placed: {order}")
-                # Extract actual entry price from order fills (for MARKET orders)
-                self.entry_price = float(order['fills'][0]['price']) if order['fills'] else current_price
-                self.set_stop_loss_take_profit(signal)
-                self.in_position = True
-                # Write trade entry to CSV
-                self.write_trade_to_csv(signal, self.entry_price, quantity, self.stop_loss_price, self.take_profit_price)
+            # Calculate quantity based on max position size percentage
+            account_balance = float(self.client.get_account()['balances'][0]['free'])  # USDT balance
+            max_position_size = account_balance * self.max_position_size_percentage
+            quantity = max_position_size / current_price
+
+            # Round quantity to appropriate precision
+            quantity = self.round_quantity(quantity)
+
+            if signal == "buy":
+                # Execute buy order
+                if self.order_type == 'MARKET':
+                    order = self.client.order_market_buy(symbol=self.symbol, quantity=quantity)
+                elif self.order_type == 'LIMIT':
+                    limit_price = current_price * (1 + self.limit_price_offset)  # Example offset
+                    order = self.client.order_limit_buy(symbol=self.symbol, quantity=quantity, price=limit_price)
+                else:
+                    print(f"Invalid order type: {self.order_type}")
+                    return
+
+                order_id = order['orderId']
+
+                # Calculate stop loss and take profit prices
+                stop_loss = current_price * (1 - self.stop_loss_percentage)
+                take_profit = current_price * (1 + self.take_profit_percentage)
+
+                # Store trade information
+                timestamp = int(time.time())
+                self.open_trades.append({
+                    'timestamp': timestamp,
+                    'signal': signal,
+                    'price': current_price,
+                    'quantity': quantity,
+                    'order_id': order_id,
+                    'stop_loss': stop_loss,
+                    'take_profit': take_profit,
+                    'pnl': 0,  # Initial PnL
+                    'is_open': True
+                })
+
+                self.write_trade_to_csv(signal, current_price, quantity, stop_loss, take_profit, 0, timestamp, 0, "OPEN")
+                print(f"Executed {signal} order. Order ID: {order_id}, Price: {current_price}, Quantity: {quantity}")
 
             elif signal == "sell":
-                if ORDER_TYPE == 'MARKET':
-                    order = self.client.order_market_sell(symbol=SYMBOL, quantity=quantity)
-                elif ORDER_TYPE == 'LIMIT':
-                    ask_price = min(self.order_flow_analyzer.order_book['asks'].keys()) #best ask
-                    limit_price = round(ask_price * (1- LIMIT_PRICE_OFFSET), 8) #ensure correct decimal places
-                    order = self.client.order_limit_sell(symbol=SYMBOL, quantity=quantity, price=str(limit_price))
+                # Execute sell order (similar to buy order)
+                if self.order_type == 'MARKET':
+                    order = self.client.order_market_sell(symbol=self.symbol, quantity=quantity)
+                elif self.order_type == 'LIMIT':
+                    limit_price = current_price * (1 - self.limit_price_offset)  # Example offset
+                    order = self.client.order_limit_sell(symbol=self.symbol, quantity=quantity, price=limit_price)
                 else:
-                    raise ValueError(f"Invalid ORDER_TYPE: {ORDER_TYPE}")
+                    print(f"Invalid order type: {self.order_type}")
+                    return
 
-                print(f"Sell order placed: {order}")
-                self.entry_price = float(order['fills'][0]['price']) if order['fills'] else current_price
-                self.set_stop_loss_take_profit(signal)
-                self.in_position = True
-                # Write trade entry to CSV
-                self.write_trade_to_csv(signal, self.entry_price, quantity, self.stop_loss_price, self.take_profit_price)
+                order_id = order['orderId']
+
+                # Calculate stop loss and take profit prices
+                stop_loss = current_price * (1 + self.stop_loss_percentage)
+                take_profit = current_price * (1 - self.take_profit_percentage)
+
+                # Store trade information
+                timestamp = int(time.time())
+                self.open_trades.append({
+                    'timestamp': timestamp,
+                    'signal': signal,
+                    'price': current_price,
+                    'quantity': quantity,
+                    'order_id': order_id,
+                    'stop_loss': stop_loss,
+                    'take_profit': take_profit,
+                    'pnl': 0,  # Initial PnL
+                    'is_open': True
+                })
+
+                self.write_trade_to_csv(signal, current_price, quantity, stop_loss, take_profit, 0, timestamp, 0, "OPEN")
+                print(f"Executed {signal} order. Order ID: {order_id}, Price: {current_price}, Quantity: {quantity}")
+
+            else:
+                print("No signal to execute.")
+
+        except exceptions.BinanceAPIException as e:
+            print(f"Binance API exception: {e}")
+            logging.error(f"Binance API exception: {e}")
+        except Exception as e:
+            print(f"Error executing trade: {e}")
+            logging.error(f"Trade Execution Error: {e}")
+
+    def check_stop_loss_take_profit(self):
+        if not self.in_position:
+            return
+
+        try:
+            current_price = self.binance_data.get_current_price()
+            if not current_price:
+                print("Could not retrieve current price.")
+                return
+
+            current_price = float(current_price)
+
+            if self.signal == "buy":
+                # Trailing Stop Loss Logic
+                new_stop_loss = current_price * (1 - self.stop_loss_percentage)
+                if new_stop_loss > self.stop_loss_price:
+                    print(f"Moving stop loss from {self.stop_loss_price} to {new_stop_loss}")
+                    self.stop_loss_price = new_stop_loss
+                    # Update CSV with new stop loss price
+                    self.update_csv_stop_loss(self.stop_loss_price)
+
+                if current_price <= self.stop_loss_price:
+                    self.exit_position("stop_loss", current_price)
+                elif current_price >= self.take_profit_price:
+                    self.exit_position("take_profit", current_price)
+            elif self.signal == "sell":
+                # Trailing Stop Loss Logic
+                new_stop_loss = current_price * (1 + self.stop_loss_percentage)
+                if new_stop_loss < self.stop_loss_price:
+                    print(f"Moving stop loss from {self.stop_loss_price} to {new_stop_loss}")
+                    self.stop_loss_price = new_stop_loss
+                    # Update CSV with new stop loss price
+                    self.update_csv_stop_loss(self.stop_loss_price)
+
+                if current_price >= self.stop_loss_price:
+                    self.exit_position("stop_loss", current_price)
+                elif current_price <= self.take_profit_price:
+                    self.exit_position("take_profit", current_price)
 
         except exceptions.BinanceAPIException as e:
             print(f"Binance API Exception: {e}")
@@ -155,106 +316,42 @@ class TradingBot:
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
 
-    def get_available_balance(self):
-        """Gets the available balance of the quote currency (e.g., USDT)."""
-        try:
-            account_info = self.client.get_account()
-            for balance in account_info['balances']:
-                if balance['asset'] == SYMBOL[-4:]:  # Assumes quote currency is last 4 chars (USDT, BUSD, etc.)
-                    return float(balance['free'])
-            print(f"Could not find balance for {SYMBOL[-4:]} in account.")
-            return None # Quote currency not found
-        except exceptions.BinanceAPIException as e:
-            print(f"Binance API Exception while getting balance: {e}")
-            return None
-
-    def calculate_quantity(self, balance, price):
-        """Calculates the quantity to trade based on risk parameters."""
-        position_size = balance * MAX_POSITION_SIZE_PERCENTAGE
-        quantity = position_size / price
-        # Adjust quantity based on Binance's minimum order size and step size (lot size)
-        info = self.client.get_symbol_info(SYMBOL)
-        step_size = None
-        for f in info['filters']:
-            if f['filterType'] == 'LOT_SIZE':
-                step_size = float(f['stepSize'])
-                break
-        if step_size is None:
-            print("Could not determine step size for quantity.")
-            return 0
-        quantity = round(quantity / step_size) * step_size
-        return quantity
-
-    def set_stop_loss_take_profit(self, signal):
-        """Sets stop-loss and take-profit prices based on entry price and percentages."""
-        if signal == "buy":
-            self.stop_loss_price = self.entry_price * (1 - STOP_LOSS_PERCENTAGE)
-            self.take_profit_price = self.entry_price * (1 + TAKE_PROFIT_PERCENTAGE)
-        elif signal == "sell":
-            self.stop_loss_price = self.entry_price * (1 + STOP_LOSS_PERCENTAGE)
-            self.take_profit_price = self.entry_price * (1 - TAKE_PROFIT_PERCENTAGE)
-
-        print(f"Stop Loss: {self.stop_loss_price}, Take Profit: {self.take_profit_price}")
-
-    def check_stop_loss_take_profit(self):
-        """Checks if stop loss or take profit has been hit and exits the position."""
+    def exit_position(self, reason, exit_price):
         if not self.in_position:
-            return
-
-        current_price = self.binance_data.get_current_price()
-        if current_price is None:
-            print("Could not retrieve current price for stop loss/take profit check.")
-            return
-
-        if self.signal == "buy":  # Long position
-            if current_price <= self.stop_loss_price or current_price >= self.take_profit_price:
-                self.exit_position(current_price, "stop_loss" if current_price <= self.stop_loss_price else "take_profit")
-        elif self.signal == "sell":  # Short position (Not implemented in your code)
-            if current_price >= self.stop_loss_price or current_price <= self.take_profit_price:
-                self.exit_position(current_price, "stop_loss" if current_price >= self.stop_loss_price else "take_profit")
-
-    def exit_position(self, exit_price, reason):
-        """Exits the current position."""
-        if not self.in_position:
+            print("Not in a position. Skipping exit.")
             return
 
         try:
-            quantity = self.get_current_position_size()
-            if quantity is None:
+            quantity = self.calculate_quantity(exit_price)  # Use exit_price to calculate quantity
+            if not quantity:
+                print("Could not calculate quantity for exit.")
                 return
 
             if self.signal == "buy":
-                if ORDER_TYPE == 'MARKET':
-                    order = self.client.order_market_sell(symbol=SYMBOL, quantity=quantity)
-                elif ORDER_TYPE == 'LIMIT':
-                    ask_price = min(self.order_flow_analyzer.order_book['asks'].keys()) #best ask
-                    limit_price = round(ask_price * (1 - LIMIT_PRICE_OFFSET), 8) #ensure correct decimal places
-                    order = self.client.order_limit_sell(symbol=SYMBOL, quantity=quantity, price=str(limit_price))
-                else:
-                    raise ValueError(f"Invalid ORDER_TYPE: {ORDER_TYPE}")
-                print(f"Sell order placed to exit position: {order}")
-            elif self.signal == "sell": #not implemented
-                if ORDER_TYPE == 'MARKET':
-                    order = self.client.order_market_buy(symbol=SYMBOL, quantity=quantity)
-                elif ORDER_TYPE == 'LIMIT':
-                    bid_price = max(self.order_flow_analyzer.order_book['bids'].keys()) #best bid
-                    limit_price = round(bid_price * (1 + LIMIT_PRICE_OFFSET), 8) #ensure correct decimal places
-                    order = self.client.order_limit_buy(symbol=SYMBOL, quantity=quantity, price=str(limit_price))
-                else:
-                    raise ValueError(f"Invalid ORDER_TYPE: {ORDER_TYPE}")
-                print(f"Buy order placed to exit position: {order}")
+                side = "SELL"
+            elif self.signal == "sell":
+                side = "BUY"
+            else:
+                print("Invalid signal.")
+                return
 
-            self.in_position = False
-            exit_timestamp = int(time.time())
-            pnl = (exit_price - self.entry_price) * quantity if self.signal == "buy" else (self.entry_price - exit_price) * quantity
-            print(f"Position exited. Reason: {reason}, Exit Price: {exit_price}, PNL: {pnl}")
+            order = self.place_order(side, quantity)
 
-            # Write trade exit to CSV
-            self.write_trade_to_csv(self.signal, self.entry_price, quantity, self.stop_loss_price, self.take_profit_price, exit_price, exit_timestamp, pnl)
+            if order:
+                self.in_position = False
+                exit_timestamp = int(time.time())
+                pnl = (exit_price - self.entry_price) * quantity if self.signal == "buy" else (self.entry_price - exit_price) * quantity
+                print(f"Position exited. Reason: {reason}, Exit Price: {exit_price}, PNL: {pnl}")
 
-            self.entry_price = 0.0
-            self.stop_loss_price = 0.0
-            self.take_profit_price = 0.0
+                # Write trade exit to CSV
+                self.write_trade_to_csv(self.signal, self.entry_price, quantity, self.stop_loss_price, self.take_profit_price, exit_price, exit_timestamp, pnl, "CLOSED")
+
+                self.entry_price = 0.0
+                self.stop_loss_price = 0.0
+                self.take_profit_price = 0.0
+
+            else:
+                print("Order placement failed.")
 
         except exceptions.BinanceAPIException as e:
             print(f"Binance API Exception while exiting position: {e}")
@@ -262,6 +359,183 @@ class TradingBot:
             print(f"Binance Order Exception while exiting position: {e}")
         except Exception as e:
             print(f"An unexpected error occurred while exiting position: {e}")
+
+    def update_csv_stop_loss(self, new_stop_loss):
+        # Read all rows from the CSV file
+        with open(self.csv_file.name, mode='r', newline='') as infile:
+            reader = csv.reader(infile)
+            rows = list(reader)
+
+        # Find the last row with status "OPEN"
+        for i in range(len(rows) - 1, 0, -1):
+            if rows[i][8] == "OPEN":
+                # Update the stop loss price in that row
+                rows[i][3] = new_stop_loss
+                break
+
+        # Write the updated rows back to the CSV file
+        with open(self.csv_file.name, mode='w', newline='') as outfile:
+            writer = csv.writer(outfile)
+            writer.writerows(rows)
+        self.csv_file.flush()
+
+    def initialize_big_move_csv(self):
+        timestamp = int(time.time())
+        filename = f"big_move_potential_{self.symbol}_{timestamp}.csv"
+        self.big_move_csv_file = open(filename, mode='w', newline='')
+        self.big_move_csv_writer = csv.writer(self.big_move_csv_file)
+
+        # Write the header to the CSV file
+        header = ['Timestamp', 'Order Flow Delta Z-Score', 'Bid Depth', 'Ask Depth', 'Slope', 'Best Bid', 'Best Ask']
+        self.big_move_csv_writer.writerow(header)
+        self.big_move_csv_file.flush()
+
+    def write_big_move_to_csv(self, timestamp, z_score, bid_depth, ask_depth, slope, best_bid, best_ask):
+        if self.big_move_csv_writer:
+            row = [timestamp, z_score, bid_depth, ask_depth, slope, best_bid, best_ask]
+            self.big_move_csv_writer.writerow(row)
+            self.big_move_csv_file.flush()
+
+    def check_big_move_potential(self):
+        """
+        Checks for strong signs of a potential big price movement and saves the details to a separate CSV file.
+        """
+        try:
+            # Define your criteria for a "big move" here
+            z_score = self.order_flow_analyzer.order_flow_delta_z_score
+            bid_depth = self.order_flow_analyzer.bid_depth
+            ask_depth = self.order_flow_analyzer.ask_depth
+            slope = self.order_flow_analyzer.order_book_slope
+            best_bid = self.binance_data.current_bid
+            best_ask = self.binance_data.current_ask
+
+            # Example criteria:
+            if (abs(z_score) > (ORDER_FLOW_DELTA_Z_SCORE_THRESHOLD * 1.5) and  # Increased Z-score threshold
+                abs(slope) > 0.05):  # Increased order book slope
+                print("Potential big move detected! Saving details to big_move_potential.csv")
+                timestamp = int(time.time())
+                self.write_big_move_to_csv(timestamp, z_score, bid_depth, ask_depth, slope, best_bid, best_ask)
+
+        except Exception as e:
+            print(f"Error checking big move potential: {e}")
+            logging.error(f"Error checking big move potential: {e}")
+
+    def write_trade_to_csv(self, timestamp, signal, price, quantity, order_id, stop_loss, take_profit):
+        """
+        Writes trade details to a CSV file.
+        """
+        try:
+            file_exists = os.path.isfile(self.csv_file_path)
+
+            with open(self.csv_file_path, mode='a', newline='') as csvfile:
+                fieldnames = ['timestamp', 'signal', 'price', 'quantity', 'order_id', 'stop_loss', 'take_profit', 'pnl']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+                if not file_exists:
+                    writer.writeheader()
+
+                writer.writerow({
+                    'timestamp': timestamp,
+                    'signal': signal,
+                    'price': price,
+                    'quantity': quantity,
+                    'order_id': order_id,
+                    'stop_loss': stop_loss,
+                    'take_profit': take_profit,
+                    'pnl': 0  # Initial PnL is 0
+                })
+            print(f"Trade details written to {self.csv_file_path}")
+
+        except Exception as e:
+            print(f"Error writing trade details to CSV: {e}")
+            logging.error(f"CSV Write Error: {e}")
+
+    def monitor_open_trades(self):
+        """
+        Monitors open trades and closes them based on stop-loss and take-profit levels.
+        """
+        try:
+            current_price = self.binance_data.get_current_price()
+
+            if current_price is None:
+                print("Current price is None. Skipping trade monitoring.")
+                return
+
+            current_price = float(current_price)
+
+            for trade in self.open_trades:
+                if trade['is_open']:
+                    if trade['signal'] == 'buy':
+                        if current_price <= trade['stop_loss'] or current_price >= trade['take_profit']:
+                            # Close buy order
+                            close_signal = 'sell'
+                            pnl = (current_price - trade['price']) * trade['quantity']
+                            self.close_trade(trade, current_price, pnl)
+                    elif trade['signal'] == 'sell':
+                        if current_price >= trade['stop_loss'] or current_price <= trade['take_profit']:
+                            # Close sell order
+                            close_signal = 'buy'
+                            pnl = (trade['price'] - current_price) * trade['quantity']
+                            self.close_trade(trade, current_price, pnl)
+        except Exception as e:
+            print(f"Error monitoring open trades: {e}")
+            logging.error(f"Monitoring Error: {e}")
+
+    def close_trade(self, trade, close_price, pnl):
+        """
+        Closes an open trade.
+        """
+        try:
+            if trade['signal'] == 'buy':
+                order = self.client.order_market_sell(symbol=self.symbol, quantity=trade['quantity'])
+            elif trade['signal'] == 'sell':
+                order = self.client.order_market_buy(symbol=self.symbol, quantity=trade['quantity'])
+            else:
+                print(f"Invalid signal {trade['signal']} in trade data.")
+                return
+
+            order_id = order['orderId']
+            trade['is_open'] = False
+            trade['pnl'] = pnl
+
+            self.update_csv_with_pnl(trade['timestamp'], pnl)
+            print(f"Closed trade with order ID: {order_id}, PnL: {pnl}")
+
+        except exceptions.BinanceAPIException as e:
+            print(f"Binance API exception: {e}")
+            logging.error(f"Binance API exception: {e}")
+        except Exception as e:
+            print(f"Error closing trade: {e}")
+            logging.error(f"Trade Closing Error: {e}")
+
+    def update_csv_with_pnl(self, timestamp, pnl):
+        """
+        Updates the PnL for a specific trade in the CSV file.
+        """
+        try:
+            # Read all rows from the CSV file
+            with open(self.csv_file_path, mode='r', newline='') as csvfile:
+                reader = csv.DictReader(csvfile)
+                rows = list(reader)
+
+            # Find the row with the matching timestamp and update the PnL
+            for row in rows:
+                if row['timestamp'] == str(timestamp):
+                    row['pnl'] = str(pnl)
+                    break
+
+            # Write the updated rows back to the CSV file
+            with open(self.csv_file_path, mode='w', newline='') as csvfile:
+                fieldnames = ['timestamp', 'signal', 'price', 'quantity', 'order_id', 'stop_loss', 'take_profit', 'pnl']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(rows)
+
+            print(f"PnL updated in {self.csv_file_path} for timestamp: {timestamp}")
+
+        except Exception as e:
+            print(f"Error updating PnL in CSV: {e}")
+            logging.error(f"CSV Update Error: {e}")
 
 # Instantiate the TradingBot and run it
 bot = TradingBot()
