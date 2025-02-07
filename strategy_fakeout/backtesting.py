@@ -31,7 +31,7 @@ def get_funding_fee(client, symbol, entry_time, exit_time):
     start_ms = int(entry_time.timestamp() * 1000)
     end_ms = int(exit_time.timestamp() * 1000)
     try:
-        funding_data = client.futures_funding_rate(symbol=symbol, startTime=start_ms, endTime=end_ms, limit=1000)
+        funding_data = client.futures_funding_rate(symbol=symbol, startTime=start_ms, endBin=end_ms, limit=1000)
         position_value = (CAPITAL * RISK_PER_TRADE) * LEVERAGE
         total_fee = sum(float(event['fundingRate']) * position_value for event in funding_data)
         return total_fee / CAPITAL  # Return as percentage of capital
@@ -70,6 +70,10 @@ def calculate_exit_profit_short(entry_price, exit_price, include_funding=True, e
     
     adjusted_entry = entry_price * (1 - FUTURES_MAKER_FEE - SLIPPAGE_RATE)
     adjusted_exit = exit_price * (1 + FUTURES_TAKER_FEE + actual_slippage)
+    
+    # For short trades:
+    # - A profit is made when exit_price < entry_price
+    # - A loss is made when exit_price > entry_price
     price_profit = (adjusted_entry - adjusted_exit) / adjusted_entry
     
     # Add funding fees if requested
@@ -158,13 +162,13 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
     signals = []
     while i < len(df):
         # Ensure we have enough candles for the lookback window plus monitoring period
-        required_candles = swing_lookback + 7  # lookback + breakout + confirmation + 5 monitoring
-        if i < required_candles or i + 5 >= len(df):  # Need 5 more candles after current position
+        required_candles = swing_lookback + 20  # lookback + breakout + confirmation + 5 monitoring
+        if i < required_candles or i + 7 >= len(df):  # Need 5 more candles after current position
             i += 1
             continue
             
         # Build sliding window for signal generation
-        window = df.iloc[i - required_candles + 1 : i + 6]  # Include 5 forward-looking candles
+        window = df.iloc[i - required_candles + 1 : i + 7]  # Include 5 forward-looking candles
         
         # Debug logging for window sizes
         logger.debug(f"Processing {symbol} at {df.index[i]}")
@@ -220,19 +224,20 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
                 if signal['side'] == 'long':
                     # Calculate current profit in R multiples
                     current_profit = (candle['high'] - entry_price)
-                    profit_r = current_profit / (entry_price - stop_loss)
+                    profit_r = current_profit / abs(entry_price - stop_loss)  # Use absolute distance for R calculation
                     max_profit_reached = max(max_profit_reached, profit_r)
                     
                     # Check stop loss
                     if candle['low'] <= stop_loss:
                         exit_price = stop_loss
                         exit_time = df.index[j]
-                        outcome = 'LOSS'
-                        signal['profit'] = calculate_exit_profit_long(
+                        profit = calculate_exit_profit_long(
                             entry_price, exit_price, True,
                             entry_time, exit_time,
                             client, symbol
                         )
+                        signal['profit'] = profit
+                        outcome = 'LOSS'  # Stop loss hit is always a loss
                         logger.debug(f"Long trade stopped out at {exit_price:.4f} (Entry: {entry_price:.4f}, Max profit reached: {max_profit_reached:.1f}R)")
                         break
                         
@@ -240,31 +245,33 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
                     if candle['high'] >= take_profit:
                         exit_price = take_profit
                         exit_time = df.index[j]
-                        outcome = 'WIN'
-                        signal['profit'] = calculate_exit_profit_long(
+                        profit = calculate_exit_profit_long(
                             entry_price, exit_price, True,
                             entry_time, exit_time,
                             client, symbol
                         )
+                        signal['profit'] = profit
+                        outcome = 'WIN'  # Take profit hit is always a win
                         logger.debug(f"Long trade hit TP at {exit_price:.4f} (Entry: {entry_price:.4f})")
                         break
                         
                 else:  # short trade
                     # Calculate current profit in R multiples
                     current_profit = (entry_price - candle['low'])
-                    profit_r = current_profit / (stop_loss - entry_price)
+                    profit_r = current_profit / abs(stop_loss - entry_price)  # Use absolute distance for R calculation
                     max_profit_reached = max(max_profit_reached, profit_r)
                     
-                    # Check stop loss
+                    # Check stop loss for short trades
                     if candle['high'] >= stop_loss:
                         exit_price = stop_loss
                         exit_time = df.index[j]
-                        outcome = 'LOSS'
-                        signal['profit'] = calculate_exit_profit_short(
+                        profit = calculate_exit_profit_short(
                             entry_price, exit_price, True,
                             entry_time, exit_time,
                             client, symbol
                         )
+                        signal['profit'] = profit
+                        outcome = 'LOSS'  # Stop loss hit is always a loss
                         logger.debug(f"Short trade stopped out at {exit_price:.4f} (Entry: {entry_price:.4f}, Max profit reached: {max_profit_reached:.1f}R)")
                         break
                         
@@ -272,12 +279,13 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
                     if candle['low'] <= take_profit:
                         exit_price = take_profit
                         exit_time = df.index[j]
-                        outcome = 'WIN'
-                        signal['profit'] = calculate_exit_profit_short(
+                        profit = calculate_exit_profit_short(
                             entry_price, exit_price, True,
                             entry_time, exit_time,
                             client, symbol
                         )
+                        signal['profit'] = profit
+                        outcome = 'WIN'  # Take profit hit is always a win
                         logger.debug(f"Short trade hit TP at {exit_price:.4f} (Entry: {entry_price:.4f})")
                         break
             
@@ -286,19 +294,23 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
                 exit_price = df.iloc[j]['close']
                 exit_time = df.index[j]
                 if signal['side'] == 'long':
-                    signal['profit'] = calculate_exit_profit_long(
+                    profit = calculate_exit_profit_long(
                         entry_price, exit_price, True,
                         entry_time, exit_time,
                         client, symbol
                     )
-                else:
-                    signal['profit'] = calculate_exit_profit_short(
+                    signal['profit'] = profit
+                else:  # short trade
+                    profit = calculate_exit_profit_short(
                         entry_price, exit_price, True,
                         entry_time, exit_time,
                         client, symbol
                     )
-                outcome = 'WIN' if signal['profit'] > 0 else 'LOSS'
+                    signal['profit'] = profit
                 logger.debug(f"Trade closed at end of period: {exit_price:.4f} (Entry: {entry_price:.4f})")
+            
+            # Set outcome based on actual profit
+            outcome = 'WIN' if signal['profit'] > 0 else 'LOSS'
             
             # Set final trade details
             signal['outcome'] = outcome
@@ -441,8 +453,7 @@ def analyze_aggregated_results(all_signals, initial_capital=1000, days=30):
         if 'entry' in df.columns:
             df.rename(columns={'entry': 'entry_price'}, inplace=True)
         
-        # Determine outcome and risk-reward ratio
-        df['outcome'] = np.where(abs(df['profit']) < 1e-8, 'BREAK EVEN', np.where(df['profit'] > 0, 'WIN', 'LOSS'))
+        # Calculate risk-reward ratio
         df['risk_reward'] = df.apply(lambda row: ((row['TP']-row['entry_price'])/(row['entry_price']-row['SL']) if (row['entry_price']-row['SL']) != 0 else float('inf')) if row['entry_price'] > row['SL'] else ((row['entry_price']-row['TP'])/(row['SL']-row['entry_price']) if (row['SL']-row['entry_price']) != 0 else float('inf')), axis=1)
         
         total_trades = len(df)

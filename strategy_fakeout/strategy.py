@@ -22,7 +22,7 @@ def generate_signal(data, lookback=40):
     swing_low = swing_window["low"].min()
 
     # Get the 5 bars before breakout for stop loss calculation
-    pre_breakout_window = data.iloc[lookback-5:lookback]
+    pre_breakout_window = data.iloc[lookback-1:lookback]
     pre_breakout_low = pre_breakout_window['low'].min()
     pre_breakout_high = pre_breakout_window['high'].max()
 
@@ -31,11 +31,11 @@ def generate_signal(data, lookback=40):
     logger.debug(f"Breakout candle - High: {breakout_candle.high}, Low: {breakout_candle.low}, Close: {breakout_candle.close}")
     logger.debug(f"Confirmation candle - High: {confirmation_candle.high}, Low: {confirmation_candle.low}, Close: {confirmation_candle.close}")
 
-    # Check for failed short setup turning into long
+    # Failed long setup becomes a long trade
     if breakout_candle.high > swing_high:
-        logger.debug("Found potential short setup (breakout above swing high)")
+        logger.debug("Found potential long setup (breakout above swing high)")
         if confirmation_candle.close < swing_high:
-            logger.debug("Confirmed failed short (close below swing high)")
+            logger.debug("Confirmed failed breakout (close below swing high)")
             setup_high = max(breakout_candle.high, confirmation_candle.high)
             
             for i, candle in enumerate(monitoring_candles.itertuples()):
@@ -51,7 +51,7 @@ def generate_signal(data, lookback=40):
                     take_profit = entry_price + (4 * risk)  # 4:1 reward:risk ratio
                     
                     debug_info = {
-                        "setup_type": "failed_short_to_long",
+                        "setup_type": "failed_breakout_to_long",
                         "lookback": lookback,
                         "swing_high": swing_high,
                         "swing_low": swing_low,
@@ -80,11 +80,12 @@ def generate_signal(data, lookback=40):
                         "debug_info": debug_info
                     }
 
-    # Check for failed long setup turning into short
+
+    # Failed short setup becomes a short trade
     if breakout_candle.low < swing_low:
-        logger.debug("Found potential long setup (breakout below swing low)")
+        logger.debug("Found potential short setup (breakout below swing low)")
         if confirmation_candle.close > swing_low:
-            logger.debug("Confirmed failed long (close above swing low)")
+            logger.debug("Confirmed failed breakout (close above swing low)")
             setup_low = min(breakout_candle.low, confirmation_candle.low)
             
             for i, candle in enumerate(monitoring_candles.itertuples()):
@@ -100,7 +101,7 @@ def generate_signal(data, lookback=40):
                     take_profit = entry_price - (4 * risk)  # 4:1 reward:risk ratio
                     
                     debug_info = {
-                        "setup_type": "failed_long_to_short",
+                        "setup_type": "failed_breakout_to_short",
                         "lookback": lookback,
                         "swing_high": swing_high,
                         "swing_low": swing_low,
