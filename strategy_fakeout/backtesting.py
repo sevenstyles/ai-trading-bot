@@ -48,7 +48,7 @@ def calculate_exit_profit_short(entry_price, exit_price):
     adjusted_exit = exit_price * (1 + FUTURES_TAKER_FEE + SLIPPAGE_RATE)
     return (adjusted_entry - adjusted_exit) / adjusted_entry
 
-def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, use_random_date=False, swing_lookback=40):
+def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, use_random_date=False, swing_lookback=20):
     # Determine backtesting date range using the current date
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
@@ -97,16 +97,31 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
     i = 0
     signals = []
     while i < len(df):
-        # Ensure we have enough candles for the lookback window
-        if i < swing_lookback + 1:
+        # Ensure we have enough candles for the lookback window plus monitoring period
+        required_candles = swing_lookback + 7  # lookback + breakout + confirmation + 5 monitoring
+        if i < required_candles or i + 5 >= len(df):  # Need 5 more candles after current position
             i += 1
             continue
-        # Build sliding window for signal generation (requires swing_lookback + 2 candles)
-        window = df.iloc[i - swing_lookback - 1 : i+1]
+            
+        # Build sliding window for signal generation
+        window = df.iloc[i - required_candles + 1 : i + 6]  # Include 5 forward-looking candles
+        
+        # Debug logging for window sizes
+        logger.debug(f"Processing {symbol} at {df.index[i]}")
+        logger.debug(f"Window size: {len(window)} candles")
+        logger.debug(f"Window start: {window.index[0]}, end: {window.index[-1]}")
+        
         signal = generate_signal(window, lookback=swing_lookback)
+        
+        if signal:
+            logger.debug(f"Signal found: {signal['side']} at {df.index[i]}")
+            logger.debug(f"Setup type: {signal['debug_info']['setup_type']}")
+            logger.debug(f"Entry: {signal['entry']}, SL: {signal['stop_loss']}, TP: {signal['take_profit']}")
+        
         if not signal:
             i += 1
             continue
+            
         entry_price = signal["entry"]
         entry_time = df.index[i]
         stop_loss = signal["stop_loss"]
@@ -121,27 +136,40 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
                     exit_price = stop_loss
                     outcome = 'BREAK EVEN' if abs(stop_loss - entry_price) < 1e-8 else 'LOSS'
                     exit_idx = j
-                    signal['profit'] = (exit_price - entry_price) / entry_price
+                    # Calculate profit with slippage and fees
+                    signal['profit'] = calculate_exit_profit_long(entry_price, exit_price)
+                    logger.debug(f"Long trade stopped out at {exit_price} (Entry: {entry_price}, SL: {stop_loss})")
                     break
                 if candle['high'] >= take_profit:
                     exit_price = take_profit
                     outcome = 'WIN'
                     exit_idx = j
-                    signal['profit'] = (exit_price - entry_price) / entry_price
+                    # Calculate profit with slippage and fees
+                    signal['profit'] = calculate_exit_profit_long(entry_price, exit_price)
+                    actual_rr = abs(signal['profit']) / abs((stop_loss - entry_price) / entry_price)
+                    logger.debug(f"Long trade hit TP at {exit_price} (Entry: {entry_price}, TP: {take_profit})")
+                    logger.debug(f"Actual RR achieved: {actual_rr:.2f}")
                     break
             else:  # short trade logic
                 if candle['high'] >= stop_loss:
                     exit_price = stop_loss
                     outcome = 'BREAK EVEN' if abs(stop_loss - entry_price) < 1e-8 else 'LOSS'
                     exit_idx = j
-                    signal['profit'] = (entry_price - exit_price) / entry_price
+                    # Calculate profit with slippage and fees
+                    signal['profit'] = calculate_exit_profit_short(entry_price, exit_price)
+                    logger.debug(f"Short trade stopped out at {exit_price} (Entry: {entry_price}, SL: {stop_loss})")
                     break
                 if candle['low'] <= take_profit:
                     exit_price = take_profit
                     outcome = 'WIN'
                     exit_idx = j
-                    signal['profit'] = (entry_price - exit_price) / entry_price
+                    # Calculate profit with slippage and fees
+                    signal['profit'] = calculate_exit_profit_short(entry_price, exit_price)
+                    actual_rr = abs(signal['profit']) / abs((stop_loss - entry_price) / entry_price)
+                    logger.debug(f"Short trade hit TP at {exit_price} (Entry: {entry_price}, TP: {take_profit})")
+                    logger.debug(f"Actual RR achieved: {actual_rr:.2f}")
                     break
+        
         # If no exit condition met in inner loop, use final candle
         if exit_idx is None:
             exit_idx = len(df) - 1
@@ -149,17 +177,25 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
             exit_time = df.index[exit_idx]
             if signal.get('side', 'long') == 'long':
                 outcome = 'BREAK EVEN' if abs(exit_price - entry_price) < 1e-8 else ('WIN' if exit_price > entry_price else 'LOSS')
-                signal['profit'] = (exit_price - entry_price) / entry_price
+                signal['profit'] = calculate_exit_profit_long(entry_price, exit_price)
             else:
                 outcome = 'BREAK EVEN' if abs(exit_price - entry_price) < 1e-8 else ('WIN' if exit_price < entry_price else 'LOSS')
-                signal['profit'] = (entry_price - exit_price) / entry_price
+                signal['profit'] = calculate_exit_profit_short(entry_price, exit_price)
             signal['take_profit'] = take_profit
+            logger.debug(f"Trade closed at end of period: {exit_price} (Entry: {entry_price})")
+
         # Set the exit details
         exit_time = df.index[exit_idx]
         signal['outcome'] = outcome
         signal['entry_time'] = entry_time
         signal['exit_time'] = exit_time
         signal['exit_price'] = exit_price
+        
+        # Calculate trade duration
+        duration = exit_time - entry_time
+        signal['duration'] = duration.total_seconds() / 3600  # Convert to hours
+        logger.debug(f"Trade duration: {signal['duration']:.1f} hours")
+        
         signals.append(signal)
         # Advance the outer loop counter to just after the exit candle
         i = exit_idx + 1
