@@ -39,7 +39,10 @@ class TradingBot:
             self.max_position_size_percentage = MAX_POSITION_SIZE_PERCENTAGE
             self.open_trades = []  # List to store open trades
             self.client = Client(API_KEY, API_SECRET)
-            self.csv_file_path = 'trade_history.csv'
+            self.csv_directory = 'trade_history'  # Directory to store CSV files
+            self.csv_file_path = os.path.join(self.csv_directory, f"trades_{self.symbol}_{int(time.time())}.csv")
+            self.big_move_directory = 'big_move_history'  # Directory for big move CSV
+            self.big_move_csv_file_path = os.path.join(self.big_move_directory, f"big_move_potential_{self.symbol}_{int(time.time())}.csv")
             self.initialize_csv()
             print("TradingBot.__init__ finished.")
 
@@ -85,10 +88,17 @@ class TradingBot:
         finally:
             self.binance_data.stop()
 
+    def ensure_directory_exists(self, directory):
+        """Ensures that the specified directory exists."""
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
     def initialize_csv(self):
+        self.ensure_directory_exists(self.csv_directory)  # Ensure directory exists
         timestamp = int(time.time())
         filename = f"trades_{self.symbol}_{timestamp}.csv"
-        self.csv_file = open(filename, mode='w', newline='')
+        self.csv_file_path = os.path.join(self.csv_directory, filename)  # Set the full file path
+        self.csv_file = open(self.csv_file_path, mode='w', newline='')
         self.csv_writer = csv.writer(self.csv_file)
         # Write the header to the CSV file
         header = ['Signal', 'Entry Price', 'Quantity', 'Stop Loss', 'Take Profit', 'Exit Price', 'Exit Timestamp', 'PNL', 'Status']
@@ -380,9 +390,11 @@ class TradingBot:
         self.csv_file.flush()
 
     def initialize_big_move_csv(self):
+        self.ensure_directory_exists(self.big_move_directory)  # Ensure directory exists
         timestamp = int(time.time())
         filename = f"big_move_potential_{self.symbol}_{timestamp}.csv"
-        self.big_move_csv_file = open(filename, mode='w', newline='')
+        self.big_move_csv_file_path = os.path.join(self.big_move_directory, filename)  # Set the full file path
+        self.big_move_csv_file = open(self.big_move_csv_file_path, mode='w', newline='')
         self.big_move_csv_writer = csv.writer(self.big_move_csv_file)
 
         # Write the header to the CSV file

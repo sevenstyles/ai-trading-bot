@@ -176,7 +176,6 @@ class OrderFlowAnalyzer:
 
         self.trade_volumes.append(volume)
         self.volume_history.append(volume)
-        print(f"Trade Volume: {volume}, Recent Trades Length: {len(self.recent_trades)}")
         self.recent_trades.append(volume) # was volume # CORRECT THIS LINE
         self.prices.append(trade["price"])  # Append the trade price
 
