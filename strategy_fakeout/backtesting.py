@@ -124,50 +124,90 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, us
             
         entry_price = signal["entry"]
         entry_time = df.index[i]
-        stop_loss = signal["stop_loss"]
+        initial_stop_loss = signal["stop_loss"]
         take_profit = signal["take_profit"]
+        current_stop_loss = initial_stop_loss
+        risk = abs(entry_price - initial_stop_loss)  # Initial risk amount
         outcome = None
+        max_profit_reached = 0  # Track maximum profit reached
+        
         # Process subsequent candles for this trade starting from i+1
         exit_idx = None
         for j in range(i+1, len(df)):
             candle = df.iloc[j]
+            
             if signal.get('side', 'long') == 'long':
-                if candle['low'] <= stop_loss:
-                    exit_price = stop_loss
-                    outcome = 'BREAK EVEN' if abs(stop_loss - entry_price) < 1e-8 else 'LOSS'
+                # Calculate current profit in R multiples
+                current_profit = (candle['high'] - entry_price)
+                profit_r = current_profit / risk
+                max_profit_reached = max(max_profit_reached, profit_r)
+                
+                # Trailing stop logic for longs
+                if profit_r >= 1:  # Once we're in more than 1R profit
+                    # Calculate new stop loss based on profit achieved
+                    if profit_r >= 3:
+                        new_stop = entry_price + (2 * risk)  # Lock in 2R if we're up 3R
+                    elif profit_r >= 2:
+                        new_stop = entry_price + risk  # Lock in 1R if we're up 2R
+                    elif profit_r >= 1:
+                        new_stop = entry_price + (0.5 * risk)  # Lock in 0.5R if we're up 1R
+                    
+                    # Only move stop loss up, never down
+                    if new_stop > current_stop_loss:
+                        current_stop_loss = new_stop
+                        logger.debug(f"Trailing stop moved up to {current_stop_loss:.2f} ({profit_r:.1f}R profit)")
+                
+                # Check stop loss and take profit
+                if candle['low'] <= current_stop_loss:
+                    exit_price = current_stop_loss
+                    outcome = 'WIN' if exit_price > entry_price else 'LOSS'
                     exit_idx = j
-                    # Calculate profit with slippage and fees
                     signal['profit'] = calculate_exit_profit_long(entry_price, exit_price)
-                    logger.debug(f"Long trade stopped out at {exit_price} (Entry: {entry_price}, SL: {stop_loss})")
+                    logger.debug(f"Long trade stopped out at {exit_price} (Entry: {entry_price}, Max profit reached: {max_profit_reached:.1f}R)")
                     break
                 if candle['high'] >= take_profit:
                     exit_price = take_profit
                     outcome = 'WIN'
                     exit_idx = j
-                    # Calculate profit with slippage and fees
                     signal['profit'] = calculate_exit_profit_long(entry_price, exit_price)
-                    actual_rr = abs(signal['profit']) / abs((stop_loss - entry_price) / entry_price)
-                    logger.debug(f"Long trade hit TP at {exit_price} (Entry: {entry_price}, TP: {take_profit})")
-                    logger.debug(f"Actual RR achieved: {actual_rr:.2f}")
+                    logger.debug(f"Long trade hit TP at {exit_price} (Entry: {entry_price})")
                     break
+                    
             else:  # short trade logic
-                if candle['high'] >= stop_loss:
-                    exit_price = stop_loss
-                    outcome = 'BREAK EVEN' if abs(stop_loss - entry_price) < 1e-8 else 'LOSS'
+                # Calculate current profit in R multiples
+                current_profit = (entry_price - candle['low'])
+                profit_r = current_profit / risk
+                max_profit_reached = max(max_profit_reached, profit_r)
+                
+                # Trailing stop logic for shorts
+                if profit_r >= 1:  # Once we're in more than 1R profit
+                    # Calculate new stop loss based on profit achieved
+                    if profit_r >= 3:
+                        new_stop = entry_price - (2 * risk)  # Lock in 2R if we're up 3R
+                    elif profit_r >= 2:
+                        new_stop = entry_price - risk  # Lock in 1R if we're up 2R
+                    elif profit_r >= 1:
+                        new_stop = entry_price - (0.5 * risk)  # Lock in 0.5R if we're up 1R
+                    
+                    # Only move stop loss down, never up
+                    if new_stop < current_stop_loss:
+                        current_stop_loss = new_stop
+                        logger.debug(f"Trailing stop moved down to {current_stop_loss:.2f} ({profit_r:.1f}R profit)")
+                
+                # Check stop loss and take profit
+                if candle['high'] >= current_stop_loss:
+                    exit_price = current_stop_loss
+                    outcome = 'WIN' if exit_price < entry_price else 'LOSS'
                     exit_idx = j
-                    # Calculate profit with slippage and fees
                     signal['profit'] = calculate_exit_profit_short(entry_price, exit_price)
-                    logger.debug(f"Short trade stopped out at {exit_price} (Entry: {entry_price}, SL: {stop_loss})")
+                    logger.debug(f"Short trade stopped out at {exit_price} (Entry: {entry_price}, Max profit reached: {max_profit_reached:.1f}R)")
                     break
                 if candle['low'] <= take_profit:
                     exit_price = take_profit
                     outcome = 'WIN'
                     exit_idx = j
-                    # Calculate profit with slippage and fees
                     signal['profit'] = calculate_exit_profit_short(entry_price, exit_price)
-                    actual_rr = abs(signal['profit']) / abs((stop_loss - entry_price) / entry_price)
-                    logger.debug(f"Short trade hit TP at {exit_price} (Entry: {entry_price}, TP: {take_profit})")
-                    logger.debug(f"Actual RR achieved: {actual_rr:.2f}")
+                    logger.debug(f"Short trade hit TP at {exit_price} (Entry: {entry_price})")
                     break
         
         # If no exit condition met in inner loop, use final candle
