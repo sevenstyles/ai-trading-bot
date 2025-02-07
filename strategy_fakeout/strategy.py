@@ -4,6 +4,21 @@ import logging
 
 logger = logging.getLogger("backtester")
 
+def calculate_stop_loss(entry_price, raw_stop_level, side="long"):
+    """Calculate stop loss with maximum distance limits."""
+    stop_distance_pct = abs(raw_stop_level - entry_price) / entry_price
+    
+    # Maximum allowed stop distance (2% for now)
+    MAX_STOP_DISTANCE = 0.02
+    
+    if stop_distance_pct > MAX_STOP_DISTANCE:
+        # If stop is too far, limit it to max distance
+        if side == "long":
+            return entry_price * (1 - MAX_STOP_DISTANCE)
+        else:  # short
+            return entry_price * (1 + MAX_STOP_DISTANCE)
+    return raw_stop_level
+
 def generate_signal(data, lookback=40):
     """
     Generate trading signal based on failed breakout reversal strategy.
@@ -57,13 +72,21 @@ def generate_signal(data, lookback=40):
             
             # Check if price closes above the setup high within monitoring period
             for i, candle in enumerate(monitoring_candles.itertuples()):
-                if candle.close > confirmation_candle.high:  # Changed to be less strict
+                if candle.close > confirmation_candle.high:
                     logger.debug(f"Found long entry on candle {i+1} of monitoring period")
-                    # Found our long entry
                     entry_price = candle.close
-                    # Stop loss below the lowest low during monitoring period
+                    
+                    # Calculate initial stop loss
                     monitoring_period = data.iloc[lookback + 1:lookback + 2 + i + 1]
-                    stop_loss = monitoring_period['low'].min() * 0.995
+                    raw_stop = monitoring_period['low'].min() * 0.995
+                    
+                    # Apply maximum stop loss distance limit
+                    stop_loss = calculate_stop_loss(entry_price, raw_stop, "long")
+                    
+                    # Log if stop was adjusted
+                    if stop_loss != raw_stop:
+                        logger.debug(f"Stop loss adjusted from {raw_stop:.4f} to {stop_loss:.4f} (max distance limit)")
+                    
                     risk = entry_price - stop_loss
                     take_profit = entry_price + (4 * risk)
 
@@ -102,13 +125,21 @@ def generate_signal(data, lookback=40):
             
             # Check if price closes below the setup low within monitoring period
             for i, candle in enumerate(monitoring_candles.itertuples()):
-                if candle.close < confirmation_candle.low:  # Changed to be less strict
+                if candle.close < confirmation_candle.low:
                     logger.debug(f"Found short entry on candle {i+1} of monitoring period")
-                    # Found our short entry
                     entry_price = candle.close
-                    # Stop loss above the highest high during monitoring period
+                    
+                    # Calculate initial stop loss
                     monitoring_period = data.iloc[lookback + 1:lookback + 2 + i + 1]
-                    stop_loss = monitoring_period['high'].max() * 1.005
+                    raw_stop = monitoring_period['high'].max() * 1.005
+                    
+                    # Apply maximum stop loss distance limit
+                    stop_loss = calculate_stop_loss(entry_price, raw_stop, "short")
+                    
+                    # Log if stop was adjusted
+                    if stop_loss != raw_stop:
+                        logger.debug(f"Stop loss adjusted from {raw_stop:.4f} to {stop_loss:.4f} (max distance limit)")
+                    
                     risk = stop_loss - entry_price
                     take_profit = entry_price - (4 * risk)
 
