@@ -1,0 +1,70 @@
++-------------------------------------------------+
+|  Bullish Order Block Visualization              |
++-------------------------------------------------+
+
+1. Swing Point Identification:
+
+   - The algorithm identifies swing highs and lows.
+   - A swing low is a point where the market makes a
+     significant low, followed by a move higher.
+
+   Example:
+
+        High          High
+         /\            /\
+        /  \          /  \
+       /    \        /    \
+      /      \      /      \
+     /        \    /        \
+    /          \  /          \
+   Low         Low          Low (Swing Low)
+
+2. Parsed Low:
+
+   - The code uses a concept called "parsed low".
+   - Normally, parsed_low = low of the candle.
+   - In high volatility candles, parsed_low = high of the candle.
+
+3. Order Block Identification (Bullish):
+
+   - Find a Swing Low.
+   - Find the *previous* Swing High.
+   - Between the previous Swing High and the current Swing Low:
+     Find the lowest Parsed Low.  This forms the Order Block.
+
+   Example:
+
+        High (Previous Swing High)
+         /\
+        /  \
+       /    \
+      /      \   <- Search for lowest Parsed Low in this region
+     /        \
+    /          \
+   Low           Low (Swing Low)
+                  |
+                  +-----+
+                  |  OB |  <- Order Block (Lowest Parsed Low)
+                  +-----+
+
+4. Mitigation
+    - A bullish order block is considered 'mitigated' if the price subsequently drops below the order block's low.
+
+   Example:
+
+        High (Previous Swing High)
+         /\
+        /  \
+       /    \
+      /      \   <- Search for lowest Parsed Low in this region
+     /        \
+    /          \
+   Low           Low (Swing Low)
+                  |
+                  +-----+
+                  |  OB |  <- Order Block (Lowest Parsed Low)
+                  +-----+
+                     \
+                      \
+                       \  <- Price moves below OB low = Mitigated
+                        \

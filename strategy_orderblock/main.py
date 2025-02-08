@@ -1,13 +1,13 @@
 import pandas as pd
 import orderblock_detector
 import visualization
-import data_loader  # Import the data_loader module
+import data_loader  
 
 if __name__ == "__main__":
-    symbol = "SOLUSDT"
+    symbol = "ETHUSDT"
     interval = "1h"
-    limit = 500
-    swing_length = 50  # This corresponds to the "size" parameter in the Pine Script
+    limit = 1000
+    swing_length = 50  
     mitigation_type = 'highlow'
     volatility_type = 'atr'
     atr_period = 200
@@ -18,10 +18,13 @@ if __name__ == "__main__":
         print("Failed to load data. Exiting.")
         exit()
 
-    order_blocks = orderblock_detector.identify_order_blocks(df, swing_length=swing_length, volatility_type=volatility_type, order_block_mitigation=mitigation_type)
+    swing_order_blocks, internal_order_blocks = orderblock_detector.identify_order_blocks(df, swing_length=5, internal_length=2, volatility_type=volatility_type, atr_period=atr_period, atr_multiplier=atr_multiplier)
 
-    print(f"Number of order blocks detected: {len(order_blocks)}")
-    print(order_blocks)
+    print(f"Number of swing order blocks detected: {len(swing_order_blocks)}")
+    print(swing_order_blocks)
+    print(f"Number of internal order blocks detected: {len(internal_order_blocks)}")
+    print(internal_order_blocks)
 
-    visualization.visualize_order_blocks(df, order_blocks, filename="btc_order_blocks.png", mitigation_type=mitigation_type)
-    print("Order blocks visualized and saved to btc_order_blocks.png") 
+
+    visualization.visualize_order_blocks(df, swing_order_blocks, internal_order_blocks, filename="btc_order_blocks.png", mitigation_type=mitigation_type)
+    print("Order blocks visualized and saved to btc_order_blocks.png")
