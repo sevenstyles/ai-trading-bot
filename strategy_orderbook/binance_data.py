@@ -145,7 +145,8 @@ class BinanceData:
 
             price = float(msg['p'])
             qty = float(msg['q'])
-            is_buy = msg['m'] == 'BUY'
+            print(f"Trade Data: msg['m'] = {msg['m']}")  # Debugging log
+            is_buy = not msg['m']
 
             self.trade_volume += qty
             self.order_flow_analyzer.process_trade(price, {"price": price, "volume": qty, "is_buy": is_buy})

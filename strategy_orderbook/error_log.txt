@@ -1,0 +1,1 @@
+2025-02-09 17:00:52,692 - ERROR - Could not retrieve depth information or bids/asks are empty.
