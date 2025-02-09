@@ -1,1 +1,0 @@
-2025-02-08 10:06:04,895 - ERROR - Received error message from WebSocket: Queue overflow. Message not filled

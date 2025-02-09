@@ -8,6 +8,7 @@ from config import SYMBOL, ORDER_TYPE, LIMIT_PRICE_OFFSET, STOP_LOSS_PERCENTAGE,
 print("Config imported")
 from binance_data import BinanceData
 print("BinanceData imported")
+import order_flow_analyzer
 from order_flow_analyzer import OrderFlowAnalyzer
 print("OrderFlowAnalyzer imported")
 from binance import Client, exceptions
@@ -24,7 +25,7 @@ class TradingBot:
         print("TradingBot.__init__ starting...")
         try:
             print("Creating OrderFlowAnalyzer...")
-            self.order_flow_analyzer = OrderFlowAnalyzer()
+            self.order_flow_analyzer = OrderFlowAnalyzer(self)  # Pass self to the constructor
             print("OrderFlowAnalyzer created.")
 
             print("Creating BinanceData...")
@@ -55,8 +56,11 @@ class TradingBot:
             self.big_move_csv_writer = None
             self.initialize_big_move_csv()
 
+            self.trading_signal = None  # Shared variable for trading signal
+
         except Exception as e:
             print(f"Error in TradingBot.__init__: {e}")
+            logging.error(f"Error in TradingBot.__init__: {e}")
             raise  # Re-raise the exception to see the full traceback
 
     def run(self):
@@ -70,10 +74,16 @@ class TradingBot:
                 self.check_big_move_potential()
 
                 # Check for trading signals
-                signal = self.order_flow_analyzer.check_for_signals()
+                #print(f"About to call check_for_signals. order_flow_analyzer: {self.order_flow_analyzer}")
+                #signal = self.order_flow_analyzer.check_for_signals()
 
-                if signal:
-                    print(f"Received signal: {signal}")
+                #if signal:
+                #    print(f"Received signal: {signal}")
+                #    self.execute_trade(signal)
+                if self.trading_signal:
+                    signal = self.trading_signal
+                    self.trading_signal = None  # Reset the signal
+                    print(f"Received signal from shared variable: {signal}")
                     self.execute_trade(signal)
 
                 # Monitor open trades
@@ -123,9 +133,11 @@ class TradingBot:
             return 0.0
         except exceptions.BinanceAPIException as e:
             print(f"Binance API Exception: {e}")
+            logging.error(f"Binance API Exception in get_available_balance: {e}")
             return 0.0
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
+            logging.error(f"Unexpected error in get_available_balance: {e}")
             return 0.0
 
     def calculate_quantity(self, entry_price):
@@ -154,9 +166,11 @@ class TradingBot:
             return quantity
         except exceptions.BinanceAPIException as e:
             print(f"Binance API Exception: {e}")
+            logging.error(f"Binance API Exception in calculate_quantity: {e}")
             return None
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
+            logging.error(f"Unexpected error in calculate_quantity: {e}")
             return None
 
     def place_order(self, side, quantity, price=None):
@@ -178,12 +192,15 @@ class TradingBot:
             return order
         except exceptions.BinanceAPIException as e:
             print(f"Binance API Exception: {e}")
+            logging.error(f"Binance API Exception in place_order: {e}")
             return None
         except exceptions.BinanceOrderException as e:
             print(f"Binance Order Exception: {e}")
+            logging.error(f"Binance Order Exception in place_order: {e}")
             return None
         except Exception as e:
             print(f"An unexpected error occurred: {e}")
+            logging.error(f"Unexpected error in place_order: {e}")
             return None
 
     def execute_trade(self, signal):
@@ -548,6 +565,37 @@ class TradingBot:
         except Exception as e:
             print(f"Error updating PnL in CSV: {e}")
             logging.error(f"CSV Update Error: {e}")
+
+    def round_quantity(self, quantity):
+        """
+        Rounds the quantity to the correct precision based on Binance's LOT_SIZE filter.
+        """
+        try:
+            symbol_info = self.client.get_symbol_info(symbol=self.symbol)
+            if not symbol_info:
+                print(f"Could not retrieve symbol information for {self.symbol}")
+                return None
+
+            filters = symbol_info['filters']
+            lot_size_filter = next((f for f in filters if f['filterType'] == 'LOT_SIZE'), None)
+
+            if not lot_size_filter:
+                print("Could not retrieve LOT_SIZE filter.")
+                return None
+
+            step_size = float(lot_size_filter['stepSize'])
+            # Round down to the nearest step size
+            rounded_quantity = round(quantity / step_size) * step_size
+            return rounded_quantity
+
+        except exceptions.BinanceAPIException as e:
+            print(f"Binance API Exception: {e}")
+            logging.error(f"Binance API Exception in round_quantity: {e}")
+            return None
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+            logging.error(f"Unexpected error in round_quantity: {e}")
+            return None
 
 # Instantiate the TradingBot and run it
 bot = TradingBot()

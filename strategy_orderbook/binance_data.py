@@ -101,6 +101,10 @@ class BinanceData:
             log_message = f"Invalid depth data format: Could not convert to float: {msg}. Error: {e}"
             logging.error(log_message)
             self.failed_attempts += 1
+        except exceptions.BinanceAPIException as e:  # Catch Binance API exceptions
+            log_message = f"Binance API Exception in handle_depth_data: {e}"
+            logging.error(log_message)
+            self.failed_attempts += 1
         except Exception as e:
             log_message = f"Error processing depth event: {e}"
             logging.error(log_message)
@@ -141,9 +145,10 @@ class BinanceData:
 
             price = float(msg['p'])
             qty = float(msg['q'])
+            is_buy = msg['m'] == 'BUY'
 
             self.trade_volume += qty
-            self.order_flow_analyzer.process_trade(price, {"price": price, "volume": qty})
+            self.order_flow_analyzer.process_trade(price, {"price": price, "volume": qty, "is_buy": is_buy})
             self.failed_attempts = 0  # Reset failed attempts counter
 
         except ValueError as e:
@@ -189,6 +194,19 @@ class BinanceData:
 
                         self.last_update_time = time.time()
                         self.failed_attempts = 0  # Reset failed attempts counter
+
+                        # Calculate liquidity
+                        raw_liquidity = self.current_bid + self.current_ask
+                        print(f"Current liquidity: {raw_liquidity}")
+
+                        # --- MOVE CHECK_FOR_SIGNALS HERE ---
+                        print(f"About to call check_for_signals from binance_data.py. order_flow_analyzer: {self.order_flow_analyzer}")
+                        signal = self.order_flow_analyzer.check_for_signals(raw_liquidity)
+                        if signal:
+                            print(f"Received signal: {signal}")
+                            self.order_flow_analyzer.trading_bot.trading_signal = signal  # Set the shared variable
+                        # ------------------------------------
+
             except Exception as e:
                 log_message = f"Error updating data periodically: {e}"
                 logging.error(log_message)
@@ -285,6 +303,8 @@ class BinanceData:
                 logging.error(log_message)
                 self.failed_attempts += 1
                 return
+            else:
+                print(f"Bids in depth cache: {len(self.depth_cache['bids'])}, Asks in depth cache: {len(self.depth_cache['asks'])}")
 
             # Process the order book data
             self.order_flow_analyzer.process_order_book(self.depth_cache)
