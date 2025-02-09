@@ -1,7 +1,0 @@
-timestamp,status,direction,entry,sl,tp,rr_ratio,confidence,analysis
-2025-01-30 15:00:00  ,NO TRADE,NO TRADE,,,,,D,"1. **Liquidity Sweep Details**: Sweep of 415.4 (Jan 20) followed by weak close, but volume profile inconsistent.  
-2. **FVG Coordinates**: Potential FVG 415.4430.0 (Jan 20-21), but aged >48 hours.  
-3. **Structural Break Analysis**: No clear BOS/CHoCH on HTF; recovery lacks volume confirmation.  
-4. **Target Zone Specifics**: Nearest opposing liquidity at 460.0 (1:1.2 RR), fails 1:3 minimum.  
-5. **Volume Analysis**: Declining volume on recovery, no breakout confirmation.  
-6. **SMT Details**: R"

@@ -9,6 +9,5 @@ def calculate_z_score(data_point, data_series):
 
     std_dev = np.std(data_series)
     if std_dev == 0:
-        return 0  # Return 0 if standard deviation is zero
-    else:
-        return (data_point - np.mean(data_series)) / std_dev 
+        std_dev = 0.00001  # Add a small constant to prevent division by zero
+    return (data_point - np.mean(data_series)) / std_dev

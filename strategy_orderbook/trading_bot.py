@@ -17,8 +17,6 @@ import logging
 
 print("Trading Bot script starting...")
 print(f"Executing trading_bot.py from: {os.path.abspath(__file__)}")
-print(f"API_KEY from config: {API_KEY}")  # Print API_KEY
-print(f"API_SECRET from config: {API_SECRET}")  # Print API_SECRET
 
 class TradingBot:
     def __init__(self):
@@ -449,35 +447,11 @@ class TradingBot:
             print(f"Error checking big move potential: {e}")
             logging.error(f"Error checking big move potential: {e}")
 
-    def write_trade_to_csv(self, timestamp, signal, price, quantity, order_id, stop_loss, take_profit):
-        """
-        Writes trade details to a CSV file.
-        """
-        try:
-            file_exists = os.path.isfile(self.csv_file_path)
 
             with open(self.csv_file_path, mode='a', newline='') as csvfile:
                 fieldnames = ['timestamp', 'signal', 'price', 'quantity', 'order_id', 'stop_loss', 'take_profit', 'pnl']
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
-                if not file_exists:
-                    writer.writeheader()
-
-                writer.writerow({
-                    'timestamp': timestamp,
-                    'signal': signal,
-                    'price': price,
-                    'quantity': quantity,
-                    'order_id': order_id,
-                    'stop_loss': stop_loss,
-                    'take_profit': take_profit,
-                    'pnl': 0  # Initial PnL is 0
-                })
-            print(f"Trade details written to {self.csv_file_path}")
-
-        except Exception as e:
-            print(f"Error writing trade details to CSV: {e}")
-            logging.error(f"CSV Write Error: {e}")
 
     def monitor_open_trades(self):
         """

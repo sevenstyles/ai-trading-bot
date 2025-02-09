@@ -199,6 +199,11 @@ class OrderFlowAnalyzer:
         # --- Calculate Order Flow Delta and Z-score ---
         order_flow_delta = sum(self.buy_volume_history) - sum(self.sell_volume_history)
         self.order_flow_delta_history.append(order_flow_delta)
+
+        if len(self.order_flow_delta_history) < 2:
+            print("Not enough order flow delta history to calculate Z-score.")
+            return None
+
         order_flow_delta_z_score = self.calculate_z_score(order_flow_delta, list(self.order_flow_delta_history))
         print(f"Order Flow Delta Z-Score: {order_flow_delta_z_score}, Order Flow Delta: {order_flow_delta}")
     
