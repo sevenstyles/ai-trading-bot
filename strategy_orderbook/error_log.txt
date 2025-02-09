@@ -1,0 +1,2 @@
+2025-02-10 09:09:24,072 - ERROR - Could not retrieve depth information or bids/asks are empty.
+2025-02-10 09:09:30,288 - ERROR - Received error message from WebSocket: Queue overflow. Message not filled
