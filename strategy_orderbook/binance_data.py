@@ -145,7 +145,6 @@ class BinanceData:
 
             price = float(msg['p'])
             qty = float(msg['q'])
-            print(f"Trade Data: msg['m'] = {msg['m']}")  # Debugging log
             is_buy = not msg['m']
 
             self.trade_volume += qty

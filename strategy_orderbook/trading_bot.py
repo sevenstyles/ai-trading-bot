@@ -247,10 +247,9 @@ class TradingBot:
                     'pnl': 0,  # Initial PnL
                     'is_open': True
                 })
-
-                self.write_trade_to_csv(signal, current_price, quantity, stop_loss, take_profit, 0, timestamp, 0, "OPEN")
+    
                 print(f"Executed {signal} order. Order ID: {order_id}, Price: {current_price}, Quantity: {quantity}")
-
+    
             elif signal == "sell":
                 # Execute sell order (similar to buy order)
                 if self.order_type == 'MARKET':
@@ -261,13 +260,13 @@ class TradingBot:
                 else:
                     print(f"Invalid order type: {self.order_type}")
                     return
-
+    
                 order_id = order['orderId']
-
+    
                 # Calculate stop loss and take profit prices
                 stop_loss = current_price * (1 + self.stop_loss_percentage)
                 take_profit = current_price * (1 - self.take_profit_percentage)
-
+    
                 # Store trade information
                 timestamp = int(time.time())
                 self.open_trades.append({
@@ -281,19 +280,26 @@ class TradingBot:
                     'pnl': 0,  # Initial PnL
                     'is_open': True
                 })
-
-                self.write_trade_to_csv(signal, current_price, quantity, stop_loss, take_profit, 0, timestamp, 0, "OPEN")
+    
                 print(f"Executed {signal} order. Order ID: {order_id}, Price: {current_price}, Quantity: {quantity}")
-
+    
             else:
                 print("No signal to execute.")
-
+    
         except exceptions.BinanceAPIException as e:
             print(f"Binance API exception: {e}")
             logging.error(f"Binance API exception: {e}")
+            order_id = None
         except Exception as e:
             print(f"Error executing trade: {e}")
             logging.error(f"Trade Execution Error: {e}")
+            order_id = None
+        finally:
+            # Write trade to CSV regardless of success
+            timestamp = int(time.time())
+            self.write_trade_to_csv(signal, current_price, quantity, stop_loss, take_profit, 0, timestamp, 0, "OPEN" if order_id else "FAILED")
+            order_id = None
+            order_id = None
 
     def check_stop_loss_take_profit(self):
         if not self.in_position:
