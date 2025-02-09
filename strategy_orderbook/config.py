@@ -3,8 +3,8 @@
 import os
 
 # Binance API Keys
-API_KEY = "65dbbd66d67732a4c601a0031eeb152b37ce9532de11edc857accf41e6087659"
-API_SECRET = "f851e4347572938d9f945c67c8904cece84175d6210d8400b04e3cd44d67e666"
+API_KEY = ""
+API_SECRET = ""
 
 # Trading Symbol (e.g., BTCUSDT, ETHUSDT)
 SYMBOL = "BTCUSDT"
@@ -25,7 +25,7 @@ MINIMUM_LIQUIDITY_THRESHOLD = 1000  # Minimum volume to consider for trading
 TICK_INTERVAL = 1 #seconds
 
 # Moving Average Window (for volume and order flow)
-MOVING_AVERAGE_WINDOW = 5
+MOVING_AVERAGE_WINDOW = 20
 
 # Time interval for data snapshots (in seconds) - Adjust based on Binance API limits
 TICK_INTERVAL = 1 # Check binance documentation, this might need to be higher.

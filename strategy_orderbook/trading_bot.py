@@ -205,6 +205,7 @@ class TradingBot:
         """
         Executes a trade based on the signal.
         """
+        quantity = None
         try:
             # Get current price
             current_price = float(self.binance_data.current_price)
@@ -219,16 +220,19 @@ class TradingBot:
 
             if signal == "buy":
                 # Execute buy order
-                if self.order_type == 'MARKET':
-                    order = self.client.order_market_buy(symbol=self.symbol, quantity=quantity)
-                elif self.order_type == 'LIMIT':
-                    limit_price = current_price * (1 + self.limit_price_offset)  # Example offset
-                    order = self.client.order_limit_buy(symbol=self.symbol, quantity=quantity, price=limit_price)
-                else:
-                    print(f"Invalid order type: {self.order_type}")
-                    return
-
-                order_id = order['orderId']
+                print(f"Simulating buy order. Price: {current_price}, Quantity: {quantity}")
+                # Remove Binance API calls
+                #if self.order_type == 'MARKET':
+                #    order = self.client.order_market_buy(symbol=self.symbol, quantity=quantity)
+                #elif self.order_type == 'LIMIT':
+                #    limit_price = current_price * (1 + self.limit_price_offset)  # Example offset
+                #    order = self.client.order_limit_buy(symbol=self.symbol, quantity=quantity, price=limit_price)
+                #else:
+                #    print(f"Invalid order type: {self.order_type}")
+                #    return
+    
+                #order_id = order['orderId']
+                order_id = "SIMULATED_BUY"
 
                 # Calculate stop loss and take profit prices
                 stop_loss = current_price * (1 - self.stop_loss_percentage)
@@ -252,16 +256,19 @@ class TradingBot:
     
             elif signal == "sell":
                 # Execute sell order (similar to buy order)
-                if self.order_type == 'MARKET':
-                    order = self.client.order_market_sell(symbol=self.symbol, quantity=quantity)
-                elif self.order_type == 'LIMIT':
-                    limit_price = current_price * (1 - self.limit_price_offset)  # Example offset
-                    order = self.client.order_limit_sell(symbol=self.symbol, quantity=quantity, price=limit_price)
-                else:
-                    print(f"Invalid order type: {self.order_type}")
-                    return
+                print(f"Simulating sell order. Price: {current_price}, Quantity: {quantity}")
+                # Remove Binance API calls
+                #if self.order_type == 'MARKET':
+                #    order = self.client.order_market_sell(symbol=self.symbol, quantity=quantity)
+                #elif self.order_type == 'LIMIT':
+                #    limit_price = current_price * (1 - self.limit_price_offset)  # Example offset
+                #    order = self.client.order_limit_sell(symbol=self.symbol, quantity=quantity, price=limit_price)
+                #else:
+                #    print(f"Invalid order type: {self.order_type}")
+                #    return
     
-                order_id = order['orderId']
+                #order_id = order['orderId']
+                order_id = "SIMULATED_SELL"
     
                 # Calculate stop loss and take profit prices
                 stop_loss = current_price * (1 + self.stop_loss_percentage)
@@ -297,7 +304,7 @@ class TradingBot:
         finally:
             # Write trade to CSV regardless of success
             timestamp = int(time.time())
-            self.write_trade_to_csv(signal, current_price, quantity, stop_loss, take_profit, 0, timestamp, 0, "OPEN" if order_id else "FAILED")
+            self.write_trade_to_csv(signal, current_price, quantity if quantity else 0, stop_loss, take_profit, 0, timestamp, 0, "FAILED")
             order_id = None
             order_id = None
 

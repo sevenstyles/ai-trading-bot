@@ -129,6 +129,7 @@ class OrderFlowAnalyzer:
             self.order_book_imbalance = self.bid_depth - self.ask_depth
             # Normalize the imbalance
             self.order_book_imbalance_normalized = self.order_book_imbalance / (self.bid_depth + self.ask_depth) if (self.bid_depth + self.ask_depth) >0 else 0
+            print(f"Order Book: bid_depth={self.bid_depth}, ask_depth={self.ask_depth}, imbalance={self.order_book_imbalance}, normalized={self.order_book_imbalance_normalized}")
     
     
             # Calculate order book slope (difference in depth between bid and ask)
