@@ -170,11 +170,11 @@ class OrderFlowAnalyzer:
     
         # Update buy/sell volume history
         if is_buy:
-            self.buy_volume_history.append(volume)
-            self.sell_volume_history.append(0) # Add 0 to sell to keep lengths consistent
+            self.buy_volume_history.appendleft(volume)
+            self.sell_volume_history.appendleft(0) # Add 0 to sell to keep lengths consistent
         else:
-            self.sell_volume_history.append(volume)
-            self.buy_volume_history.append(0) # Add 0 to buy
+            self.sell_volume_history.appendleft(volume)
+            self.buy_volume_history.appendleft(0) # Add 0 to buy
     
         self.recent_trades.append(volume)  # Keep for potential future use
         self.prices.append(trade["price"])  # Append the trade price
