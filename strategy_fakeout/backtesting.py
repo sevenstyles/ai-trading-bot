@@ -110,7 +110,7 @@ def calculate_position_size(entry_price, stop_loss, side="long"):
     
     return quantity, leveraged_position
 
-def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=7, client=None, use_random_date=False, swing_lookback=20):
+def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, use_random_date=False, swing_lookback=20):
     # Determine backtesting date range using the current date
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)

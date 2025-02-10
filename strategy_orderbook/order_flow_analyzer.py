@@ -14,7 +14,6 @@ from config import (
     ATR_PERIOD,
     CONFIRMATION_THRESHOLD
 )
-from utils import calculate_z_score
 from indicators import ATR  # Import the ATR class
 
 print("order_flow_analyzer.py script starting...")
@@ -49,8 +48,8 @@ class OrderFlowAnalyzer:
             self.prices = deque(maxlen=MOVING_AVERAGE_WINDOW)  # Store recent prices for ATR
             self.signal_sum = 0  # Sum of recent signals for moving average
             print("OrderFlowAnalyzer.__init__ finished.")
-            self.buy_volume_history = deque(maxlen=MOVING_AVERAGE_WINDOW)  # Track buy volume
-            self.sell_volume_history = deque(maxlen=MOVING_AVERAGE_WINDOW) # Track sell volume
+            self.buy_volume_ma = None  # Moving average of buy volumes
+            self.sell_volume_ma = None # Moving average of sell volumes
             self.signal_strength_history = deque(maxlen=MOVING_AVERAGE_WINDOW) # For confirmation
         except Exception as e:
             print(f"Error in OrderFlowAnalyzer.__init__: {e}")
@@ -169,13 +168,22 @@ class OrderFlowAnalyzer:
             print(f"Trade volume is None, skipping update.")
             return
     
-        # Update buy/sell volume history
+        # Update buy/sell volume moving averages
         if is_buy:
-            self.buy_volume_history.appendleft(volume)
-            self.sell_volume_history.appendleft(0) # Add 0 to sell to keep lengths consistent
+            if self.buy_volume_ma is None:
+                self.buy_volume_ma = volume
+            else:
+                self.buy_volume_ma += (volume - self.buy_volume_ma) / MOVING_AVERAGE_WINDOW
+            self.sell_volume_ma = self.sell_volume_ma if self.sell_volume_ma is not None else 0
+            self.sell_volume_ma += (0 - self.sell_volume_ma) / MOVING_AVERAGE_WINDOW # Keep sell MA updated with 0s
         else:
-            self.sell_volume_history.appendleft(volume)
-            self.buy_volume_history.appendleft(0) # Add 0 to buy
+            if self.sell_volume_ma is None:
+                self.sell_volume_ma = volume
+            else:
+                self.sell_volume_ma += (volume - self.sell_volume_ma) / MOVING_AVERAGE_WINDOW
+            self.buy_volume_ma = self.buy_volume_ma if self.buy_volume_ma is not None else 0
+            self.buy_volume_ma += (0 - self.buy_volume_ma) / MOVING_AVERAGE_WINDOW  # Keep buy MA updated with 0s
+
     
         self.recent_trades.append(volume)  # Keep for potential future use
         self.prices.append(trade["price"])  # Append the trade price
@@ -193,12 +201,12 @@ class OrderFlowAnalyzer:
             print("Liquidity below minimum threshold. Skipping signal generation.")
             return None
     
-        if len(self.buy_volume_history) < MOVING_AVERAGE_WINDOW:
+        if self.buy_volume_ma is None or self.sell_volume_ma is None:
             print("Not enough volume data to generate signals.")
             return None
-    
+
         # --- Calculate Order Flow Delta and Z-score ---
-        order_flow_delta = sum(self.buy_volume_history) - sum(self.sell_volume_history)
+        order_flow_delta = self.buy_volume_ma - self.sell_volume_ma
         self.order_flow_delta_history.append(order_flow_delta)
 
         if len(self.order_flow_delta_history) < 2:
@@ -207,22 +215,22 @@ class OrderFlowAnalyzer:
 
         order_flow_delta_z_score = self.calculate_z_score(order_flow_delta, list(self.order_flow_delta_history))
         print(f"Order Flow Delta Z-Score: {order_flow_delta_z_score}, Order Flow Delta: {order_flow_delta}")
-    
+
         # --- Unified Signal Logic ---
         z_score_weight = 1.0  # Configurable weight
         imbalance_weight = 1.0 # Configurable weight
-    
+
         signal_strength = (
             order_flow_delta_z_score * z_score_weight +
             self.order_book_imbalance_normalized * imbalance_weight
         )
         self.signal_strength_history.append(signal_strength)
-    
+
         # --- Improved Confirmation (Moving Average of Signal Strength) ---
         signal_strength_ma = self.calculate_moving_average(self.signal_strength_history)
-    
+
         print(f"Signal Strength: {signal_strength}, Moving Average: {signal_strength_ma}")
-    
+
         if signal_strength_ma > ORDER_FLOW_DELTA_Z_SCORE_THRESHOLD:
             signal = "buy"
             print("Buy signal generated!")
@@ -231,9 +239,9 @@ class OrderFlowAnalyzer:
             print("Sell signal generated!")
         else:
             signal = None
-    
-        return signal
 
+        return signal
+    
     def calculate_z_score(self, data_point, data_series):
         """Calculates the Z-score of a single data point against a series."""
         if len(data_series) < 2:  # Need at least 2 data points for standard deviation
@@ -242,5 +250,7 @@ class OrderFlowAnalyzer:
         std_dev = np.std(data_series)
         if std_dev == 0:
             return 0  # Return 0 if standard deviation is zero
+        elif std_dev < 1e-10:
+            return 0
         else:
             return (data_point - np.mean(data_series)) / std_dev

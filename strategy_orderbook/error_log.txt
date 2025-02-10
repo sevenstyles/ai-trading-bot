@@ -1,2 +1,41 @@
-2025-02-10 09:09:24,072 - ERROR - Could not retrieve depth information or bids/asks are empty.
-2025-02-10 09:09:30,288 - ERROR - Received error message from WebSocket: Queue overflow. Message not filled
+2025-02-10 11:45:39,815 - ERROR - Received error message from WebSocket: Queue overflow. Message not filled
+2025-02-10 11:53:11,472 - ERROR - Trade Execution Error: API Secret required for private endpoints
+2025-02-10 11:53:11,473 - ERROR - Error in run: cannot access local variable 'stop_loss' where it is not associated with a value
+2025-02-10 11:53:11,603 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-4' coro=<ThreadedApiManager.start_listener() done, defined at C:\Python312\Lib\site-packages\binance\threaded_stream.py:44> exception=AttributeError("'ClientConnection' object has no attribute 'fail_connection'")>
+Traceback (most recent call last):
+  File "C:\Python312\Lib\site-packages\binance\threaded_stream.py", line 45, in start_listener
+    async with socket as s:
+  File "C:\Python312\Lib\site-packages\binance\streams.py", line 75, in __aexit__
+    self.ws.fail_connection()
+    ^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ClientConnection' object has no attribute 'fail_connection'
+2025-02-10 11:53:12,092 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-3' coro=<ThreadedApiManager.start_listener() done, defined at C:\Python312\Lib\site-packages\binance\threaded_stream.py:44> exception=AttributeError("'ClientConnection' object has no attribute 'fail_connection'")>
+Traceback (most recent call last):
+  File "C:\Python312\Lib\site-packages\binance\threaded_stream.py", line 45, in start_listener
+    async with socket as s:
+  File "C:\Python312\Lib\site-packages\binance\streams.py", line 75, in __aexit__
+    self.ws.fail_connection()
+    ^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ClientConnection' object has no attribute 'fail_connection'
+2025-02-10 13:26:23,144 - ERROR - Trade Execution Error: API Secret required for private endpoints
+2025-02-10 13:26:23,144 - ERROR - Error in run: cannot access local variable 'stop_loss' where it is not associated with a value
+2025-02-10 13:26:23,155 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-4' coro=<ThreadedApiManager.start_listener() done, defined at C:\Python312\Lib\site-packages\binance\threaded_stream.py:44> exception=AttributeError("'ClientConnection' object has no attribute 'fail_connection'")>
+Traceback (most recent call last):
+  File "C:\Python312\Lib\site-packages\binance\threaded_stream.py", line 45, in start_listener
+    async with socket as s:
+  File "C:\Python312\Lib\site-packages\binance\streams.py", line 75, in __aexit__
+    self.ws.fail_connection()
+    ^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ClientConnection' object has no attribute 'fail_connection'
+2025-02-10 13:26:24,094 - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-3' coro=<ThreadedApiManager.start_listener() done, defined at C:\Python312\Lib\site-packages\binance\threaded_stream.py:44> exception=AttributeError("'ClientConnection' object has no attribute 'fail_connection'")>
+Traceback (most recent call last):
+  File "C:\Python312\Lib\site-packages\binance\threaded_stream.py", line 45, in start_listener
+    async with socket as s:
+  File "C:\Python312\Lib\site-packages\binance\streams.py", line 75, in __aexit__
+    self.ws.fail_connection()
+    ^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'ClientConnection' object has no attribute 'fail_connection'

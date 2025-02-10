@@ -17,7 +17,7 @@ def main():
         return
 
     # Backtest period set to 7 days
-    days = 28
+    days = 3
     all_trades = []
     
     for symbol in symbols:
