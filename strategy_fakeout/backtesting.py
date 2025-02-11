@@ -59,7 +59,9 @@ def calculate_exit_profit_long(entry_price, exit_price, include_funding=True, en
     
     adjusted_entry = entry_price * (1 + FUTURES_MAKER_FEE + SLIPPAGE_RATE)
     adjusted_exit = exit_price * (1 - FUTURES_TAKER_FEE - actual_slippage)
-    price_profit = (adjusted_exit - adjusted_entry) / adjusted_entry
+    
+    # Calculate profit as a percentage of the entry price
+    price_profit = (adjusted_exit - adjusted_entry) / entry_price
     
     # Add funding fees if requested
     if include_funding and entry_time and exit_time and client and symbol:
@@ -80,10 +82,8 @@ def calculate_exit_profit_short(entry_price, exit_price, include_funding=True, e
     adjusted_entry = entry_price * (1 - FUTURES_MAKER_FEE - SLIPPAGE_RATE)
     adjusted_exit = exit_price * (1 + FUTURES_TAKER_FEE + actual_slippage)
     
-    # For short trades:
-    # - A profit is made when exit_price < entry_price
-    # - A loss is made when exit_price > entry_price
-    price_profit = (adjusted_entry - adjusted_exit) / adjusted_entry
+    # Calculate profit as a percentage of the entry price
+    price_profit = (adjusted_entry - adjusted_exit) / entry_price
     
     # Add funding fees if requested
     if include_funding and entry_time and exit_time and client and symbol:
@@ -96,10 +96,9 @@ def calculate_position_size(entry_price, stop_loss, side="long"):
     """Calculate the position size based on capital, risk per trade, and leverage with limits."""
     risk_amount = CAPITAL * RISK_PER_TRADE  # How much money we're willing to risk
     stop_distance = abs(entry_price - stop_loss)
-    stop_distance_pct = stop_distance / entry_price
     
     # Calculate the position size that risks the desired amount
-    position_value = risk_amount / stop_distance_pct if stop_distance_pct != 0 else 0
+    position_value = (risk_amount / stop_distance) * entry_price if stop_distance != 0 else 0
 
     # Apply leverage
     leveraged_position = position_value * LEVERAGE
@@ -148,38 +147,17 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, us
     df.set_index('timestamp', inplace=True)
     df.sort_index(inplace=True)
     
-    # Fetch higher timeframe (4h) data
-    klines_4h = client.get_historical_klines(
-        symbol, "4h",
-        start_date.strftime("%d %b %Y"),
-        end_date.strftime("%d %b %Y")
-    )
-    if not klines_4h:
-        logger.error(f"No 4h klines fetched for {symbol}")
-        return [], df
-        
-    df_htf = pd.DataFrame(klines_4h, columns=[
-        'timestamp', 'open', 'high', 'low', 'close', 'volume',
-        'close_time', 'quote_asset_volume', 'trades',
-        'taker_buy_base', 'taker_buy_quote', 'ignore'
-    ])
-    df_htf[numeric_cols] = df_htf[numeric_cols].apply(pd.to_numeric, errors='coerce')
-    df_htf = df_htf.dropna(subset=numeric_cols)
-    df_htf['timestamp'] = pd.to_datetime(df_htf['timestamp'], unit='ms')
-    df_htf.set_index('timestamp', inplace=True)
-    df_htf.sort_index(inplace=True)
-    
     i = 0
     signals = []
     while i < len(df):
         # Ensure we have enough candles for the lookback window plus monitoring period
-        required_candles = swing_lookback + 20  # lookback + breakout + confirmation + 5 monitoring
-        if i < required_candles or i + 7 >= len(df):  # Need 5 more candles after current position
+        required_candles = swing_lookback + 2  # lookback + breakout + confirmation
+        if i < required_candles or i + 5 >= len(df):  # Need 5 more candles after current position
             i += 1
             continue
             
         # Build sliding window for signal generation
-        window = df.iloc[i - required_candles + 1 : i + 7]  # Include 5 forward-looking candles
+        window = df.iloc[i - required_candles : i + 2]  # Include breakout and confirmation candles
         
         signal = generate_signal(window, lookback=swing_lookback, risk_per_trade=risk_per_trade)
         

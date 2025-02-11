@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import logging
+from config import RISK_REWARD_RATIO
 
 logger = logging.getLogger("backtester")
 
@@ -28,9 +29,9 @@ def generate_signal(data, lookback=40, risk_per_trade=None):
     if (lookback - swing_low_loc) >= 5 and breakout_candle.close < swing_low:
         if confirmation_candle.close > swing_low:
             entry_price = confirmation_candle.close
-            stop_loss = confirmation_candle.low
-            risk = stop_loss - entry_price
-            take_profit = entry_price - (3 * risk)  # 3:1 reward:risk ratio
+            stop_loss = min(breakout_candle.low, confirmation_candle.low)
+            risk = abs(entry_price - stop_loss)
+            take_profit = entry_price + (RISK_REWARD_RATIO * risk)
 
             debug_info = {
                 "setup_type": "failed_breakout_to_long",
@@ -40,7 +41,7 @@ def generate_signal(data, lookback=40, risk_per_trade=None):
                 "breakout_candle": breakout_candle.to_dict(),
                 "confirmation_candle": confirmation_candle.to_dict(),
                 "risk_distance": risk,
-                "reward_distance": 3 * risk
+                "reward_distance": RISK_REWARD_RATIO * risk
             }
             return {
                 "side": "long",
@@ -56,9 +57,9 @@ def generate_signal(data, lookback=40, risk_per_trade=None):
     if (lookback - swing_high_loc) >= 5 and breakout_candle.close > swing_high:
         if confirmation_candle.close < swing_high:
             entry_price = confirmation_candle.close
-            stop_loss = confirmation_candle.high
-            risk = stop_loss - entry_price
-            take_profit = entry_price - (3 * risk)  # 3:1 reward:risk ratio
+            stop_loss = max(breakout_candle.high, confirmation_candle.high)
+            risk = abs(entry_price - stop_loss)
+            take_profit = entry_price - (RISK_REWARD_RATIO * risk)
 
             debug_info = {
                 "setup_type": "failed_breakout_to_short",
@@ -68,7 +69,7 @@ def generate_signal(data, lookback=40, risk_per_trade=None):
                 "breakout_candle": breakout_candle.to_dict(),
                 "confirmation_candle": confirmation_candle.to_dict(),
                 "risk_distance": risk,
-                "reward_distance": 3 * risk
+                "reward_distance": RISK_REWARD_RATIO * risk
             }
             return {
                 "side": "short",
