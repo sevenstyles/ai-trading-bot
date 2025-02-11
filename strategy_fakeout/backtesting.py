@@ -8,13 +8,7 @@ import logging
 import sys
 sys.path.insert(0, os.getcwd())
 logger = logging.getLogger("backtester")
-logger.setLevel(logging.DEBUG)
-if not logger.handlers:
-    fh = logging.FileHandler("backtester_detailed.log")
-    fh.setLevel(logging.DEBUG)
-    formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-    fh.setFormatter(formatter)
-    logger.addHandler(fh)
+logger.setLevel(logging.INFO)
 logger.propagate = False
 from config import (
     MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE,
@@ -404,13 +398,6 @@ def analyze_results(signals, symbol):
         'side', 'entry_time', 'entry', 'stop_loss', 'take_profit',
         'exit_time', 'exit_price', 'profit_pct', 'outcome'
     ]
-    
-    # Add optional columns if they exist
-    if 'max_profit_reached' in df.columns:
-        df['max_profit_reached'] = df['max_profit_reached'].round(2)
-        display_cols.append('max_profit_reached')
-    if 'bars_held' in df.columns:
-        display_cols.append('bars_held')
     
     print(df[display_cols].to_string(index=False))
     print("-"*100)
