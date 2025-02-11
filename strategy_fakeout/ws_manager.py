@@ -1,6 +1,5 @@
 import pandas as pd
 from datetime import datetime
-from logger import log_debug
 import state
 from trade_manager import check_for_trade
 
@@ -9,7 +8,6 @@ def process_candle_message(msg):
     if "data" in msg:
         msg = msg["data"]
     if msg.get("e") == "error":
-        log_debug(f"Received error message: {msg}")
         return
     if msg.get("e") != "kline":
         return
@@ -38,7 +36,6 @@ def process_candle_message(msg):
         ])
         state.candles_dict[coin_symbol] = state.candles_dict[coin_symbol].tail(100)
         print(f"Candle for {coin_symbol} closed at {candle_time}: close = {close}")
-        log_debug(f"Candle for {coin_symbol} closed at {candle_time}: close = {close}")
         check_for_trade(coin_symbol)
 
 

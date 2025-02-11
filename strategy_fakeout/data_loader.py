@@ -1,13 +1,11 @@
 import pandas as pd
 from binance_client import client
-from logger import log_debug
 import state
 from data_fetch import get_top_volume_pairs
 
 
 def preload_candles(interval, limit):
     print("Preloading historical candles for symbols...")
-    log_debug("Preloading historical candles for symbols...")
     valid_symbols = []
     invalid_symbols = []
     
@@ -30,7 +28,6 @@ def preload_candles(interval, limit):
             state.candles_dict[symbol] = df[numeric_cols]
             msg = f"Preloaded {len(df)} candles for {symbol}"
             print(msg)
-            log_debug(msg)
             valid_symbols.append(symbol)
         except Exception as e:
             err_msg = f"Error preloading candles for {symbol}: {e}"

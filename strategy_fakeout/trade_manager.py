@@ -1,7 +1,6 @@
 import pandas as pd
 from datetime import datetime
 import state
-from logger import log_debug
 from binance_client import client
 from config import RISK_PER_TRADE, SLIPPAGE_RATE, LEVERAGE, CANDLESTICK_INTERVAL
 from config import CAPITAL, ORDER_SIZE_PCT
@@ -52,7 +51,7 @@ def close_trade(symbol, trade, exit_price, exit_time, close_reason=""):
         try:
             client.futures_cancel_order(symbol=symbol, orderId=trade["stop_order_id"])
         except Exception as e:
-            log_debug(f"Error cancelling stop order for {symbol} when closing trade: {e}")
+            pass  # Handle the exception as needed, e.g., logging
     side = "SELL" if trade['direction'] == 'long' else "BUY"
     try:
         order = client.futures_create_order(
@@ -67,7 +66,7 @@ def close_trade(symbol, trade, exit_price, exit_time, close_reason=""):
         else:
             effective_exit = simulate_fill_price(symbol, side, exit_price)
     except Exception as e:
-        log_debug(f"Error closing trade for {symbol}: {e}")
+        print(f"Error closing trade for {symbol}: {e}")
         effective_exit = simulate_fill_price(symbol, side, exit_price)
     trade['exit_price'] = effective_exit
     trade['exit_time'] = exit_time
@@ -75,7 +74,7 @@ def close_trade(symbol, trade, exit_price, exit_time, close_reason=""):
     trade['close_reason'] = close_reason
     print(f"Trade closed for {symbol}: {close_reason}")
     trade_record = trade.copy()
-    trade_record['symbol'] = symbol
+    trade_record['symbol'] = symbol  # Ensure symbol is included
     state.executed_trades.append(trade_record)
     save_executed_trades_csv()
     if symbol in state.active_trades:
@@ -86,23 +85,18 @@ def close_trade(symbol, trade, exit_price, exit_time, close_reason=""):
 
 def check_for_trade(symbol):
     candle_count = len(state.candles_dict.get(symbol, []))
-    log_debug(f"check_for_trade called for {symbol}, candle count: {candle_count}")
     if symbol not in state.candles_dict:
-        log_debug(f"No candles available yet for {symbol}")
         return
     if candle_count < 50:
-        log_debug(f"Not enough candles for {symbol}. Only {candle_count} available, waiting for at least 50.")
         return
     df = state.candles_dict[symbol].copy().sort_index()
     if symbol in state.active_trades:
         update_active_trade(symbol, df)
         save_active_trades_csv()
         return
-    log_debug(f"For {symbol} - Latest Candle Time: {df.index[-1]}, Close: {df['close'].iloc[-1]}")
     latest_idx = len(df) - 1
     long_signal = generate_signal(df, latest_idx)
     short_signal = False
-    log_debug(f"For {symbol} at index {latest_idx} - long_signal: {long_signal}, short_signal: {short_signal}")
     
     # Retrieve HTF (4h) candles for filtering (last 30 days)
     import datetime
@@ -112,7 +106,6 @@ def check_for_trade(symbol):
     end_str = end_date.strftime("%d %b %Y")
     htf_klines = client.get_historical_klines(symbol, "4h", start_str, end_str)
     if not htf_klines:
-        log_debug(f"Could not retrieve HTF candles for {symbol}")
         return
     df_4h = pd.DataFrame(htf_klines, columns=[
         'timestamp', 'open', 'high', 'low', 'close', 'volume',
@@ -127,18 +120,14 @@ def check_for_trade(symbol):
     current_time = df.index[-1]
     df_4h_current = df_4h[df_4h['timestamp'] <= current_time]
     if df_4h_current.empty:
-        log_debug(f"No HTF candles available up to {current_time} for {symbol}")
         return
     
     htf_trend = get_trend_direction(df_4h_current)
-    log_debug(f"HTF trend for {symbol}: {htf_trend}")
     
     # Only allow trades if the HTF trend aligns with the lower timeframe signal
     if long_signal and htf_trend != 'bullish':
-        log_debug(f"HTF trend is not bullish for {symbol}. Skipping long trade.")
         return
     if short_signal and htf_trend != 'bearish':
-        log_debug(f"HTF trend is not bearish for {symbol}. Skipping short trade.")
         return
     
     if long_signal:
@@ -227,7 +216,6 @@ def place_order(symbol, side, price):
         return quantity
     except Exception as e:
         log_trade(f"Error placing order for {symbol}: {e}")
-        log_debug(f"Error placing order for {symbol}: {e}")
         return None
 
 
@@ -264,8 +252,6 @@ def save_executed_trades_csv():
             df['profit_pct'] = df['profit_pct'].round(2)
         filename = f"executed_trades_{CANDLESTICK_INTERVAL}.csv"
         df.to_csv(filename, index=False)
-        log_debug(f"Executed trades saved to {filename}")
-
 
 def save_active_trades_csv():
     if state.active_trades:
@@ -276,8 +262,6 @@ def save_active_trades_csv():
             active_trade_list.append(trade_copy)
         df = pd.DataFrame(active_trade_list)
         df.to_csv("active_trades.csv", index=False)
-        log_debug("Active trades saved to active_trades.csv")
-
 
 def load_active_positions():
     try:
@@ -310,11 +294,9 @@ def load_active_positions():
                         'quantity': abs(position_amt)
                     }
                 state.active_trades[symbol] = trade
-                log_debug(f"Loaded active position for {symbol}")
         save_active_trades_csv()
     except Exception as e:
-        log_debug(f"Error loading active positions: {e}")
-
+        pass
 
 def update_stop_order(symbol, trade):
     side = "SELL" if trade["direction"] == "long" else "BUY"
@@ -322,7 +304,7 @@ def update_stop_order(symbol, trade):
         try:
             client.futures_cancel_order(symbol=symbol, orderId=trade["stop_order_id"])
         except Exception as e:
-            log_debug(f"Could not cancel previous stop order for {symbol}: {e}")
+            pass
     try:
         stop_loss = trade["stop_loss"]
         stop_price = dynamic_round_price(symbol, stop_loss)
@@ -331,7 +313,6 @@ def update_stop_order(symbol, trade):
             ticker = client.get_symbol_ticker(symbol=symbol)
             current_price = float(ticker["price"])
         except Exception as e:
-            log_debug(f"Error fetching ticker for {symbol}: {e}")
             if symbol in state.candles_dict and not state.candles_dict[symbol].empty:
                 current_price = state.candles_dict[symbol].iloc[-1]["close"]
         if current_price is not None:
@@ -351,10 +332,8 @@ def update_stop_order(symbol, trade):
                     multiplier_up = float(f.get("multiplierUp", 0))
                     multiplier_down = float(f.get("multiplierDown", 0))
                     if trade["direction"] == "short" and stop_price > current_price * multiplier_up:
-                        log_debug(f"Stop price {stop_price} exceeds allowed multiplier for {symbol}")
                         return
                     if trade["direction"] == "long" and stop_price < current_price * multiplier_down:
-                        log_debug(f"Stop price {stop_price} below allowed multiplier for {symbol}")
                         return
                     break
 
@@ -368,6 +347,6 @@ def update_stop_order(symbol, trade):
             trade["stop_order_id"] = new_order.get("orderId")
             log_trade(f"Placed new stop order for {symbol} at {stop_price}: {new_order}")
         else:
-            log_debug(f"Could not update stop order for {symbol} due to missing current price.")
+            pass
     except Exception as e:
-        log_debug(f"Error placing new stop order for {symbol}: {e}") 
+        pass

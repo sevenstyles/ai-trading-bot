@@ -476,13 +476,3 @@ def analyze_aggregated_results(all_signals, initial_capital=1000, days=30):
         print("=== END OF SUMMARY ===\n")
     except Exception as e:
         print(f"Aggregated analysis error: {str(e)}")
-
-def run_sequential_backtest(trades, initial_capital=10000):
-    current_capital = initial_capital
-    trades_sorted = sorted(trades, key=lambda t: t['entry_time'])
-    for i, trade in enumerate(trades_sorted):
-        if 'profit' in trade:
-            current_capital *= (1 + RISK_PER_TRADE * trade['profit'])
-            trade['capital_after'] = current_capital
-            print(f"Trade {i+1}: Capital before: {initial_capital:.2f} | Profit: {trade['profit']*100:.2f}% | Capital after: {current_capital:.2f}")
-    return current_capital 

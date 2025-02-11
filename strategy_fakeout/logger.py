@@ -2,6 +2,3 @@
 
 import os
 from datetime import datetime
-
-def log_debug(message):
-    pass 
