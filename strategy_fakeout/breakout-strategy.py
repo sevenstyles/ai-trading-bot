@@ -30,7 +30,7 @@ def main():
     config = load_config('config.txt')
     start_date_str = config.get('start_date')
     backtest_days = int(config.get('backtest_days', 3))  # Default to 3 days if not specified
-    num_pairs = int(config.get('num_pairs', 10))  # Default to 10 pairs if not specified
+    num_pairs = int(config.get('num_pairs', 1))  # Default to 10 pairs if not specified
 
     symbols = get_top_volume_pairs(limit=num_pairs)
     if not symbols:
