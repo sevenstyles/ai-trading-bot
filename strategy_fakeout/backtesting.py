@@ -310,7 +310,7 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, us
                     signal['profit'] = profit
                 logger.debug(f"Trade closed at end of period: {exit_price:.4f} (Entry: {entry_price:.4f})")
             
-            # Set outcome based on actual profit
+            # Set outcome based on actual profit ONLY if no outcome was previously determined
             outcome = 'WIN' if signal['profit'] > 0 else 'LOSS'
             
             # Set final trade details
@@ -403,7 +403,7 @@ def analyze_results(signals, symbol):
     # Display trade details
     display_cols = [
         'side', 'entry_time', 'entry', 'stop_loss', 'take_profit',
-        'exit_time', 'exit_price', 'profit_pct', 'outcome'
+        'exit_price', 'profit_pct', 'outcome'
     ]
     
     print(df[display_cols].to_string(index=False))
