@@ -199,11 +199,6 @@ def dynamic_round_price(symbol, price):
 
 def place_order(symbol, side, price):
     try:
-        # Set the desired leverage for the symbol
-        client.futures_change_leverage(symbol=symbol, leverage=LEVERAGE)
-    except Exception as e:
-        log_trade(f"Error setting leverage for {symbol}: {e}")
-    try:
         # Calculate order value based on capital and order size percentage for live trading
         order_value = CAPITAL * ORDER_SIZE_PCT
         quantity = order_value / price

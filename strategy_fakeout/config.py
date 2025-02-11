@@ -31,7 +31,6 @@ RISK_REWARD_RATIO = 3.0
 
 CAPITAL = 100  # Base capital
 RISK_PER_TRADE = 0.5  # 50% risk per trade
-LEVERAGE = 10  # 10x leverage
 ORDER_SIZE_PCT = 0.45  # Use 45% of capital per trade
 
 BLACKLIST = [

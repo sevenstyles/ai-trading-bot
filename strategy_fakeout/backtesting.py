@@ -23,7 +23,7 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 from config import (
-    MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE,
+    MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE,
     SLIPPAGE_RATE, STOP_LOSS_SLIPPAGE, LONG_STOP_LOSS_MULTIPLIER,
     SHORT_STOP_LOSS_MULTIPLIER, TRAILING_STOP_PCT, TRAILING_START_LONG,
     TRAILING_START_SHORT, MIN_BARS_BEFORE_STOP, FUTURES_MAKER_FEE,
@@ -41,7 +41,7 @@ def get_funding_fee(client, symbol, entry_time, exit_time):
     end_ms = int(exit_time.timestamp() * 1000)
     try:
         funding_data = client.futures_funding_rate(symbol=symbol, startTime=start_ms, endBin=end_ms, limit=1000)
-        position_value = (CAPITAL * RISK_PER_TRADE) * LEVERAGE
+        position_value = CAPITAL * RISK_PER_TRADE
         total_fee = sum(float(event['fundingRate']) * position_value for event in funding_data)
         return total_fee / CAPITAL  # Return as percentage of capital
     except Exception as e:
@@ -88,9 +88,21 @@ def calculate_exit_profit_short(entry_price, exit_price, include_funding=True, e
     # Add funding fees if requested
     if include_funding and entry_time and exit_time and client and symbol:
         funding_fee = get_funding_fee(client, symbol, entry_time, exit_time)
-        return price_profit - funding_fee
+        final_profit = price_profit - funding_fee
+    else:
+        final_profit = price_profit
     
-    return price_profit
+    logger.debug(f"Short Trade Calculation:")
+    logger.debug(f"  entry_price: {entry_price}")
+    logger.debug(f"  exit_price: {exit_price}")
+    logger.debug(f"  adjusted_entry: {adjusted_entry}")
+    logger.debug(f"  adjusted_exit: {adjusted_exit}")
+    logger.debug(f"  price_profit: {price_profit}")
+    if include_funding and entry_time and exit_time and client and symbol:
+        logger.debug(f"  funding_fee: {funding_fee}")
+    logger.debug(f"  final_profit: {final_profit}")
+    
+    return final_profit
 
 def calculate_position_size(entry_price, stop_loss, side="long"):
     """Calculate the position size based on capital, risk per trade, and leverage with limits."""
@@ -100,21 +112,14 @@ def calculate_position_size(entry_price, stop_loss, side="long"):
     # Calculate the position size that risks the desired amount
     position_value = (risk_amount / stop_distance) * entry_price if stop_distance != 0 else 0
 
-    # Apply leverage
-    leveraged_position = position_value * LEVERAGE
-    
-    # Apply position size cap
-    if leveraged_position > POSITION_SIZE_CAP:
-        leveraged_position = POSITION_SIZE_CAP
-    
     # Check minimum trade value
-    if leveraged_position < MIN_TRADE_VALUE:
+    if position_value < MIN_TRADE_VALUE:
         return 0, 0
     
     # Calculate the quantity of contracts/tokens
-    quantity = leveraged_position / entry_price
+    quantity = position_value / entry_price
     
-    return quantity, leveraged_position
+    return quantity, position_value
 
 def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, use_random_date=False, swing_lookback=20, start_date_str=None, risk_per_trade=None):
     # Determine backtesting date range using the current date in UTC+11
@@ -174,7 +179,6 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, us
                 i += 1
                 signal['quantity'] = 0
                 signal['position_value'] = 0
-                signal['leverage_used'] = LEVERAGE
                 signal['entry_time'] = df.index[i]  # Set entry time
                 signal['symbol'] = symbol
                 signal['entry'] = 0
@@ -187,7 +191,6 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, us
             # Add trade details
             signal['quantity'] = quantity
             signal['position_value'] = position_value
-            signal['leverage_used'] = LEVERAGE
             signal['entry_time'] = df.index[i]  # Set entry time
             signal['symbol'] = symbol
             
@@ -290,8 +293,11 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, us
                     )
                     signal['profit'] = profit
             
-            # Set outcome based on actual profit ONLY if no outcome was previously determined
-            outcome = 'WIN' if signal['profit'] > 0 else 'LOSS'
+            # Set outcome based on actual profit
+            if signal['profit'] > 0:
+                outcome = 'WIN'
+            else:
+                outcome = 'LOSS'
             
             # Set final trade details
             signal['outcome'] = outcome
@@ -302,6 +308,8 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, us
             signal['duration'] = (exit_time - entry_time).total_seconds() / 3600  # Duration in hours
             signal['risk_per_trade'] = risk_per_trade
             signal['entry_price'] = signal["entry"]
+            # Use final_profit to calculate profit_pct
+            signal['profit_pct'] = signal['profit'] * 100
             signals.append(signal)
             
             # Skip the processed candles
@@ -347,11 +355,8 @@ def analyze_results(signals, symbol):
     long_trades = len(df[df["side"]=="long"])
     short_trades = len(df[df["side"]=="short"])
     
-    # Calculate profit percentage using entry and exit prices
-    df['profit_pct'] = ((df['exit_price'] - df['entry']) / df['entry'] * 100).round(2)
-    
-    # Correct the profit percentage for short positions
-    df['profit_pct'] = df.apply(lambda row: -row['profit_pct'] if row['side'] == 'short' else row['profit_pct'], axis=1)
+    # Use the pre-calculated profit to determine profit_pct
+    df['profit_pct'] = (df['profit'] * 100).round(2)
     
     # Calculate average trade duration
     if 'duration' in df.columns:
