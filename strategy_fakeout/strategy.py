@@ -29,7 +29,7 @@ def generate_signal(data, lookback=40):
     logger.debug(f"Confirmation candle - High: {confirmation_candle.high}, Low: {confirmation_candle.low}, Close: {confirmation_candle.close}")
 
     # --- LONG TRADE ---
-    if (lookback - swing_low_loc) >= 5 and breakout_candle.low < swing_low:
+    if (lookback - swing_low_loc) >= 5 and breakout_candle.close < swing_low:
         logger.debug(f"Found potential long setup (breakout below swing low), Index diff: {lookback - swing_low_loc}")
         if confirmation_candle.close > swing_low:
             logger.debug("Confirmed failed breakout (close above swing low)")
@@ -58,7 +58,7 @@ def generate_signal(data, lookback=40):
             }
 
     # --- SHORT TRADE ---
-    if (lookback - swing_high_loc) >= 5 and breakout_candle.high > swing_high:
+    if (lookback - swing_high_loc) >= 5 and breakout_candle.close > swing_high:
         logger.debug(f"Found potential short setup (breakout above swing high), Index diff: {lookback - swing_high_loc}")
         if confirmation_candle.close < swing_high:
             logger.debug("Confirmed failed breakout (close below swing high)")
