@@ -35,8 +35,8 @@ def generate_signal(data, lookback=40):
             logger.debug("Confirmed failed breakout (close above swing low)")
             entry_price = confirmation_candle.close
             stop_loss = confirmation_candle.low
-            risk = entry_price - stop_loss
-            take_profit = entry_price + (3 * risk)  # 3:1 reward:risk ratio
+            risk = stop_loss - entry_price
+            take_profit = entry_price - (3 * risk)  # 3:1 reward:risk ratio
 
             debug_info = {
                 "setup_type": "failed_breakout_to_long",
@@ -65,7 +65,7 @@ def generate_signal(data, lookback=40):
             entry_price = confirmation_candle.close
             stop_loss = confirmation_candle.high
             risk = stop_loss - entry_price
-            take_profit = entry_price - (3 * risk)  # 3:1 reward:risk ratio
+            take_profit = entry_price + (3 * risk)  # 3:1 reward:risk ratio
 
             debug_info = {
                 "setup_type": "failed_breakout_to_short",

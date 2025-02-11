@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import random
 import json
 import logging
@@ -19,6 +19,9 @@ from config import (
     MIN_TRADE_VALUE
 )
 from strategy import generate_signal
+
+# Define UTC+11 timezone
+UTC11 = timezone(timedelta(hours=11))
 
 def get_funding_fee(client, symbol, entry_time, exit_time):
     """Calculate funding fees for the trade duration."""
@@ -105,8 +108,8 @@ def calculate_position_size(entry_price, stop_loss, side="long"):
     return quantity, leveraged_position
 
 def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, use_random_date=False, swing_lookback=20):
-    # Determine backtesting date range using the current date
-    end_date = datetime.now()
+    # Determine backtesting date range using the current date in UTC+11
+    end_date = datetime.now(UTC11)
     start_date = end_date - timedelta(days=days)
     
     # Fetch lower timeframe klines

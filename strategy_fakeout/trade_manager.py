@@ -1,5 +1,5 @@
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import state
 from binance_client import client
 from config import RISK_PER_TRADE, SLIPPAGE_RATE, LEVERAGE, CANDLESTICK_INTERVAL
@@ -8,6 +8,9 @@ from strategy import get_trend_direction, generate_signal
 from trade_logger import log_trade
 import math
 from decimal import Decimal, ROUND_DOWN
+
+# Define UTC+11 timezone
+UTC11 = timezone(timedelta(hours=11))
 
 def apply_trailing_stop(symbol, trade, latest_candle, trailing_stop_pct):
     # For long trades, update new_high and potential trailing stop
@@ -100,8 +103,8 @@ def check_for_trade(symbol):
     
     # Retrieve HTF (4h) candles for filtering (last 30 days)
     import datetime
-    start_date = datetime.datetime.now() - datetime.timedelta(days=30)
-    end_date = datetime.datetime.now()
+    start_date = datetime.datetime.now(UTC11) - datetime.timedelta(days=30)
+    end_date = datetime.datetime.now(UTC11)
     start_str = start_date.strftime("%d %b %Y")
     end_str = end_date.strftime("%d %b %Y")
     htf_klines = client.get_historical_klines(symbol, "4h", start_str, end_str)
@@ -275,7 +278,7 @@ def load_active_positions():
                     continue
                 if position_amt > 0:
                     trade = {
-                        'entry_time': datetime.now(),
+                        'entry_time': datetime.now(UTC11),
                         'entry_price': entry_price,
                         'stop_loss': entry_price * 0.99,
                         'take_profit': entry_price * 1.03,
@@ -285,7 +288,7 @@ def load_active_positions():
                     }
                 else:
                     trade = {
-                        'entry_time': datetime.now(),
+                        'entry_time': datetime.now(UTC11),
                         'entry_price': entry_price,
                         'stop_loss': entry_price * 1.01,
                         'take_profit': entry_price * 0.97,

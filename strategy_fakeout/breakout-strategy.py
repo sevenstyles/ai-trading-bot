@@ -11,13 +11,13 @@ from backtesting import backtest_strategy, analyze_results, analyze_aggregated_r
 client = Client(api_key=BINANCE_API_KEY, api_secret=BINANCE_API_SECRET)
 
 def main():
-    symbols = get_top_volume_pairs(limit=10)
+    symbols = get_top_volume_pairs(limit=20)
     if not symbols:
         print("No top volume pairs found.")
         return
 
     # Backtest period set to 7 days
-    days = 3
+    days = 2
     all_trades = []
     
     for symbol in symbols:
