@@ -90,8 +90,8 @@ def calculate_position_size(entry_price, stop_loss, side="long"):
     stop_distance_pct = stop_distance / entry_price
     
     # Calculate the position size that risks the desired amount
-    position_value = risk_amount / stop_distance_pct
-    
+    position_value = risk_amount / stop_distance_pct if stop_distance_pct != 0 else 0
+
     # Apply leverage
     leveraged_position = position_value * LEVERAGE
     
@@ -258,7 +258,7 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, us
                 else:  # short trade
                     # Calculate current profit in R multiples
                     current_profit = (entry_price - candle['low'])
-                    profit_r = current_profit / abs(stop_loss - entry_price)  # Use absolute distance for R calculation
+                    profit_r = current_profit / abs(stop_loss - entry_price) if abs(stop_loss - entry_price) != 0 else 0  # Use absolute distance for R calculation
                     max_profit_reached = max(max_profit_reached, profit_r)
                     
                     # Check stop loss for short trades
@@ -376,11 +376,11 @@ def analyze_results(signals, symbol):
     df['R_multiple'] = df.apply(lambda row: 
         (row['exit_price'] - row['entry']) / (row['entry'] - row['stop_loss'])
         if row['side'] == 'long' else
-        (row['entry'] - row['exit_price']) / (row['stop_loss'] - row['entry']), 
+        0 if row['stop_loss'] == row['entry'] else (row['entry'] - row['exit_price']) / (row['stop_loss'] - row['entry']),
         axis=1
     )
     avg_r_multiple = df['R_multiple'].mean()
-    
+
     # Print results
     print("\n" + "="*50)
     print(f"=== {symbol} Trading Results ===")
