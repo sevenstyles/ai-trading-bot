@@ -254,6 +254,8 @@ def save_executed_trades_csv():
             df['profit_pct'] = df.apply(calc_profit, axis=1)
             df['profit_pct'] = df['profit_pct'].round(2)
         filename = f"executed_trades_{CANDLESTICK_INTERVAL}.csv"
+        # Add a unique identifier to each trade
+        df['trade_id'] = range(len(df))
         df.to_csv(filename, index=False)
 
 def save_active_trades_csv():

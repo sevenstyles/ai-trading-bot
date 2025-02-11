@@ -194,6 +194,16 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, us
             # Skip trade if position size is too small
             if quantity == 0:
                 i += 1
+                signal['quantity'] = 0
+                signal['position_value'] = 0
+                signal['leverage_used'] = LEVERAGE
+                signal['entry_time'] = df.index[i]  # Set entry time
+                signal['symbol'] = symbol
+                signal['entry'] = 0
+                signal['exit_price'] = 0
+                signal['profit'] = 0
+                signal['outcome'] = 'LOSS'
+                signals.append(signal)
                 continue
             
             # Add trade details
@@ -313,6 +323,7 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, us
             signal['exit_time'] = exit_time
             signal['duration'] = (exit_time - entry_time).total_seconds() / 3600  # Duration in hours
             signal['risk_per_trade'] = risk_per_trade
+            signal['entry_price'] = signal["entry"]
             signals.append(signal)
             
             # Skip the processed candles
@@ -327,8 +338,9 @@ def simulate_capital(signals, initial_capital=1000, risk_per_trade=0.5):
     sorted_signals = sorted(signals, key=lambda t: t['entry_time'])
     capital = initial_capital
     for trade in sorted_signals:
+        profit_pct = ((trade['exit_price'] - trade['entry_price']) / trade['entry_price']) if trade['side'] == 'long' else ((trade['entry_price'] - trade['exit_price']) / trade['entry_price'])
         if 'profit' in trade:
-            capital *= (1 + risk_per_trade * trade['profit'])
+            capital *= (1 + risk_per_trade * profit_pct.item())
             trade['capital_after'] = capital
     return capital
 
@@ -359,6 +371,9 @@ def analyze_results(signals, symbol):
     
     # Calculate profit percentage using entry and exit prices
     df['profit_pct'] = ((df['exit_price'] - df['entry']) / df['entry'] * 100).round(2)
+    
+    # Correct the profit percentage for short positions
+    df['profit_pct'] = df.apply(lambda row: -row['profit_pct'] if row['side'] == 'short' else row['profit_pct'], axis=1)
     
     # Calculate average trade duration
     if 'duration' in df.columns:
@@ -441,7 +456,25 @@ def analyze_aggregated_results(all_signals, initial_capital=1000, days=30):
             df.rename(columns={'entry': 'entry_price'}, inplace=True)
         
         # Calculate risk-reward ratio
-        df['risk_reward'] = df.apply(lambda row: ((row['TP']-row['entry_price'])/(row['entry_price']-row['SL']) if (row['entry_price']-row['SL']) != 0 else float('inf')) if row['entry_price'] > row['SL'] else ((row['entry_price']-row['TP'])/(row['SL']-row['entry_price']) if (row['SL']-row['entry_price']) != 0 else float('inf')), axis=1)
+        def calculate_risk_reward(row):
+            try:
+                entry_price = row['entry_price']
+                sl = row['SL']
+                tp = row['TP']
+
+                if (entry_price - sl) == 0:
+                    return float('inf')  # Avoid division by zero
+
+                if entry_price > sl:  # Long trade
+                    return (tp - entry_price) / (entry_price - sl)
+                else:  # Short trade
+                    if (sl - entry_price) == 0:
+                        return float('inf')  # Avoid division by zero
+                    return (entry_price - tp) / (sl - entry_price)
+            except:
+                return float('inf')
+
+        df['risk_reward'] = df.apply(calculate_risk_reward, axis=1)
         
         total_trades = len(df)
         wins = len(df[df['outcome'] == 'WIN'])
@@ -459,10 +492,11 @@ def analyze_aggregated_results(all_signals, initial_capital=1000, days=30):
         print(f"Long Trades: {long_trades}, Short Trades: {short_trades}, Break Even Trades: {break_even_trades}")
         print(f"Simulation: Starting Capital: ${initial_capital}, Final Capital: ${final_capital:.2f}")
         print(f"Final Profit Percentage: {profit:.2f}%")
+        # Remove the trade list from the aggregate section
         # Calculate profit percentage using entry and exit prices
-        df['profit_pct'] = ((df['exit_price'] - df['entry_price']) / df['entry_price'] * 100).round(2)
+        #df['profit_pct'] = ((df['exit_price'] - df['entry_price']) / df['entry_price'] * 100).round(2)
         # Include the 'side' column in the printed output
-        print(df[["side", "entry_time", "entry_price", "SL", "TP", "exit_time", "exit_price", "profit_pct", "outcome"]])
+        #print(df[["side", "entry_time", "entry_price", "SL", "TP", "exit_time", "exit_price", "profit_pct", "outcome"]])
         print("=== END OF SUMMARY ===\n")
     except Exception as e:
         print(f"Aggregated analysis error: {str(e)}")
