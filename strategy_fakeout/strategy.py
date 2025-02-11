@@ -4,7 +4,7 @@ import logging
 
 logger = logging.getLogger("backtester")
 
-def generate_signal(data, lookback=40):
+def generate_signal(data, lookback=40, risk_per_trade=None):
     """
     Generate trading signals based on failed breakout patterns.
     """
@@ -24,15 +24,9 @@ def generate_signal(data, lookback=40):
     swing_high_loc = swing_window.index.get_loc(swing_high_index)
     swing_low_loc = swing_window.index.get_loc(swing_low_index)
 
-    logger.debug(f"Analyzing window: Swing High: {swing_high} (Loc: {swing_high_loc}), Swing Low: {swing_low} (Loc: {swing_low_loc})")
-    logger.debug(f"Breakout candle - High: {breakout_candle.high}, Low: {breakout_candle.low}, Close: {breakout_candle.close}")
-    logger.debug(f"Confirmation candle - High: {confirmation_candle.high}, Low: {confirmation_candle.low}, Close: {confirmation_candle.close}")
-
     # --- LONG TRADE ---
     if (lookback - swing_low_loc) >= 5 and breakout_candle.close < swing_low:
-        logger.debug(f"Found potential long setup (breakout below swing low), Index diff: {lookback - swing_low_loc}")
         if confirmation_candle.close > swing_low:
-            logger.debug("Confirmed failed breakout (close above swing low)")
             entry_price = confirmation_candle.close
             stop_loss = confirmation_candle.low
             risk = stop_loss - entry_price
@@ -54,14 +48,13 @@ def generate_signal(data, lookback=40):
                 "stop_loss": stop_loss,
                 "take_profit": take_profit,
                 "take_profit_levels": [take_profit],
-                "debug_info": debug_info
+                "debug_info": debug_info,
+                "risk_per_trade": risk
             }
 
     # --- SHORT TRADE ---
     if (lookback - swing_high_loc) >= 5 and breakout_candle.close > swing_high:
-        logger.debug(f"Found potential short setup (breakout above swing high), Index diff: {lookback - swing_high_loc}")
         if confirmation_candle.close < swing_high:
-            logger.debug("Confirmed failed breakout (close below swing high)")
             entry_price = confirmation_candle.close
             stop_loss = confirmation_candle.high
             risk = stop_loss - entry_price
@@ -83,7 +76,8 @@ def generate_signal(data, lookback=40):
                 "stop_loss": stop_loss,
                 "take_profit": take_profit,
                 "take_profit_levels": [take_profit],
-                "debug_info": debug_info
+                "debug_info": debug_info,
+                "risk_per_trade": risk
             }
 
     return None

@@ -45,7 +45,7 @@ def main():
     for symbol in symbols:
         print(f"\n=== Backtesting {symbol} ===")
         # backtest_strategy now returns a tuple: (trades, price_df)
-        trades, price_df = backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=backtest_days, client=client, use_random_date=True, start_date_str=start_date_str)
+        trades, price_df = backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=backtest_days, client=client, use_random_date=True, start_date_str=start_date_str, risk_per_trade=float(config['risk_per_trade']))
         if trades:
             df_trades = pd.DataFrame(trades)
             long_trades = len(df_trades[df_trades["side"]=="long"])
@@ -55,7 +55,7 @@ def main():
             all_trades.extend(trades)
 
             for trade in trades:
-                ending_capital *= (1 + trade['profit'])
+                ending_capital *= (1 + trade['risk_per_trade'] * trade['profit'])
                 backtest_results.append({
                     'pair': symbol,
                     'direction': trade['side'],

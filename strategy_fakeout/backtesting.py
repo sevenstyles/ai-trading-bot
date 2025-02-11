@@ -8,8 +8,20 @@ import logging
 import sys
 sys.path.insert(0, os.getcwd())
 logger = logging.getLogger("backtester")
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 logger.propagate = False
+
+# Create a handler that outputs to the console
+ch = logging.StreamHandler(sys.stdout)
+ch.setLevel(logging.DEBUG)
+
+# Create a formatter
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+ch.setFormatter(formatter)
+
+# Add the handler to the logger
+logger.addHandler(ch)
+
 from config import (
     MAX_HOLD_BARS, MIN_QUOTE_VOLUME, CAPITAL, RISK_PER_TRADE, LEVERAGE,
     SLIPPAGE_RATE, STOP_LOSS_SLIPPAGE, LONG_STOP_LOSS_MULTIPLIER,
@@ -94,12 +106,10 @@ def calculate_position_size(entry_price, stop_loss, side="long"):
     
     # Apply position size cap
     if leveraged_position > POSITION_SIZE_CAP:
-        logger.debug(f"Position size {leveraged_position:.2f} exceeds cap {POSITION_SIZE_CAP}. Reducing position.")
         leveraged_position = POSITION_SIZE_CAP
     
     # Check minimum trade value
     if leveraged_position < MIN_TRADE_VALUE:
-        logger.debug(f"Position size {leveraged_position:.2f} below minimum {MIN_TRADE_VALUE}. Skipping trade.")
         return 0, 0
     
     # Calculate the quantity of contracts/tokens
@@ -107,7 +117,7 @@ def calculate_position_size(entry_price, stop_loss, side="long"):
     
     return quantity, leveraged_position
 
-def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, use_random_date=False, swing_lookback=20, start_date_str=None):
+def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, use_random_date=False, swing_lookback=20, start_date_str=None, risk_per_trade=None):
     # Determine backtesting date range using the current date in UTC+11
     if start_date_str:
         end_date = datetime.strptime(start_date_str, "%Y-%m-%d") + timedelta(days=days)
@@ -171,18 +181,9 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, us
         # Build sliding window for signal generation
         window = df.iloc[i - required_candles + 1 : i + 7]  # Include 5 forward-looking candles
         
-        # Debug logging for window sizes
-        logger.debug(f"Processing {symbol} at {df.index[i]}")
-        logger.debug(f"Window size: {len(window)} candles")
-        logger.debug(f"Window start: {window.index[0]}, end: {window.index[-1]}")
-        
-        signal = generate_signal(window, lookback=swing_lookback)
+        signal = generate_signal(window, lookback=swing_lookback, risk_per_trade=risk_per_trade)
         
         if signal:
-            logger.debug(f"Signal found: {signal['side']} at {df.index[i]}")
-            logger.debug(f"Setup type: {signal['debug_info']['setup_type']}")
-            logger.debug(f"Entry: {signal['entry']}, SL: {signal['stop_loss']}, TP: {signal['take_profit']}")
-            
             # Calculate position size
             quantity, position_value = calculate_position_size(
                 signal['entry'], 
@@ -194,10 +195,6 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, us
             if quantity == 0:
                 i += 1
                 continue
-            
-            logger.debug(f"Position Size: {quantity:.4f} contracts")
-            logger.debug(f"Position Value: ${position_value:.2f}")
-            logger.debug(f"Using {LEVERAGE}x leverage")
             
             # Add trade details
             signal['quantity'] = quantity
@@ -239,7 +236,6 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, us
                         )
                         signal['profit'] = profit
                         outcome = 'LOSS'  # Stop loss hit is always a loss
-                        logger.debug(f"Long trade stopped out at {exit_price:.4f} (Entry: {entry_price:.4f}, Max profit reached: {max_profit_reached:.1f}R)")
                         break
                         
                     # Check take profit
@@ -253,7 +249,6 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, us
                         )
                         signal['profit'] = profit
                         outcome = 'WIN'  # Take profit hit is always a win
-                        logger.debug(f"Long trade hit TP at {exit_price:.4f} (Entry: {entry_price:.4f})")
                         break
                         
                 else:  # short trade
@@ -273,7 +268,6 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, us
                         )
                         signal['profit'] = profit
                         outcome = 'LOSS'  # Stop loss hit is always a loss
-                        logger.debug(f"Short trade stopped out at {exit_price:.4f} (Entry: {entry_price:.4f}, Max profit reached: {max_profit_reached:.1f}R)")
                         break
                         
                     # Check take profit
@@ -287,7 +281,6 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, us
                         )
                         signal['profit'] = profit
                         outcome = 'WIN'  # Take profit hit is always a win
-                        logger.debug(f"Short trade hit TP at {exit_price:.4f} (Entry: {entry_price:.4f})")
                         break
             
             # If no exit condition met, close at last candle
@@ -308,7 +301,6 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, us
                         client, symbol
                     )
                     signal['profit'] = profit
-                logger.debug(f"Trade closed at end of period: {exit_price:.4f} (Entry: {entry_price:.4f})")
             
             # Set outcome based on actual profit ONLY if no outcome was previously determined
             outcome = 'WIN' if signal['profit'] > 0 else 'LOSS'
@@ -320,6 +312,7 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, us
             signal['exit_price'] = exit_price
             signal['exit_time'] = exit_time
             signal['duration'] = (exit_time - entry_time).total_seconds() / 3600  # Duration in hours
+            signal['risk_per_trade'] = risk_per_trade
             signals.append(signal)
             
             # Skip the processed candles
@@ -330,12 +323,12 @@ def backtest_strategy(symbol, timeframe=OHLCV_TIMEFRAME, days=3, client=None, us
         
     return signals, df
 
-def simulate_capital(signals, initial_capital=1000):
+def simulate_capital(signals, initial_capital=1000, risk_per_trade=0.5):
     sorted_signals = sorted(signals, key=lambda t: t['entry_time'])
     capital = initial_capital
     for trade in sorted_signals:
         if 'profit' in trade:
-            capital *= (1 + RISK_PER_TRADE * trade['profit'])
+            capital *= (1 + risk_per_trade * trade['profit'])
             trade['capital_after'] = capital
     return capital
 
@@ -364,8 +357,8 @@ def analyze_results(signals, symbol):
     long_trades = len(df[df["side"]=="long"])
     short_trades = len(df[df["side"]=="short"])
     
-    # Convert profit to percentage
-    df["profit_pct"] = (df["profit"] * 100).round(2)
+    # Calculate profit percentage using entry and exit prices
+    df['profit_pct'] = ((df['exit_price'] - df['entry']) / df['entry'] * 100).round(2)
     
     # Calculate average trade duration
     if 'duration' in df.columns:
@@ -457,14 +450,17 @@ def analyze_aggregated_results(all_signals, initial_capital=1000, days=30):
         long_trades = len(df[df['side'] == 'long'])
         short_trades = len(df[df['side'] == 'short'])
         break_even_trades = len(df[df['outcome'] == 'BREAK EVEN'])
-        final_capital = simulate_capital(all_signals, initial_capital=initial_capital)
+        final_capital = simulate_capital(all_signals, initial_capital=initial_capital, risk_per_trade=RISK_PER_TRADE)
+        profit = (final_capital - initial_capital) / initial_capital * 100
         
         print("=== Aggregated Report ===")
         print(f"Total Trades: {total_trades}")
         print(f"Win Rate (wins vs losses): {win_rate:.2f}%")
         print(f"Long Trades: {long_trades}, Short Trades: {short_trades}, Break Even Trades: {break_even_trades}")
         print(f"Simulation: Starting Capital: ${initial_capital}, Final Capital: ${final_capital:.2f}")
-        df["profit_pct"] = (df["profit"] * 100).round(2)
+        print(f"Final Profit Percentage: {profit:.2f}%")
+        # Calculate profit percentage using entry and exit prices
+        df['profit_pct'] = ((df['exit_price'] - df['entry_price']) / df['entry_price'] * 100).round(2)
         # Include the 'side' column in the printed output
         print(df[["side", "entry_time", "entry_price", "SL", "TP", "exit_time", "exit_price", "profit_pct", "outcome"]])
         print("=== END OF SUMMARY ===\n")

@@ -1,3 +1,4 @@
-start_date=2025-01-15
+start_date=2025-01-11
 backtest_days=3
 num_pairs=1
+risk_per_trade=0.5
