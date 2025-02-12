@@ -29,6 +29,7 @@ MOVING_AVERAGE_WINDOW = 20
 
 # Time interval for data snapshots (in seconds) - Adjust based on Binance API limits
 TICK_INTERVAL = 1 # Check binance documentation, this might need to be higher.
+TICK_INTERVAL = 5 # Increased to 5 seconds to prevent WebSocket queue overflow
 
 # --- Order Execution Parameters ---
 # Use 'MARKET' or 'LIMIT' orders

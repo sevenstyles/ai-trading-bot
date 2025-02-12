@@ -7,14 +7,13 @@ print("deque imported")
 from config import (
     MOVING_AVERAGE_WINDOW,
     VOLUME_SPIKE_MULTIPLIER,
-    ORDER_FLOW_DELTA_Z_SCORE_THRESHOLD,
     CONFIRMATION_TICKS,
-    MINIMUM_LIQUIDITY_THRESHOLD,
     TICK_INTERVAL,
     ATR_PERIOD,
     CONFIRMATION_THRESHOLD
 )
 from indicators import ATR  # Import the ATR class
+from signal_generator import SignalGenerator  # Import the new class
 
 print("order_flow_analyzer.py script starting...")
 
@@ -49,14 +48,11 @@ class OrderFlowAnalyzer:
             self.signal_sum = 0  # Sum of recent signals for moving average
             print("OrderFlowAnalyzer.__init__ finished.")
             self.signal_strength_history = deque(maxlen=MOVING_AVERAGE_WINDOW) # For confirmation
+            self.signal_generator = SignalGenerator()  # Initialize the SignalGenerator
         except Exception as e:
             print(f"Error in OrderFlowAnalyzer.__init__: {e}")
             raise
 
-    def calculate_moving_average(self, data_series):
-        if len(data_series) == 0:
-            return 0
-        return sum(data_series) / len(data_series)
     
     def calculate_volume_delta(self):
         # Not used anymore, replaced by order flow delta
@@ -103,12 +99,12 @@ class OrderFlowAnalyzer:
             # bid_depth_weighted = 0
             # ask_depth_weighted = 0
             # weights = [0.8, 0.4, 0.2, 0.1, 0.05]  # Less aggressive weights
-
+    
             # # Log raw depths here
             raw_bid_depth = sum(order_book['bids'].values())
             raw_ask_depth = sum(order_book['asks'].values())
             print(f"Raw Bid Depth: {raw_bid_depth}, Raw Ask Depth: {raw_ask_depth}")
-
+    
             # for i in range(min(5, len(order_book['bids']))):
             #     price = list(order_book['bids'].keys())[i]
             #     bid_depth_weighted += order_book['bids'][price] * weights[i]
@@ -168,64 +164,10 @@ class OrderFlowAnalyzer:
     
         self.recent_trades.append(volume)  # Keep for potential future use
         self.prices.append(trade["price"])  # Append the trade price
-
+    
         # Update ATR
         self.atr.update(trade["price"], trade["price"], trade["price"])  # high, low, close are the same for trade price
 
-    def check_for_signals(self, raw_liquidity):
-        """Checks for trading signals based on order flow analysis."""
-    
-        # --- General Liquidity Check ---
-        #raw_liquidity = self.bid_depth + self.ask_depth  # Use raw depths
-        print(f"Current liquidity: {raw_liquidity}")
-        if raw_liquidity < MINIMUM_LIQUIDITY_THRESHOLD:
-            print("Liquidity below minimum threshold. Skipping signal generation.")
-            return None
-
-        # --- Calculate Order Flow Delta and Z-score ---
-        order_flow_delta = self.bid_depth - self.ask_depth  # Use raw depths from order book
-        self.order_flow_delta_history.append(order_flow_delta)
-
-        if len(self.order_flow_delta_history) < 2:
-            print("Not enough order flow delta history to calculate Z-score.")
-            return None
-            
-        order_flow_delta_z_score = self.calculate_z_score(order_flow_delta, list(self.order_flow_delta_history))
-        print(f"Order Flow Delta Z-Score: {order_flow_delta_z_score}, Order Flow Delta: {order_flow_delta}")
-
-        # --- Unified Signal Logic ---
-        z_score_weight = 1.0  # Configurable weight
-        imbalance_weight = 1.0  # Configurable weight
-
-        signal_strength = (
-            order_flow_delta_z_score * z_score_weight +
-            self.order_book_imbalance_normalized * imbalance_weight
-        )
-        self.signal_strength_history.append(signal_strength)
-
-        # --- Improved Confirmation (Moving Average of Signal Strength) ---
-        signal_strength_ma = self.calculate_moving_average(self.signal_strength_history)
-
-        print(f"Signal Strength: {signal_strength}, Moving Average: {signal_strength_ma}")
-
-        if signal_strength_ma > ORDER_FLOW_DELTA_Z_SCORE_THRESHOLD:
-            signal = "buy"
-            print("Buy signal generated!")
-        elif signal_strength_ma < -ORDER_FLOW_DELTA_Z_SCORE_THRESHOLD:
-            signal = "sell"
-            print("Sell signal generated!")
-        else:
-            signal = None
-
-        return signal
-    
-    def calculate_z_score(self, data_point, data_series):
-        """Calculates the Z-score of a single data point against a series."""
-        if len(data_series) < 2:  # Need at least 2 data points for standard deviation
-            return 0  # Return 0 if not enough data points
-
-        std_dev = np.std(data_series)
-        if std_dev == 0:
-            return 0  # Return 0 if standard deviation is zero
-        else:
-            return (data_point - np.mean(data_series)) / std_dev
+    def check_for_signals(self, raw_liquidity, bid_depth, ask_depth):
+        """Checks for trading signals using the SignalGenerator."""
+        return self.signal_generator.check_for_signals(raw_liquidity, bid_depth, ask_depth)

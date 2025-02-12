@@ -206,6 +206,8 @@ class TradingBot:
         Executes a trade based on the signal.
         """
         quantity = None
+        stop_loss = None  # Initialize to None
+        take_profit = None  # Initialize to None
         try:
             # Get current price
             current_price = float(self.binance_data.current_price)
@@ -302,11 +304,11 @@ class TradingBot:
             logging.error(f"Trade Execution Error: {e}")
             order_id = None
         finally:
-            # Write trade to CSV regardless of success
+            # Write trade to CSV only if quantity is valid (simulating a successful trade)
             timestamp = int(time.time())
-            self.write_trade_to_csv(signal, current_price, quantity if quantity else 0, stop_loss, take_profit, 0, timestamp, 0, "FAILED")
-            order_id = None
-            order_id = None
+            if quantity is not None and quantity > 0:
+                self.write_trade_to_csv(signal, current_price, quantity, stop_loss, take_profit, 0, timestamp, 0, "OPEN") # Assume "OPEN" status
+            # No 'else' condition: We don't write to CSV if quantity is invalid
 
     def check_stop_loss_take_profit(self):
         if not self.in_position:
