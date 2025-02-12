@@ -92,16 +92,6 @@ def calculate_exit_profit_short(entry_price, exit_price, include_funding=True, e
     else:
         final_profit = price_profit
     
-    logger.debug(f"Short Trade Calculation:")
-    logger.debug(f"  entry_price: {entry_price}")
-    logger.debug(f"  exit_price: {exit_price}")
-    logger.debug(f"  adjusted_entry: {adjusted_entry}")
-    logger.debug(f"  adjusted_exit: {adjusted_exit}")
-    logger.debug(f"  price_profit: {price_profit}")
-    if include_funding and entry_time and exit_time and client and symbol:
-        logger.debug(f"  funding_fee: {funding_fee}")
-    logger.debug(f"  final_profit: {final_profit}")
-    
     return final_profit
 
 def calculate_position_size(entry_price, stop_loss, side="long"):

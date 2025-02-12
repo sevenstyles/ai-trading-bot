@@ -1,0 +1,21 @@
+//@version=5
+indicator(title="Outside Bar Mitigation", shorttitle="OBM", overlay=true)
+
+// Pattern detection
+bool outsideBar = high > high[1] and low < low[1]
+bool secondCandleBullish = close > open
+
+// Line drawing
+var line obLine = na
+if outsideBar and not outsideBar[1]
+    line.delete(obLine)
+    obLine := line.new(bar_index, close, bar_index + 1, close, extend = extend.right, color = secondCandleBullish ? color.green : color.red)
+
+// Mitigation
+if not na(obLine)
+    if secondCandleBullish
+        if close > line.get_y1(obLine)
+            line.set_color(obLine, color.gray)
+    else
+        if close < line.get_y1(obLine)
+            line.set_color(obLine, color.gray)

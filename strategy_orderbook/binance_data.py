@@ -199,9 +199,13 @@ class BinanceData:
                         raw_liquidity = self.current_bid + self.current_ask
                         print(f"Current liquidity: {raw_liquidity}")
 
+                        # Calculate bid and ask depth from the depth cache
+                        self.bid_depth = sum(self.depth_cache['bids'].values())
+                        self.ask_depth = sum(self.depth_cache['asks'].values())
+
                         # --- MOVE CHECK_FOR_SIGNALS HERE ---
                         print(f"About to call check_for_signals from binance_data.py. order_flow_analyzer: {self.order_flow_analyzer}")
-                        signal = self.order_flow_analyzer.check_for_signals(raw_liquidity)
+                        signal = self.order_flow_analyzer.check_for_signals(raw_liquidity, self.bid_depth, self.ask_depth)  # Pass bid and ask depth
                         if signal:
                             print(f"Received signal: {signal}")
                             self.order_flow_analyzer.trading_bot.trading_signal = signal  # Set the shared variable
