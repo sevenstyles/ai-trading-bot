@@ -5,17 +5,21 @@ indicator(title="Outside Bar Mitigation", shorttitle="OBM", overlay=true)
 bool outsideBar = high > high[1] and low < low[1]
 bool secondCandleBullish = close > open
 
+// User-configurable settings
+maxLines = input.int(10, title="Max Historical Lines", minval=1)
+
 // Line drawing
-var line obLine = na
+var line[] obLines = array.new_line()
 if outsideBar and not outsideBar[1]
-    line.delete(obLine)
-    obLine := line.new(bar_index, close, bar_index + 1, close, extend = extend.right, color = secondCandleBullish ? color.green : color.red)
+    if array.size(obLines) >= maxLines
+        line.delete(array.shift(obLines))
+    array.push(obLines, line.new(bar_index, close, bar_index + 1, close, extend = extend.right, color = secondCandleBullish ? color.green : color.red))
 
 // Mitigation
-if not na(obLine)
+for l in obLines
     if secondCandleBullish
-        if close > line.get_y1(obLine)
-            line.set_color(obLine, color.gray)
+        if close > line.get_y1(l)
+            line.set_color(l, color.gray)
     else
-        if close < line.get_y1(obLine)
-            line.set_color(obLine, color.gray)
+        if close < line.get_y1(l)
+            line.set_color(l, color.gray)
