@@ -7,6 +7,7 @@ bool secondCandleBullish = close > open
 
 // User-configurable settings
 maxLines = input.int(10, title="Max Historical Lines", minval=1)
+colorCandles = input.bool(false, title="Color Outside Bar Candles")
 
 // Line drawing
 var line[] obLines = array.new_line()
@@ -14,6 +15,8 @@ if outsideBar and not outsideBar[1]
     if array.size(obLines) >= maxLines
         line.delete(array.shift(obLines))
     array.push(obLines, line.new(bar_index, close, bar_index + 1, close, extend = extend.right, color = secondCandleBullish ? color.green : color.red))
+
+    barcolor(colorCandles ? (secondCandleBullish ? color.green : color.red) : na)
 
 // Mitigation
 for l in obLines
